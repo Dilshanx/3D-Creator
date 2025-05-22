@@ -8,6 +8,40 @@ import {
 } from "react";
 import * as THREE from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Conditional imports with error handling
 let Canvas, useFrame, useThree, extend;
@@ -45,91 +79,6 @@ if (extend && THREE) {
     ConeGeometry: THREE.ConeGeometry,
     TorusGeometry: THREE.TorusGeometry,
   });
-}
-
-// Modern Slider Component
-function ModernSlider({ label, value, min, max, step, onChange, unit = "" }) {
-  return (
-    <div className='mb-4'>
-      <div className='flex justify-between items-center mb-2'>
-        <label className='text-sm font-medium text-slate-300'>{label}</label>
-        <span className='text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded'>
-          {typeof value === "number" ? value.toFixed(2) : value}
-          {unit}
-        </span>
-      </div>
-      <div className='relative'>
-        <input
-          type='range'
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          onChange={(e) => onChange(parseFloat(e.target.value))}
-          className='w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider-modern'
-        />
-      </div>
-    </div>
-  );
-}
-
-// Modern Input Component
-function ModernInput({ label, value, onChange, placeholder, type = "text" }) {
-  return (
-    <div className='mb-4'>
-      <label className='block text-sm font-medium text-slate-300 mb-2'>
-        {label}
-      </label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className='w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200'
-      />
-    </div>
-  );
-}
-
-// Modern Button Component
-function ModernButton({
-  children,
-  onClick,
-  variant = "primary",
-  size = "md",
-  disabled = false,
-  className = "",
-}) {
-  const baseClasses =
-    "font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800";
-
-  const variants = {
-    primary: "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500",
-    secondary:
-      "bg-slate-700 hover:bg-slate-600 text-slate-200 focus:ring-slate-500",
-    danger: "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500",
-    success: "bg-green-600 hover:bg-green-700 text-white focus:ring-green-500",
-    accent:
-      "bg-purple-600 hover:bg-purple-700 text-white focus:ring-purple-500",
-  };
-
-  const sizes = {
-    sm: "px-3 py-1.5 text-sm",
-    md: "px-4 py-2 text-sm",
-    lg: "px-6 py-3 text-base",
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${
-        disabled ? "opacity-50 cursor-not-allowed" : ""
-      } ${className}`}
-    >
-      {children}
-    </button>
-  );
 }
 
 // Enhanced GLB Exporter utility
@@ -374,39 +323,32 @@ const createTextGeometryForExport = (text, size) => {
 // Fallback component
 function FallbackCreator() {
   return (
-    <div className='flex flex-col h-full bg-slate-900 text-slate-100'>
-      <div className='flex justify-between items-center p-6 bg-slate-800 border-b border-slate-700'>
-        <div className='flex items-center space-x-3'>
-          <h2 className='text-2xl font-bold text-red-400'>3D Model Creator</h2>
-          <span className='px-3 py-1 text-xs bg-red-600 rounded-full font-medium'>
-            Error
-          </span>
-        </div>
-      </div>
-
-      <div className='flex-grow flex items-center justify-center p-8'>
-        <div className='text-center max-w-md'>
-          <div className='text-6xl mb-6'>⚠️</div>
-          <h3 className='text-2xl font-bold text-red-400 mb-6'>
+    <div className='flex flex-col h-full bg-gradient-to-br from-background to-muted'>
+      <Card className='m-8 max-w-md mx-auto'>
+        <CardHeader className='text-center'>
+          <div className='text-6xl mb-4'>⚠️</div>
+          <CardTitle className='text-2xl text-destructive'>
             Missing Dependencies
-          </h3>
-          <p className='text-slate-300 mb-8 leading-relaxed'>
+          </CardTitle>
+          <CardDescription>
             This component requires React Three Fiber and related packages to
             work properly.
-          </p>
-          <div className='bg-slate-800 p-6 rounded-xl text-left border border-slate-700'>
-            <p className='text-sm text-slate-400 mb-3 font-medium'>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='space-y-4'>
+          <div className='bg-muted p-4 rounded-lg'>
+            <p className='text-sm text-muted-foreground mb-2 font-medium'>
               Install the required packages:
             </p>
-            <code className='text-green-400 text-sm font-mono'>
+            <code className='text-primary text-sm font-mono'>
               npm install @react-three/fiber @react-three/drei three
             </code>
           </div>
-          <p className='text-xs text-slate-500 mt-6'>
+          <p className='text-xs text-muted-foreground text-center'>
             After installing, restart your development server.
           </p>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -1021,502 +963,730 @@ export default function Model3DCreator() {
   }, [shapes]);
 
   return (
-    <div className='flex flex-col h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100'>
-      <style jsx>{`
-        .slider-modern::-webkit-slider-thumb {
-          appearance: none;
-          height: 20px;
-          width: 20px;
-          border-radius: 50%;
-          background: #3b82f6;
-          cursor: pointer;
-          border: 2px solid #1e40af;
-          box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
-        }
-
-        .slider-modern::-webkit-slider-thumb:hover {
-          background: #2563eb;
-          box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.1);
-        }
-
-        .slider-modern::-moz-range-thumb {
-          height: 20px;
-          width: 20px;
-          border-radius: 50%;
-          background: #3b82f6;
-          cursor: pointer;
-          border: 2px solid #1e40af;
-        }
-      `}</style>
-
-      {/* Modern Top Toolbar */}
-      <div className='flex justify-between items-center p-6 bg-slate-800/90 backdrop-blur-sm border-b border-slate-700/50'>
-        <div className='flex items-center space-x-4'>
-          <div className='flex items-center space-x-3'>
-            <div className='w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center'>
-              <span className='text-white font-bold text-sm'>3D</span>
-            </div>
-            <h2 className='text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent'>
-              Model Creator
-            </h2>
-          </div>
-          <span className='px-3 py-1 text-xs bg-gradient-to-r from-blue-500 to-purple-500 rounded-full font-medium text-white'>
-            v2.0 • GLB Export
-          </span>
-        </div>
-
-        <div className='flex items-center space-x-3'>
-          <ModernButton
-            onClick={undo}
-            disabled={undoStack.length === 0}
-            variant='secondary'
-            size='sm'
-          >
-            ↶ Undo
-          </ModernButton>
-
-          <ModernButton
-            onClick={redo}
-            disabled={redoStack.length === 0}
-            variant='secondary'
-            size='sm'
-          >
-            ↷ Redo
-          </ModernButton>
-
-          <div className='h-6 w-px bg-slate-600'></div>
-
-          <ModernButton onClick={exportJSON} variant='secondary' size='sm'>
-            📄 JSON
-          </ModernButton>
-
-          <ModernButton onClick={exportGLB} variant='success' size='sm'>
-            📦 Export GLB
-          </ModernButton>
-        </div>
-      </div>
-
-      <div className='flex flex-grow'>
-        {/* Modern Left Sidebar */}
-        <div className='w-72 p-6 bg-slate-800/50 backdrop-blur-sm border-r border-slate-700/50 overflow-y-auto'>
-          {/* Tools Section */}
-          <div className='mb-8'>
-            <h3 className='font-semibold text-slate-200 mb-4 text-lg'>
-              Transform Tools
-            </h3>
-            <div className='grid grid-cols-3 gap-2'>
-              {["translate", "rotate", "scale"].map((toolMode) => (
-                <ModernButton
-                  key={toolMode}
-                  onClick={() => setMode(toolMode)}
-                  variant={mode === toolMode ? "primary" : "secondary"}
-                  size='sm'
-                  className='flex flex-col items-center justify-center h-16'
-                >
-                  <span className='text-lg mb-1'>
-                    {toolMode === "translate"
-                      ? "↔️"
-                      : toolMode === "rotate"
-                      ? "🔄"
-                      : "⚡"}
-                  </span>
-                  <span className='text-xs capitalize'>{toolMode}</span>
-                </ModernButton>
-              ))}
-            </div>
-          </div>
-
-          {/* Shapes Section */}
-          <div className='mb-8'>
-            <h3 className='font-semibold text-slate-200 mb-4 text-lg'>
-              Add Shapes
-            </h3>
-            <div className='grid grid-cols-2 gap-3'>
-              {shapeOptions.map((shape) => (
-                <ModernButton
-                  key={shape.name}
-                  onClick={() => addShape(shape.geometry)}
-                  variant='secondary'
-                  size='sm'
-                  className='flex flex-col items-center justify-center h-20 hover:bg-slate-600'
-                >
-                  <span className='text-xl mb-1'>{shape.icon}</span>
-                  <span className='text-xs'>{shape.name}</span>
-                </ModernButton>
-              ))}
-            </div>
-          </div>
-
-          {/* Camera Views */}
-          <div>
-            <h3 className='font-semibold text-slate-200 mb-4 text-lg'>
-              Camera Views
-            </h3>
-            <div className='grid grid-cols-2 gap-2'>
-              {[
-                { name: "Top", preset: "top", icon: "⬆️" },
-                { name: "Front", preset: "front", icon: "➡️" },
-                { name: "Side", preset: "side", icon: "↗️" },
-                { name: "Isometric", preset: "isometric", icon: "🎯" },
-              ].map((view) => (
-                <ModernButton
-                  key={view.preset}
-                  onClick={() => setCameraView(view.preset)}
-                  variant='secondary'
-                  size='sm'
-                  className='flex items-center justify-center space-x-2'
-                >
-                  <span>{view.icon}</span>
-                  <span className='text-xs'>{view.name}</span>
-                </ModernButton>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Main Canvas Area */}
-        <div className='flex-grow relative'>
-          <Canvas
-            shadows
-            camera={{ position: [5, 5, 5], fov: 60 }}
-            gl={{ antialias: true }}
-            style={{
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-            }}
-            onCreated={({ gl }) => {
-              if (THREE) {
-                gl.shadowMap.enabled = true;
-                gl.shadowMap.type = THREE.PCFSoftShadowMap;
-              }
-            }}
-          >
-            <Scene
-              shapes={shapes}
-              selectedShapeId={selectedShapeId}
-              mode={mode}
-              onShapeClick={handleShapeClick}
-              onShapeUpdate={handleShapeUpdate}
-              orbitControlsEnabled={orbitControlsEnabled}
-              sceneRef={sceneRef}
-            />
-            {cameraPreset && <CameraController preset={cameraPreset} />}
-          </Canvas>
-
-          {/* Modern Info Overlay */}
-          <div className='absolute bottom-6 left-6 p-4 bg-black/20 backdrop-blur-md rounded-xl border border-white/10'>
-            <div className='flex items-center space-x-4 text-white/90'>
-              <div className='flex items-center space-x-2'>
-                <span className='w-2 h-2 bg-green-400 rounded-full'></span>
-                <span className='text-sm font-medium'>
-                  {shapes.length} Objects
-                </span>
-              </div>
-              <div className='w-px h-4 bg-white/20'></div>
-              <span className='text-sm'>
-                Mode: {mode.charAt(0).toUpperCase() + mode.slice(1)}
-              </span>
-            </div>
-          </div>
-
-          {selectedShape && (
-            <div className='absolute top-6 left-6 p-4 bg-blue-500/20 backdrop-blur-md rounded-xl border border-blue-400/30'>
-              <div className='text-blue-100 text-sm font-medium'>
-                Selected:{" "}
-                {selectedShape.geometry === "text"
-                  ? `Text: "${selectedShape.text || "Empty"}"`
-                  : selectedShape.geometry.charAt(0).toUpperCase() +
-                    selectedShape.geometry.slice(1)}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Modern Right Sidebar - Properties */}
-        <div className='w-80 p-6 bg-slate-800/50 backdrop-blur-sm border-l border-slate-700/50 overflow-y-auto'>
-          {selectedShape ? (
-            <div className='space-y-6'>
-              {/* Header */}
-              <div className='flex justify-between items-center'>
-                <h3 className='font-semibold text-slate-100 text-lg'>
-                  Properties
-                </h3>
-                <div className='flex space-x-2'>
-                  <ModernButton
-                    onClick={duplicateShape}
-                    variant='secondary'
-                    size='sm'
-                    className='p-2'
-                    title='Duplicate'
-                  >
-                    📋
-                  </ModernButton>
-                  <ModernButton
-                    onClick={() => removeShape(selectedShape.id)}
-                    variant='danger'
-                    size='sm'
-                    className='p-2'
-                    title='Delete'
-                  >
-                    🗑️
-                  </ModernButton>
-                </div>
-              </div>
-
-              {/* Shape Info Card */}
-              <div className='p-4 bg-slate-700/50 rounded-xl border border-slate-600/50'>
-                <div className='text-sm text-slate-300 mb-1'>Shape Type</div>
-                <div className='text-lg font-medium text-slate-100 capitalize'>
-                  {selectedShape.geometry === "text"
-                    ? "3D Text"
-                    : selectedShape.geometry}
-                </div>
-              </div>
-
-              {/* Text Content for Text shapes */}
-              {selectedShape.geometry === "text" && (
-                <div className='space-y-4'>
-                  <ModernInput
-                    label='Text Content'
-                    value={selectedShape.text || ""}
-                    onChange={(value) =>
-                      updateShape(selectedShape.id, { text: value })
-                    }
-                    placeholder='Enter your text...'
-                  />
-
-                  <ModernSlider
-                    label='Text Size'
-                    value={selectedShape.textSize || 0.5}
-                    min={0.1}
-                    max={2}
-                    step={0.1}
-                    onChange={(value) =>
-                      updateShape(selectedShape.id, { textSize: value })
-                    }
-                  />
-                </div>
-              )}
-
-              {/* Position Controls */}
-              <div className='space-y-3'>
-                <h4 className='font-medium text-slate-200'>Position</h4>
-                {["X", "Y", "Z"].map((axis, index) => (
-                  <ModernSlider
-                    key={axis}
-                    label={`${axis} Position`}
-                    value={selectedShape.position[index]}
-                    min={-10}
-                    max={10}
-                    step={0.1}
-                    onChange={(value) => {
-                      const newPosition = [...selectedShape.position];
-                      newPosition[index] = value;
-                      updateShape(selectedShape.id, { position: newPosition });
-                    }}
-                  />
-                ))}
-              </div>
-
-              {/* Rotation Controls */}
-              <div className='space-y-3'>
-                <h4 className='font-medium text-slate-200'>Rotation</h4>
-                {["X", "Y", "Z"].map((axis, index) => (
-                  <ModernSlider
-                    key={axis}
-                    label={`${axis} Rotation`}
-                    value={(selectedShape.rotation[index] * 180) / Math.PI}
-                    min={-180}
-                    max={180}
-                    step={5}
-                    unit='°'
-                    onChange={(degrees) => {
-                      const radians = (degrees * Math.PI) / 180;
-                      const newRotation = [...selectedShape.rotation];
-                      newRotation[index] = radians;
-                      updateShape(selectedShape.id, { rotation: newRotation });
-                    }}
-                  />
-                ))}
-              </div>
-
-              {/* Scale Controls */}
-              <div className='space-y-3'>
-                <h4 className='font-medium text-slate-200'>Scale</h4>
-                {["X", "Y", "Z"].map((axis, index) => (
-                  <ModernSlider
-                    key={axis}
-                    label={`${axis} Scale`}
-                    value={selectedShape.scale[index]}
-                    min={0.1}
-                    max={3}
-                    step={0.1}
-                    onChange={(value) => {
-                      const newScale = [...selectedShape.scale];
-                      newScale[index] = Math.max(0.1, value);
-                      updateShape(selectedShape.id, { scale: newScale });
-                    }}
-                  />
-                ))}
-              </div>
-
-              {/* Material Selection */}
+    <TooltipProvider>
+      <div className='flex flex-col h-screen bg-gradient-to-br from-background via-muted/20 to-background'>
+        {/* Modern Top Toolbar */}
+        <motion.div
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className='flex justify-between items-center p-4 bg-card/80 backdrop-blur-sm border-b border-border/50'
+        >
+          <div className='flex items-center space-x-4'>
+            <div className='flex items-center space-x-3'>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                className='w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg'
+              >
+                <span className='text-white font-bold text-lg'>3D</span>
+              </motion.div>
               <div>
-                <label className='block text-sm font-medium text-slate-300 mb-3'>
-                  Material
-                </label>
-                <select
-                  value={selectedShape.material}
-                  onChange={(e) =>
-                    updateShape(selectedShape.id, { material: e.target.value })
-                  }
-                  className='w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                >
-                  {materialOptions.map((mat) => (
-                    <option key={mat.type} value={mat.type}>
-                      {mat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Color Control */}
-              <div>
-                <label className='block text-sm font-medium text-slate-300 mb-3'>
-                  Color
-                </label>
-                <div className='flex items-center space-x-3'>
-                  <input
-                    type='color'
-                    value={selectedShape.color}
-                    onChange={(e) =>
-                      updateShape(selectedShape.id, { color: e.target.value })
-                    }
-                    className='w-12 h-12 rounded-lg border-2 border-slate-600 cursor-pointer'
-                  />
-                  <input
-                    type='text'
-                    value={selectedShape.color}
-                    onChange={(e) =>
-                      updateShape(selectedShape.id, { color: e.target.value })
-                    }
-                    className='flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                  />
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div>
-                <h4 className='font-medium text-slate-200 mb-3'>
-                  Quick Actions
-                </h4>
-                <div className='grid grid-cols-2 gap-2'>
-                  <ModernButton
-                    onClick={() =>
-                      updateShape(selectedShape.id, { scale: [1, 1, 1] })
-                    }
-                    variant='secondary'
-                    size='sm'
-                  >
-                    Reset Scale
-                  </ModernButton>
-                  <ModernButton
-                    onClick={() =>
-                      updateShape(selectedShape.id, { rotation: [0, 0, 0] })
-                    }
-                    variant='secondary'
-                    size='sm'
-                  >
-                    Reset Rotation
-                  </ModernButton>
-                  <ModernButton
-                    onClick={() =>
-                      updateShape(selectedShape.id, { position: [0, 0.5, 0] })
-                    }
-                    variant='secondary'
-                    size='sm'
-                  >
-                    Center Object
-                  </ModernButton>
-                  <ModernButton
-                    onClick={() =>
-                      updateShape(selectedShape.id, {
-                        color: `#${Math.floor(
-                          Math.random() * 16777215
-                        ).toString(16)}`,
-                      })
-                    }
-                    variant='accent'
-                    size='sm'
-                  >
-                    Random Color
-                  </ModernButton>
-                </div>
+                <h1 className='text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent'>
+                  Model Creator
+                </h1>
+                <p className='text-xs text-muted-foreground'>
+                  Professional 3D Design Tool
+                </p>
               </div>
             </div>
-          ) : (
-            <div className='flex flex-col items-center justify-center h-full text-center'>
-              <div className='text-6xl mb-6'>🎨</div>
-              <h3 className='text-xl font-semibold text-slate-200 mb-4'>
-                Create Your 3D Scene
-              </h3>
-              <p className='text-slate-400 mb-8 leading-relaxed'>
-                Select a shape to edit its properties or add new objects to get
-                started.
-              </p>
-              <div className='space-y-3 w-full'>
-                <ModernButton
-                  onClick={() => addShape("box")}
-                  variant='primary'
-                  className='w-full'
-                >
-                  🧊 Add Cube
-                </ModernButton>
-                <ModernButton
-                  onClick={() => addShape("text")}
-                  variant='success'
-                  className='w-full'
-                >
-                  📝 Add 3D Text
-                </ModernButton>
-                <ModernButton
-                  onClick={() => addShape("sphere")}
-                  variant='accent'
-                  className='w-full'
-                >
-                  ⚪ Add Sphere
-                </ModernButton>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+            <Badge
+              variant='secondary'
+              className='bg-gradient-to-r from-blue-500/10 to-purple-500/10 text-blue-600 border-blue-200'
+            >
+              v2.0 • GLB Export
+            </Badge>
+          </div>
 
-      {/* Modern Status Bar */}
-      <div className='flex justify-between items-center px-6 py-3 bg-slate-800/90 backdrop-blur-sm border-t border-slate-700/50'>
-        <div className='flex items-center space-x-4 text-sm text-slate-300'>
           <div className='flex items-center space-x-2'>
-            <div className='w-2 h-2 bg-green-400 rounded-full'></div>
-            <span>
-              {shapes.length} {shapes.length === 1 ? "object" : "objects"} in
-              scene
-            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={undo}
+                  disabled={undoStack.length === 0}
+                  variant='outline'
+                  size='sm'
+                  className='transition-all duration-200'
+                >
+                  ↶ Undo
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Undo last action</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={redo}
+                  disabled={redoStack.length === 0}
+                  variant='outline'
+                  size='sm'
+                  className='transition-all duration-200'
+                >
+                  ↷ Redo
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Redo last action</TooltipContent>
+            </Tooltip>
+
+            <Separator orientation='vertical' className='h-6' />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant='outline' size='sm'>
+                  📤 Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={exportJSON}>
+                  📄 Export as JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportGLB}>
+                  📦 Export as GLB
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          {selectedShape && (
-            <>
-              <div className='w-px h-4 bg-slate-600'></div>
+        </motion.div>
+
+        <div className='flex flex-grow'>
+          {/* Modern Left Sidebar */}
+          <motion.div
+            initial={{ x: -20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 0.1 }}
+            className='w-80 p-6 bg-card/50 backdrop-blur-sm border-r border-border/50 overflow-y-auto'
+          >
+            <Tabs defaultValue='tools' className='space-y-6'>
+              <TabsList className='grid w-full grid-cols-3'>
+                <TabsTrigger value='tools'>Tools</TabsTrigger>
+                <TabsTrigger value='shapes'>Shapes</TabsTrigger>
+                <TabsTrigger value='camera'>Camera</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value='tools' className='space-y-6'>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className='flex items-center space-x-2'>
+                      <span>🛠️</span>
+                      <span>Transform Tools</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Select how you want to manipulate objects
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='grid grid-cols-3 gap-3'>
+                      {["translate", "rotate", "scale"].map((toolMode) => (
+                        <Tooltip key={toolMode}>
+                          <TooltipTrigger asChild>
+                            <motion.div
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              <Button
+                                onClick={() => setMode(toolMode)}
+                                variant={
+                                  mode === toolMode ? "default" : "outline"
+                                }
+                                size='sm'
+                                className='flex flex-col items-center justify-center h-16 w-full'
+                              >
+                                <span className='text-lg mb-1'>
+                                  {toolMode === "translate"
+                                    ? "↔️"
+                                    : toolMode === "rotate"
+                                    ? "🔄"
+                                    : "⚡"}
+                                </span>
+                                <span className='text-xs capitalize'>
+                                  {toolMode}
+                                </span>
+                              </Button>
+                            </motion.div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {toolMode === "translate"
+                              ? "Move objects"
+                              : toolMode === "rotate"
+                              ? "Rotate objects"
+                              : "Scale objects"}
+                          </TooltipContent>
+                        </Tooltip>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value='shapes' className='space-y-6'>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className='flex items-center space-x-2'>
+                      <span>🎨</span>
+                      <span>Add Shapes</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Click to add new 3D objects to your scene
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='grid grid-cols-2 gap-3'>
+                      {shapeOptions.map((shape) => (
+                        <Tooltip key={shape.name}>
+                          <TooltipTrigger asChild>
+                            <motion.div
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              <Button
+                                onClick={() => addShape(shape.geometry)}
+                                variant='outline'
+                                size='sm'
+                                className='flex flex-col items-center justify-center h-20 w-full hover:bg-primary/5 transition-all duration-200'
+                              >
+                                <span className='text-xl mb-1'>
+                                  {shape.icon}
+                                </span>
+                                <span className='text-xs'>{shape.name}</span>
+                              </Button>
+                            </motion.div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Add {shape.name} to scene
+                          </TooltipContent>
+                        </Tooltip>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value='camera' className='space-y-6'>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className='flex items-center space-x-2'>
+                      <span>📷</span>
+                      <span>Camera Views</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Quick camera positioning presets
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='grid grid-cols-2 gap-3'>
+                      {[
+                        { name: "Top", preset: "top", icon: "⬆️" },
+                        { name: "Front", preset: "front", icon: "➡️" },
+                        { name: "Side", preset: "side", icon: "↗️" },
+                        { name: "Isometric", preset: "isometric", icon: "🎯" },
+                      ].map((view) => (
+                        <Tooltip key={view.preset}>
+                          <TooltipTrigger asChild>
+                            <motion.div
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              <Button
+                                onClick={() => setCameraView(view.preset)}
+                                variant='outline'
+                                size='sm'
+                                className='flex items-center justify-center space-x-2 w-full'
+                              >
+                                <span>{view.icon}</span>
+                                <span className='text-xs'>{view.name}</span>
+                              </Button>
+                            </motion.div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Switch to {view.name} view
+                          </TooltipContent>
+                        </Tooltip>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </motion.div>
+
+          {/* Main Canvas Area */}
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className='flex-grow relative overflow-hidden'
+          >
+            <Canvas
+              shadows
+              camera={{ position: [5, 5, 5], fov: 60 }}
+              gl={{ antialias: true }}
+              style={{
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              }}
+              onCreated={({ gl }) => {
+                if (THREE) {
+                  gl.shadowMap.enabled = true;
+                  gl.shadowMap.type = THREE.PCFSoftShadowMap;
+                }
+              }}
+            >
+              <Scene
+                shapes={shapes}
+                selectedShapeId={selectedShapeId}
+                mode={mode}
+                onShapeClick={handleShapeClick}
+                onShapeUpdate={handleShapeUpdate}
+                orbitControlsEnabled={orbitControlsEnabled}
+                sceneRef={sceneRef}
+              />
+              {cameraPreset && <CameraController preset={cameraPreset} />}
+            </Canvas>
+
+            {/* Modern Info Overlays */}
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className='absolute bottom-6 left-6'
+            >
+              <Card className='bg-black/20 backdrop-blur-md border-white/10'>
+                <CardContent className='p-4'>
+                  <div className='flex items-center space-x-4 text-white/90'>
+                    <div className='flex items-center space-x-2'>
+                      <div className='w-2 h-2 bg-green-400 rounded-full animate-pulse'></div>
+                      <span className='text-sm font-medium'>
+                        {shapes.length} Objects
+                      </span>
+                    </div>
+                    <Separator
+                      orientation='vertical'
+                      className='h-4 bg-white/20'
+                    />
+                    <span className='text-sm'>
+                      Mode: {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <AnimatePresence>
+              {selectedShape && (
+                <motion.div
+                  initial={{ y: -20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: -20, opacity: 0 }}
+                  className='absolute top-6 left-6'
+                >
+                  <Card className='bg-blue-500/20 backdrop-blur-md border-blue-400/30'>
+                    <CardContent className='p-4'>
+                      <div className='text-blue-100 text-sm font-medium'>
+                        Selected:{" "}
+                        {selectedShape.geometry === "text"
+                          ? `Text: "${selectedShape.text || "Empty"}"`
+                          : selectedShape.geometry.charAt(0).toUpperCase() +
+                            selectedShape.geometry.slice(1)}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+
+          {/* Modern Right Sidebar - Properties */}
+          <motion.div
+            initial={{ x: 20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className='w-80 p-6 bg-card/50 backdrop-blur-sm border-l border-border/50 overflow-y-auto'
+          >
+            <AnimatePresence mode='wait'>
+              {selectedShape ? (
+                <motion.div
+                  key='properties'
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className='space-y-6'
+                >
+                  {/* Header */}
+                  <div className='flex justify-between items-center'>
+                    <div>
+                      <h3 className='text-lg font-semibold'>Properties</h3>
+                      <p className='text-sm text-muted-foreground'>
+                        Customize your selected object
+                      </p>
+                    </div>
+                    <div className='flex space-x-2'>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={duplicateShape}
+                            variant='outline'
+                            size='sm'
+                          >
+                            📋
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Duplicate object</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={() => removeShape(selectedShape.id)}
+                            variant='outline'
+                            size='sm'
+                            className='text-destructive hover:bg-destructive/10'
+                          >
+                            🗑️
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Delete object</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </div>
+
+                  {/* Shape Info Card */}
+                  <Card>
+                    <CardContent className='p-4'>
+                      <div className='text-sm text-muted-foreground mb-1'>
+                        Shape Type
+                      </div>
+                      <div className='text-lg font-medium capitalize flex items-center space-x-2'>
+                        <span>
+                          {shapeOptions.find(
+                            (s) => s.geometry === selectedShape.geometry
+                          )?.icon || "🔷"}
+                        </span>
+                        <span>
+                          {selectedShape.geometry === "text"
+                            ? "3D Text"
+                            : selectedShape.geometry}
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Text Content for Text shapes */}
+                  {selectedShape.geometry === "text" && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className='text-base'>
+                          Text Settings
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className='space-y-4'>
+                        <div>
+                          <Label htmlFor='text-content'>Text Content</Label>
+                          <Input
+                            id='text-content'
+                            value={selectedShape.text || ""}
+                            onChange={(e) =>
+                              updateShape(selectedShape.id, {
+                                text: e.target.value,
+                              })
+                            }
+                            placeholder='Enter your text...'
+                            className='mt-1'
+                          />
+                        </div>
+
+                        <div>
+                          <Label>
+                            Text Size:{" "}
+                            {selectedShape.textSize?.toFixed(2) || 0.5}
+                          </Label>
+                          <Slider
+                            value={[selectedShape.textSize || 0.5]}
+                            onValueChange={([value]) =>
+                              updateShape(selectedShape.id, { textSize: value })
+                            }
+                            max={2}
+                            min={0.1}
+                            step={0.1}
+                            className='mt-2'
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Transform Controls */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className='text-base'>Transform</CardTitle>
+                    </CardHeader>
+                    <CardContent className='space-y-6'>
+                      {/* Position Controls */}
+                      <div className='space-y-3'>
+                        <h4 className='font-medium text-sm'>Position</h4>
+                        {["X", "Y", "Z"].map((axis, index) => (
+                          <div key={axis}>
+                            <Label className='text-xs'>
+                              {axis}: {selectedShape.position[index].toFixed(2)}
+                            </Label>
+                            <Slider
+                              value={[selectedShape.position[index]]}
+                              onValueChange={([value]) => {
+                                const newPosition = [...selectedShape.position];
+                                newPosition[index] = value;
+                                updateShape(selectedShape.id, {
+                                  position: newPosition,
+                                });
+                              }}
+                              max={10}
+                              min={-10}
+                              step={0.1}
+                              className='mt-1'
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Rotation Controls */}
+                      <div className='space-y-3'>
+                        <h4 className='font-medium text-sm'>Rotation</h4>
+                        {["X", "Y", "Z"].map((axis, index) => (
+                          <div key={axis}>
+                            <Label className='text-xs'>
+                              {axis}:{" "}
+                              {(
+                                (selectedShape.rotation[index] * 180) /
+                                Math.PI
+                              ).toFixed(0)}
+                              °
+                            </Label>
+                            <Slider
+                              value={[
+                                (selectedShape.rotation[index] * 180) / Math.PI,
+                              ]}
+                              onValueChange={([degrees]) => {
+                                const radians = (degrees * Math.PI) / 180;
+                                const newRotation = [...selectedShape.rotation];
+                                newRotation[index] = radians;
+                                updateShape(selectedShape.id, {
+                                  rotation: newRotation,
+                                });
+                              }}
+                              max={180}
+                              min={-180}
+                              step={5}
+                              className='mt-1'
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Scale Controls */}
+                      <div className='space-y-3'>
+                        <h4 className='font-medium text-sm'>Scale</h4>
+                        {["X", "Y", "Z"].map((axis, index) => (
+                          <div key={axis}>
+                            <Label className='text-xs'>
+                              {axis}: {selectedShape.scale[index].toFixed(2)}
+                            </Label>
+                            <Slider
+                              value={[selectedShape.scale[index]]}
+                              onValueChange={([value]) => {
+                                const newScale = [...selectedShape.scale];
+                                newScale[index] = Math.max(0.1, value);
+                                updateShape(selectedShape.id, {
+                                  scale: newScale,
+                                });
+                              }}
+                              max={3}
+                              min={0.1}
+                              step={0.1}
+                              className='mt-1'
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Material and Appearance */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className='text-base'>Appearance</CardTitle>
+                    </CardHeader>
+                    <CardContent className='space-y-4'>
+                      <div>
+                        <Label>Material</Label>
+                        <Select
+                          value={selectedShape.material}
+                          onValueChange={(value) =>
+                            updateShape(selectedShape.id, { material: value })
+                          }
+                        >
+                          <SelectTrigger className='mt-1'>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {materialOptions.map((mat) => (
+                              <SelectItem key={mat.type} value={mat.type}>
+                                {mat.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label>Color</Label>
+                        <div className='flex items-center space-x-3 mt-1'>
+                          <input
+                            type='color'
+                            value={selectedShape.color}
+                            onChange={(e) =>
+                              updateShape(selectedShape.id, {
+                                color: e.target.value,
+                              })
+                            }
+                            className='w-12 h-10 rounded-md border border-input cursor-pointer'
+                          />
+                          <Input
+                            value={selectedShape.color}
+                            onChange={(e) =>
+                              updateShape(selectedShape.id, {
+                                color: e.target.value,
+                              })
+                            }
+                            className='flex-1'
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Quick Actions */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className='text-base'>Quick Actions</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className='grid grid-cols-2 gap-2'>
+                        <Button
+                          onClick={() =>
+                            updateShape(selectedShape.id, { scale: [1, 1, 1] })
+                          }
+                          variant='outline'
+                          size='sm'
+                        >
+                          Reset Scale
+                        </Button>
+                        <Button
+                          onClick={() =>
+                            updateShape(selectedShape.id, {
+                              rotation: [0, 0, 0],
+                            })
+                          }
+                          variant='outline'
+                          size='sm'
+                        >
+                          Reset Rotation
+                        </Button>
+                        <Button
+                          onClick={() =>
+                            updateShape(selectedShape.id, {
+                              position: [0, 0.5, 0],
+                            })
+                          }
+                          variant='outline'
+                          size='sm'
+                        >
+                          Center Object
+                        </Button>
+                        <Button
+                          onClick={() =>
+                            updateShape(selectedShape.id, {
+                              color: `#${Math.floor(
+                                Math.random() * 16777215
+                              ).toString(16)}`,
+                            })
+                          }
+                          variant='outline'
+                          size='sm'
+                        >
+                          Random Color
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key='empty'
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className='flex flex-col items-center justify-center h-full text-center'
+                >
+                  <div className='text-6xl mb-6'>🎨</div>
+                  <h3 className='text-xl font-semibold mb-4'>
+                    Create Your 3D Scene
+                  </h3>
+                  <p className='text-muted-foreground mb-8 leading-relaxed'>
+                    Select a shape to edit its properties or add new objects to
+                    get started.
+                  </p>
+                  <div className='space-y-3 w-full'>
+                    <Button onClick={() => addShape("box")} className='w-full'>
+                      🧊 Add Cube
+                    </Button>
+                    <Button
+                      onClick={() => addShape("text")}
+                      variant='outline'
+                      className='w-full'
+                    >
+                      📝 Add 3D Text
+                    </Button>
+                    <Button
+                      onClick={() => addShape("sphere")}
+                      variant='outline'
+                      className='w-full'
+                    >
+                      ⚪ Add Sphere
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        </div>
+
+        {/* Modern Status Bar */}
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className='flex justify-between items-center px-6 py-3 bg-card/80 backdrop-blur-sm border-t border-border/50'
+        >
+          <div className='flex items-center space-x-4 text-sm text-muted-foreground'>
+            <div className='flex items-center space-x-2'>
+              <div className='w-2 h-2 bg-green-500 rounded-full animate-pulse'></div>
               <span>
-                Selected:{" "}
-                {selectedShape.geometry === "text"
-                  ? `Text: "${selectedShape.text || "Empty"}"`
-                  : selectedShape.geometry}
+                {shapes.length} {shapes.length === 1 ? "object" : "objects"} in
+                scene
               </span>
-            </>
-          )}
-        </div>
-        <div className='text-xs text-slate-400'>
-          Modern 3D Creator • Orbit: Mouse • Pan: Shift+Drag • Zoom: Scroll
-        </div>
+            </div>
+            {selectedShape && (
+              <>
+                <Separator orientation='vertical' className='h-4' />
+                <span>
+                  Selected:{" "}
+                  {selectedShape.geometry === "text"
+                    ? `Text: "${selectedShape.text || "Empty"}"`
+                    : selectedShape.geometry}
+                </span>
+              </>
+            )}
+          </div>
+          <div className='text-xs text-muted-foreground'>
+            Modern 3D Creator • Orbit: Mouse • Pan: Shift+Drag • Zoom: Scroll
+          </div>
+        </motion.div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
