@@ -1,175 +1,719 @@
+// "use client";
+
+// import Link from "next/link";
+// import { motion } from "framer-motion";
+// import { ArrowRight, Box, PanelRight } from "lucide-react";
+// import { Button } from "@/components/ui/button";
+// // import Enhanced3DShapes from "@/components/3d/Display/Enhanced3DShapes";
+// import Enhanced3DShapes from "@/components/Enhanced3DShapes/Enhanced3DShapes";
+
+// const containerVariants = {
+//   hidden: { opacity: 0 },
+//   visible: {
+//     opacity: 1,
+//     transition: {
+//       staggerChildren: 0.1,
+//     },
+//   },
+// };
+
+// const itemVariants = {
+//   hidden: { y: 20, opacity: 0 },
+//   visible: {
+//     y: 0,
+//     opacity: 1,
+//   },
+// };
+
+// export default function Home() {
+//   return (
+//     <>
+//       {/* Hero Section */}
+//       <section className='relative w-full h-[90vh] flex items-center justify-center overflow-hidden'>
+//         <div className='absolute inset-0 z-0'>
+//           <div className='absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 dark:from-blue-900/30 dark:to-purple-900/30' />
+//         </div>
+
+//         <div className='container mx-auto px-4 z-10'>
+//           <motion.div
+//             className='flex flex-col lg:flex-row items-center justify-between gap-12'
+//             initial='hidden'
+//             animate='visible'
+//             variants={containerVariants}
+//           >
+//             <div className='lg:w-1/2'>
+//               <motion.h1
+//                 className='text-4xl md:text-6xl font-bold text-gray-900 dark:text-white mb-6'
+//                 variants={itemVariants}
+//               >
+//                 Create Amazing{" "}
+//                 <span className='text-blue-600 dark:text-blue-400'>
+//                   3D Shapes
+//                 </span>{" "}
+//                 in Minutes
+//               </motion.h1>
+
+//               <motion.p
+//                 className='text-lg text-gray-700 dark:text-gray-300 mb-8'
+//                 variants={itemVariants}
+//               >
+//                 Design, customize, and export professional 3D shapes with our
+//                 intuitive creator tool. Hearts, stars, crowns, butterflies, and
+//                 leaves - all with advanced materials and lighting.
+//               </motion.p>
+
+//               <motion.div
+//                 className='flex flex-wrap gap-4'
+//                 variants={itemVariants}
+//               >
+//                 <Button asChild size='lg' className='gap-2'>
+//                   <Link href='/models'>
+//                     Create Shapes <Box className='h-4 w-4' />
+//                   </Link>
+//                 </Button>
+
+//                 <Button asChild variant='outline' size='lg' className='gap-2'>
+//                   <Link href='/showcase'>
+//                     View Showcase <ArrowRight className='h-4 w-4' />
+//                   </Link>
+//                 </Button>
+//               </motion.div>
+//             </div>
+
+//             {/* Replace ModelViewer with Enhanced3DShapes preview */}
+//             <motion.div
+//               className='lg:w-1/2 h-[400px] rounded-xl overflow-hidden shadow-xl bg-slate-900'
+//               variants={itemVariants}
+//             >
+//               <div className='w-full h-full scale-50 origin-center'>
+//                 <Enhanced3DShapes />
+//               </div>
+//             </motion.div>
+//           </motion.div>
+//         </div>
+//       </section>
+
+//       {/* Features Section */}
+//       <section className='py-24 bg-gray-50 dark:bg-gray-900'>
+//         <div className='container mx-auto px-4'>
+//           <motion.div
+//             className='text-center mb-16'
+//             initial={{ opacity: 0, y: 20 }}
+//             whileInView={{ opacity: 1, y: 0 }}
+//             viewport={{ once: true }}
+//             transition={{ duration: 0.6 }}
+//           >
+//             <h2 className='text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4'>
+//               Powerful 3D Shape Creation Tools
+//             </h2>
+//             <p className='text-lg text-gray-700 dark:text-gray-300 max-w-2xl mx-auto'>
+//               Everything you need to create beautiful 3D shapes with advanced
+//               materials and realistic lighting
+//             </p>
+//           </motion.div>
+
+//           <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8'>
+//             {[
+//               {
+//                 icon: <Box className='h-8 w-8' />,
+//                 title: "Multiple Shape Types",
+//                 description:
+//                   "Choose from hearts, stars, crowns, butterflies, and leaves - each with unique organic curves and details",
+//               },
+//               {
+//                 icon: <PanelRight className='h-8 w-8' />,
+//                 title: "Advanced Materials",
+//                 description:
+//                   "Metallic, glass, ceramic, organic, and crystal materials with realistic lighting and shadows",
+//               },
+//               {
+//                 icon: <ArrowRight className='h-8 w-8' />,
+//                 title: "Professional Export",
+//                 description:
+//                   "Download as GLB or OBJ formats with full geometry, materials, and UV mapping for professional use",
+//               },
+//             ].map((feature, index) => (
+//               <motion.div
+//                 key={index}
+//                 className='bg-white dark:bg-gray-800 p-8 rounded-xl shadow-md'
+//                 initial={{ opacity: 0, y: 20 }}
+//                 whileInView={{ opacity: 1, y: 0 }}
+//                 viewport={{ once: true }}
+//                 transition={{ delay: index * 0.1, duration: 0.5 }}
+//               >
+//                 <div className='text-blue-600 dark:text-blue-400 mb-4'>
+//                   {feature.icon}
+//                 </div>
+//                 <h3 className='text-xl font-bold text-gray-900 dark:text-white mb-3'>
+//                   {feature.title}
+//                 </h3>
+//                 <p className='text-gray-700 dark:text-gray-300'>
+//                   {feature.description}
+//                 </p>
+//               </motion.div>
+//             ))}
+//           </div>
+//         </div>
+//       </section>
+
+//       {/* Full Featured 3D Shapes Studio Section */}
+//       <section className='py-20 bg-white dark:bg-gray-800'>
+//         <div className='container mx-auto px-4'>
+//           <motion.div
+//             className='text-center mb-12'
+//             initial={{ opacity: 0, y: 20 }}
+//             whileInView={{ opacity: 1, y: 0 }}
+//             viewport={{ once: true }}
+//             transition={{ duration: 0.6 }}
+//           >
+//             <h2 className='text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4'>
+//               Interactive 3D Shapes Studio
+//             </h2>
+//             <p className='text-lg text-gray-700 dark:text-gray-300 max-w-2xl mx-auto'>
+//               Experience the full power of our 3D shape creator with real-time
+//               editing, animation controls, and professional export options
+//             </p>
+//           </motion.div>
+
+//           <motion.div
+//             className='rounded-2xl overflow-hidden shadow-2xl'
+//             initial={{ opacity: 0, scale: 0.95 }}
+//             whileInView={{ opacity: 1, scale: 1 }}
+//             viewport={{ once: true }}
+//             transition={{ duration: 0.8 }}
+//           >
+//             <Enhanced3DShapes />
+//           </motion.div>
+//         </div>
+//       </section>
+
+//       {/* CTA Section */}
+//       <section className='py-20 bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-800 dark:to-blue-800'>
+//         <div className='container mx-auto px-4 text-center'>
+//           <motion.div
+//             initial={{ opacity: 0, scale: 0.9 }}
+//             whileInView={{ opacity: 1, scale: 1 }}
+//             viewport={{ once: true }}
+//             transition={{ duration: 0.6 }}
+//           >
+//             <h2 className='text-3xl md:text-4xl font-bold text-white mb-6'>
+//               Ready to Create Your First 3D Shape?
+//             </h2>
+//             <p className='text-xl text-blue-100 mb-8 max-w-2xl mx-auto'>
+//               Jump into our intuitive shape creator tool and start building
+//               amazing 3D models with advanced materials and lighting today
+//             </p>
+//             <Button asChild size='lg' variant='secondary' className='gap-2'>
+//               <Link href='/models'>
+//                 Start Creating Now <ArrowRight className='h-4 w-4' />
+//               </Link>
+//             </Button>
+//           </motion.div>
+//         </div>
+//       </section>
+//     </>
+//   );
+// }
+
 "use client";
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Box, PanelRight } from "lucide-react";
+import {
+  ArrowRight,
+  Box,
+  PanelRight,
+  Zap,
+  Palette,
+  Sparkles,
+  Download,
+  Play,
+  Pause,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import ModelViewer from "@/components/3d/ModelViewer";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
+import Enhanced3DShapes from "@/components/Enhanced3DShapes/Enhanced3DShapes";
+import { useState } from "react";
 
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.1,
+      staggerChildren: 0.15,
+      delayChildren: 0.2,
     },
   },
 };
 
 const itemVariants = {
-  hidden: { y: 20, opacity: 0 },
+  hidden: { y: 30, opacity: 0 },
   visible: {
     y: 0,
     opacity: 1,
+    transition: {
+      type: "spring",
+      stiffness: 100,
+      damping: 15,
+    },
+  },
+};
+
+const featureIconVariants = {
+  hover: { scale: 1.2, rotate: 15 },
+  tap: { scale: 0.9 },
+};
+
+// Floating animation for 3D preview wrapper
+const floatingVariants = {
+  animate: {
+    y: [0, -10, 0],
+    rotateY: [0, 5, 0],
+    transition: {
+      duration: 4,
+      repeat: Infinity,
+      ease: "easeInOut",
+    },
+  },
+};
+
+// Glow effect animation
+const glowVariants = {
+  animate: {
+    boxShadow: [
+      "0 0 20px rgba(168, 85, 247, 0.4)",
+      "0 0 40px rgba(168, 85, 247, 0.6)",
+      "0 0 20px rgba(168, 85, 247, 0.4)",
+    ],
+    transition: {
+      duration: 3,
+      repeat: Infinity,
+      ease: "easeInOut",
+    },
   },
 };
 
 export default function Home() {
+  const [isPlaying, setIsPlaying] = useState(true);
+
   return (
     <>
       {/* Hero Section */}
-      <section className='relative w-full h-[90vh] flex items-center justify-center overflow-hidden'>
-        <div className='absolute inset-0 z-0'>
-          <div className='absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 dark:from-blue-900/30 dark:to-purple-900/30' />
+      <section className='relative w-full min-h-[90vh] md:min-h-screen flex items-center justify-center overflow-hidden py-20 md:py-0'>
+        {/* Enhanced Animated Background */}
+        <div className='absolute inset-0 -z-10 h-full w-full bg-background'>
+          <div className='absolute bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:30px_30px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_110%)]'></div>
+          {/* Animated gradient orbs */}
+          <div className='absolute top-20 left-20 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl animate-pulse'></div>
+          <div className='absolute bottom-20 right-20 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse delay-1000'></div>
+        </div>
+        <div className='absolute inset-0 z-0 pointer-events-none'>
+          <div className='absolute inset-0 bg-gradient-to-b from-transparent via-background/50 to-background opacity-80'></div>
         </div>
 
         <div className='container mx-auto px-4 z-10'>
           <motion.div
-            className='flex flex-col lg:flex-row items-center justify-between gap-12'
+            className='flex flex-col lg:flex-row items-center justify-between gap-12 xl:gap-20'
             initial='hidden'
             animate='visible'
             variants={containerVariants}
           >
-            <div className='lg:w-1/2'>
+            <div className='lg:w-1/2 text-center lg:text-left'>
               <motion.h1
-                className='text-4xl md:text-6xl font-bold text-gray-900 dark:text-white mb-6'
+                className='text-5xl md:text-6xl lg:text-7xl font-extrabold text-foreground mb-6 leading-tight'
                 variants={itemVariants}
               >
-                Create Amazing{" "}
-                <span className='text-blue-600 dark:text-blue-400'>
-                  3D Models
-                </span>{" "}
-                in Minutes
+                Craft Stunning{" "}
+                <span className='bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-blue-500 dark:from-purple-400 dark:to-blue-400'>
+                  3D Shapes
+                </span>
+                , Effortlessly.
               </motion.h1>
 
               <motion.p
-                className='text-lg text-gray-700 dark:text-gray-300 mb-8'
+                className='text-lg md:text-xl text-muted-foreground mb-10'
                 variants={itemVariants}
               >
-                Design, customize, and export professional 3D models with our
-                intuitive creator tool. No experience required.
+                Unleash your creativity with an intuitive 3D shape studio.
+                Design, customize, animate, and export professional-grade models
+                with advanced PBR materials and dynamic lighting.
               </motion.p>
 
               <motion.div
-                className='flex flex-wrap gap-4'
+                className='flex flex-col sm:flex-row justify-center lg:justify-start gap-4'
                 variants={itemVariants}
               >
-                <Button asChild size='lg' className='gap-2'>
+                <Button
+                  asChild
+                  size='lg'
+                  className='gap-2 text-lg px-8 py-6 shadow-lg hover:shadow-primary/30 transition-shadow'
+                >
                   <Link href='/models'>
-                    Create Model <Box className='h-4 w-4' />
+                    Start Creating <Zap className='h-5 w-5' />
                   </Link>
                 </Button>
-
-                <Button asChild variant='outline' size='lg' className='gap-2'>
+                <Button
+                  asChild
+                  variant='outline'
+                  size='lg'
+                  className='gap-2 text-lg px-8 py-6'
+                >
                   <Link href='/showcase'>
-                    View Showcase <ArrowRight className='h-4 w-4' />
+                    View Showcase <ArrowRight className='h-5 w-5' />
                   </Link>
                 </Button>
               </motion.div>
             </div>
 
+            {/* Enhanced 3D Preview Section */}
             <motion.div
-              className='lg:w-1/2 h-[400px] rounded-xl overflow-hidden shadow-xl'
+              className='lg:w-1/2 w-full mt-10 lg:mt-0 relative'
               variants={itemVariants}
             >
-              <ModelViewer model='robot' className='w-full h-full' />
+              {/* Floating container with glow effect */}
+              <motion.div
+                variants={floatingVariants}
+                animate='animate'
+                className='relative'
+              >
+                <motion.div
+                  variants={glowVariants}
+                  animate='animate'
+                  className='rounded-2xl'
+                >
+                  <Card className='overflow-hidden shadow-2xl border-primary/30 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg relative'>
+                    {/* Decorative elements */}
+                    <div className='absolute top-4 right-4 z-10 flex gap-2'>
+                      <div className='w-3 h-3 bg-red-500 rounded-full opacity-60'></div>
+                      <div className='w-3 h-3 bg-yellow-500 rounded-full opacity-60'></div>
+                      <div className='w-3 h-3 bg-green-500 rounded-full opacity-60'></div>
+                    </div>
+
+                    {/* Play/Pause button */}
+                    <Button
+                      variant='ghost'
+                      size='sm'
+                      className='absolute top-4 left-4 z-10 bg-background/80 backdrop-blur-sm'
+                      onClick={() => setIsPlaying(!isPlaying)}
+                    >
+                      {isPlaying ? (
+                        <Pause className='h-4 w-4' />
+                      ) : (
+                        <Play className='h-4 w-4' />
+                      )}
+                    </Button>
+
+                    <AspectRatio
+                      ratio={16 / 10}
+                      className='bg-gradient-to-br from-slate-900/80 to-slate-800/80 relative overflow-hidden'
+                    >
+                      {/* Background pattern */}
+                      <div className='absolute inset-0 opacity-10'>
+                        <div className='absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,.1)_50%,transparent_75%)] bg-[length:20px_20px] animate-pulse'></div>
+                      </div>
+
+                      {/* 3D Component with enhanced styling */}
+                      <div className='w-full h-full relative'>
+                        {/* Spotlight effect */}
+                        <div className='absolute inset-0 bg-gradient-radial from-transparent via-transparent to-black/20 pointer-events-none'></div>
+
+                        {/* Enhanced 3D component */}
+                        <div className='w-full h-full transform transition-transform duration-300 hover:scale-105'>
+                          <Enhanced3DShapes />
+                        </div>
+
+                        {/* Interactive overlay */}
+                        <div className='absolute bottom-4 left-4 right-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 opacity-0 hover:opacity-100 transition-opacity duration-300'>
+                          <p className='text-sm text-muted-foreground'>
+                            ✨ Interactive 3D Preview - Click and drag to
+                            explore
+                          </p>
+                        </div>
+                      </div>
+                    </AspectRatio>
+                  </Card>
+                </motion.div>
+              </motion.div>
+
+              {/* Floating labels */}
+              <motion.div
+                className='absolute -top-6 -right-6 bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-medium shadow-lg'
+                initial={{ opacity: 0, scale: 0 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 1, type: "spring" }}
+              >
+                Real-time 3D
+              </motion.div>
+
+              <motion.div
+                className='absolute -bottom-6 -left-6 bg-secondary text-secondary-foreground px-3 py-1 rounded-full text-sm font-medium shadow-lg'
+                initial={{ opacity: 0, scale: 0 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 1.2, type: "spring" }}
+              >
+                PBR Materials
+              </motion.div>
             </motion.div>
           </motion.div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className='py-24 bg-gray-50 dark:bg-gray-900'>
+      <section className='py-20 md:py-32 bg-muted/40'>
         <div className='container mx-auto px-4'>
           <motion.div
             className='text-center mb-16'
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className='text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4'>
-              Powerful 3D Creation Tools
+            <h2 className='text-4xl md:text-5xl font-bold text-foreground mb-4'>
+              Unleash Your 3D Potential
             </h2>
-            <p className='text-lg text-gray-700 dark:text-gray-300 max-w-2xl mx-auto'>
-              Everything you need to bring your imagination to life in three
-              dimensions
+            <p className='text-xl text-muted-foreground max-w-3xl mx-auto'>
+              Our studio offers a comprehensive suite of tools for crafting
+              unique 3D assets with unparalleled ease and visual fidelity.
             </p>
           </motion.div>
 
           <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8'>
             {[
               {
-                icon: <Box className='h-8 w-8' />,
-                title: "Multiple Model Types",
+                icon: <Box className='h-10 w-10' />,
+                title: "Versatile Shape Library",
                 description:
-                  "Choose from robots, spaceships, cars, houses, trees, gems, planets, and anime characters",
+                  "Start with a diverse collection of base shapes—hearts, stars, crowns, and more—each ready for your creative touch.",
               },
               {
-                icon: <PanelRight className='h-8 w-8' />,
-                title: "Easy Customization",
+                icon: <Palette className='h-10 w-10' />,
+                title: "Advanced PBR Materials",
                 description:
-                  "Simple controls to adjust every aspect of your 3D creation",
+                  "Apply realistic metallic, glass, crystal, ceramic, or organic finishes with dynamic lighting and reflections.",
               },
               {
-                icon: <ArrowRight className='h-8 w-8' />,
-                title: "One-Click Export",
+                icon: <Sparkles className='h-10 w-10' />,
+                title: "Dynamic Animations",
                 description:
-                  "Download your models as GLB files compatible with all major 3D applications",
+                  "Bring your shapes to life with customizable animation presets, from gentle floats to energetic spins.",
+              },
+              {
+                icon: <PanelRight className='h-10 w-10' />,
+                title: "Intuitive Customization",
+                description:
+                  "Fine-tune every aspect: color, depth, quality, lighting, and animation speed through a user-friendly panel.",
+              },
+              {
+                icon: <Download className='h-10 w-10' />,
+                title: "Professional Export",
+                description:
+                  "Download your creations as GLB or OBJ, ready for use in game engines, 3D software, or web projects.",
+              },
+              {
+                icon: <Zap className='h-10 w-10' />,
+                title: "Real-time Previews",
+                description:
+                  "See your changes instantly in a high-fidelity 3D viewer with SSAO and environment-based lighting.",
               },
             ].map((feature, index) => (
               <motion.div
                 key={index}
-                className='bg-white dark:bg-gray-800 p-8 rounded-xl shadow-md'
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1, duration: 0.5 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{
+                  delay: index * 0.1,
+                  duration: 0.5,
+                  type: "spring",
+                  stiffness: 90,
+                }}
               >
-                <div className='text-blue-600 dark:text-blue-400 mb-4'>
-                  {feature.icon}
-                </div>
-                <h3 className='text-xl font-bold text-gray-900 dark:text-white mb-3'>
-                  {feature.title}
-                </h3>
-                <p className='text-gray-700 dark:text-gray-300'>
-                  {feature.description}
-                </p>
+                <Card className='h-full hover:shadow-primary/10 transition-shadow duration-300'>
+                  <CardHeader>
+                    <motion.div
+                      className='text-primary mb-4 inline-block p-3 bg-primary/10 rounded-lg'
+                      variants={featureIconVariants}
+                      whileHover='hover'
+                      whileTap='tap'
+                    >
+                      {feature.icon}
+                    </motion.div>
+                    <CardTitle className='text-2xl'>{feature.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CardDescription className='text-base'>
+                      {feature.description}
+                    </CardDescription>
+                  </CardContent>
+                </Card>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className='py-20 bg-blue-600 dark:bg-blue-800'>
-        <div className='container mx-auto px-4 text-center'>
+      {/* Enhanced Full Featured 3D Shapes Studio Section */}
+      <section className='py-20 md:py-32 bg-gradient-to-br from-background via-background to-primary/5 relative overflow-hidden'>
+        {/* Background decorations */}
+        <div className='absolute top-0 left-0 w-full h-full opacity-30'>
+          <div className='absolute top-20 left-10 w-32 h-32 bg-primary/20 rounded-full blur-2xl animate-pulse'></div>
+          <div className='absolute bottom-40 right-20 w-48 h-48 bg-secondary/20 rounded-full blur-3xl animate-pulse delay-500'></div>
+          <div className='absolute top-1/2 left-1/3 w-24 h-24 bg-accent/20 rounded-full blur-xl animate-pulse delay-1000'></div>
+        </div>
+
+        <div className='container mx-auto px-4 relative z-10'>
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
+            className='text-center mb-16'
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className='text-3xl md:text-4xl font-bold text-white mb-6'>
-              Ready to Create Your First 3D Model?
+            <h2 className='text-4xl md:text-5xl font-bold text-foreground mb-4'>
+              Experience the Full Studio
             </h2>
-            <p className='text-xl text-blue-100 mb-8 max-w-2xl mx-auto'>
-              Jump into our intuitive creator tool and start building amazing 3D
-              models today
+            <p className='text-xl text-muted-foreground max-w-3xl mx-auto'>
+              Dive into the complete 3D shape creation environment. Interact,
+              customize, and see the power of real-time PBR rendering.
             </p>
-            <Button asChild size='lg' variant='secondary' className='gap-2'>
+          </motion.div>
+
+          <motion.div
+            className='relative'
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            whileInView={{ opacity: 1, y: 0, scale: 1 }}
+            viewport={{ once: true, amount: 0.1 }}
+            transition={{
+              duration: 0.8,
+              type: "spring",
+              stiffness: 50,
+              damping: 15,
+            }}
+          >
+            {/* Enhanced container with multiple visual effects */}
+            <div className='relative rounded-3xl overflow-hidden shadow-2xl border border-primary/20 bg-gradient-to-br from-card via-card to-card/80 backdrop-blur-lg'>
+              {/* Top bar with controls */}
+              <div className='bg-gradient-to-r from-primary/10 to-secondary/10 p-4 border-b border-border/20 flex items-center justify-between'>
+                <div className='flex items-center gap-3'>
+                  <div className='flex gap-2'>
+                    <div className='w-3 h-3 bg-red-500 rounded-full'></div>
+                    <div className='w-3 h-3 bg-yellow-500 rounded-full'></div>
+                    <div className='w-3 h-3 bg-green-500 rounded-full'></div>
+                  </div>
+                  <span className='text-sm font-medium text-muted-foreground'>
+                    3D Shape Studio
+                  </span>
+                </div>
+                <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+                  <span className='flex items-center gap-1'>
+                    <div className='w-2 h-2 bg-green-500 rounded-full animate-pulse'></div>
+                    Live Preview
+                  </span>
+                </div>
+              </div>
+
+              {/* Enhanced 3D component container */}
+              <div className='relative min-h-[70vh] md:min-h-[80vh] bg-gradient-to-br from-slate-950/90 to-slate-900/90'>
+                {/* Ambient lighting effect */}
+                <div className='absolute inset-0 bg-gradient-radial from-primary/5 via-transparent to-transparent pointer-events-none'></div>
+
+                {/* Grid pattern overlay */}
+                <div className='absolute inset-0 opacity-5'>
+                  <div className='w-full h-full bg-[linear-gradient(rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:50px_50px]'></div>
+                </div>
+
+                {/* Main 3D component */}
+                <div className='relative w-full h-full'>
+                  <Enhanced3DShapes />
+                </div>
+
+                {/* Interactive hints */}
+                <div className='absolute bottom-6 left-6 right-6 flex justify-between items-end'>
+                  <div className='bg-background/90 backdrop-blur-sm rounded-lg p-4 max-w-xs opacity-0 hover:opacity-100 transition-opacity duration-300'>
+                    <h4 className='font-semibold text-sm mb-2'>Pro Tips:</h4>
+                    <ul className='text-xs text-muted-foreground space-y-1'>
+                      <li>• Drag to rotate the view</li>
+                      <li>• Scroll to zoom in/out</li>
+                      <li>• Use controls to customize</li>
+                    </ul>
+                  </div>
+
+                  <div className='flex gap-2'>
+                    <Button
+                      size='sm'
+                      variant='secondary'
+                      className='bg-background/90 backdrop-blur-sm'
+                    >
+                      <Download className='h-4 w-4 mr-2' />
+                      Export
+                    </Button>
+                    <Button
+                      size='sm'
+                      className='bg-primary/90 backdrop-blur-sm'
+                    >
+                      <Sparkles className='h-4 w-4 mr-2' />
+                      Customize
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Floating performance indicators */}
+            <motion.div
+              className='absolute -top-4 -right-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium shadow-lg flex items-center gap-2'
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 1.5, type: "spring" }}
+            >
+              <div className='w-2 h-2 bg-white rounded-full animate-pulse'></div>
+              60 FPS
+            </motion.div>
+
+            <motion.div
+              className='absolute -bottom-4 -left-4 bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-medium shadow-lg'
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 1.7, type: "spring" }}
+            >
+              WebGL 2.0
+            </motion.div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className='py-20 md:py-32 bg-gradient-to-br from-primary/80 to-primary'>
+        <div className='container mx-auto px-4 text-center'>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.3 }}
+            transition={{ duration: 0.7 }}
+          >
+            <h2 className='text-4xl md:text-5xl font-bold text-primary-foreground mb-6'>
+              Ready to Shape Your Ideas?
+            </h2>
+            <p className='text-xl text-primary-foreground/80 mb-10 max-w-2xl mx-auto'>
+              Join thousands of creators. Start building stunning 3D models with
+              unparalleled ease and visual fidelity today. No complex software
+              needed.
+            </p>
+            <Button
+              asChild
+              size='lg'
+              variant='secondary'
+              className='gap-2 text-lg px-10 py-7 shadow-lg hover:shadow-xl transition-shadow'
+            >
               <Link href='/models'>
-                Start Creating Now <ArrowRight className='h-4 w-4' />
+                Get Started for Free <ArrowRight className='h-5 w-5' />
               </Link>
             </Button>
           </motion.div>

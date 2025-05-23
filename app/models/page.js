@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import ModelCreator from "@/components/3d/ModelCreator";
+import ModelCreator from "@/components/3d/Create/ModelCreator";
 
 export default function ModelCreatorPage() {
   return (
