@@ -248,6 +248,7 @@
 // }
 
 // EditorSidebar.jsx
+// EditorSidebar.jsx
 import { motion } from "framer-motion";
 import {
   Card,
@@ -269,27 +270,19 @@ export default function EditorSidebar({
   setMode,
   addShape,
   setCameraView,
-  shapeOptions, // Primitive shapes
+  shapeOptions = [], // Default to an empty array
 }) {
+  // console.log("[EditorSidebar] Received shapeOptions prop:", shapeOptions); // Debug log
+
   const transformToolOptions = [
     {
       toolMode: "translate",
       icon: "↔️",
       label: "Translate",
-      tooltip: "Move objects (W)", // Added shortcuts for common tools
+      tooltip: "Move (W)",
     },
-    {
-      toolMode: "rotate",
-      icon: "🔄",
-      label: "Rotate",
-      tooltip: "Rotate objects (E)",
-    },
-    {
-      toolMode: "scale",
-      icon: "📏", // Changed icon for scale to avoid conflict
-      label: "Scale",
-      tooltip: "Scale objects (R)",
-    },
+    { toolMode: "rotate", icon: "🔄", label: "Rotate", tooltip: "Rotate (E)" },
+    { toolMode: "scale", icon: "📏", label: "Scale", tooltip: "Scale (R)" },
   ];
 
   const cameraViewOptions = [
@@ -383,27 +376,29 @@ export default function EditorSidebar({
             </CardHeader>
             <CardContent>
               <div className='grid grid-cols-2 gap-3'>
-                {shapeOptions.map((shape) => (
-                  <Tooltip key={shape.name}>
-                    <TooltipTrigger asChild>
-                      <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <Button
-                          onClick={() => addShape(shape.geometry)}
-                          variant='outline'
-                          size='sm'
-                          className='flex flex-col items-center justify-center h-20 w-full hover:bg-primary/10 transition-all duration-200'
+                {/* Safeguard before mapping */}
+                {Array.isArray(shapeOptions) &&
+                  shapeOptions.map((shape) => (
+                    <Tooltip key={shape.name}>
+                      <TooltipTrigger asChild>
+                        <motion.div
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
                         >
-                          <span className='text-xl mb-1'>{shape.icon}</span>
-                          <span className='text-xs'>{shape.name}</span>
-                        </Button>
-                      </motion.div>
-                    </TooltipTrigger>
-                    <TooltipContent>Add {shape.name} to scene</TooltipContent>
-                  </Tooltip>
-                ))}
+                          <Button
+                            onClick={() => addShape(shape.geometry)}
+                            variant='outline'
+                            size='sm'
+                            className='flex flex-col items-center justify-center h-20 w-full hover:bg-primary/10 transition-all duration-200'
+                          >
+                            <span className='text-xl mb-1'>{shape.icon}</span>
+                            <span className='text-xs'>{shape.name}</span>
+                          </Button>
+                        </motion.div>
+                      </TooltipTrigger>
+                      <TooltipContent>Add {shape.name} to scene</TooltipContent>
+                    </Tooltip>
+                  ))}
               </div>
             </CardContent>
           </Card>
