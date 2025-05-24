@@ -1,45 +1,3 @@
-// // FallbackCreator.jsx
-// import {
-//   Card,
-//   CardContent,
-//   CardDescription,
-//   CardHeader,
-//   CardTitle,
-// } from "@/components/ui/card";
-
-// export default function FallbackCreator() {
-//   return (
-//     <div className='flex flex-col h-full bg-gradient-to-br from-background to-muted'>
-//       <Card className='m-8 max-w-md mx-auto'>
-//         <CardHeader className='text-center'>
-//           <div className='text-6xl mb-4'>⚠️</div>
-//           <CardTitle className='text-2xl text-destructive'>
-//             Missing Dependencies
-//           </CardTitle>
-//           <CardDescription>
-//             This component requires React Three Fiber and related packages to
-//             work properly.
-//           </CardDescription>
-//         </CardHeader>
-//         <CardContent className='space-y-4'>
-//           <div className='bg-muted p-4 rounded-lg'>
-//             <p className='text-sm text-muted-foreground mb-2 font-medium'>
-//               Install the required packages:
-//             </p>
-//             <code className='text-primary text-sm font-mono'>
-//               npm install @react-three/fiber @react-three/drei three
-//             </code>
-//           </div>
-//           <p className='text-xs text-muted-foreground text-center'>
-//             After installing, restart your development server.
-//           </p>
-//         </CardContent>
-//       </Card>
-//     </div>
-//   );
-// }
-
-// FallbackCreator.jsx
 import {
   Card,
   CardContent,
@@ -77,7 +35,7 @@ export default function FallbackCreator() {
             </code>
             <p className='text-xs text-muted-foreground mt-2'>
               (three-stdlib is recommended for up-to-date loaders like
-              RGBELoader)
+              RGBELoader from Drei's Environment)
             </p>
           </div>
           <p className='text-sm text-muted-foreground text-center'>
