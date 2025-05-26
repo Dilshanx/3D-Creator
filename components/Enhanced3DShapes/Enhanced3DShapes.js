@@ -522,7 +522,7 @@ const EnhancedShapeSelector = ({ shapes, currentShape, onShapeSelect }) => {
       flower: <Flower2 className='w-5 h-5' />,
       crown: <Crown className='w-5 h-5' />,
       infinity: <Infinity className='w-5 h-5' />,
-      spiral: <Spiral className='w-5 h-5' />,
+      spiral: <Zap className='w-5 h-5' />,
     };
     return iconMap[shapeId] || <Box className='w-5 h-5' />;
   };

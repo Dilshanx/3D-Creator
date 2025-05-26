@@ -157,3 +157,4 @@ export default function CanvasView({
     </motion.div>
   );
 }
+
