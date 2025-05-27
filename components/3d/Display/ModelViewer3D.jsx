@@ -29853,56 +29853,42 @@ const getGltfLoader = () => {
 };
 
 // --- R3F HELPER/SUB-COMPONENTS ---
-// 
 function createR3FMaterialProps(
   baseColor,
   materialType = "standard",
   customProps = {},
   envMap
 ) {
-  const colorInput = new THREE.Color(baseColor); // Original color from settings.shapeColor
+  const color = new THREE.Color(baseColor);
   let preset = baseMaterialPresets[materialType] || baseMaterialPresets.ceramic;
-  const finalProps = { ...preset }; // Spread preset first
-
-  // Override with custom numerical properties if they exist
+  const finalProps = { ...preset };
   if (customProps.roughness !== null && customProps.roughness !== undefined)
     finalProps.roughness = customProps.roughness;
   if (customProps.metalness !== null && customProps.metalness !== undefined)
     finalProps.metalness = customProps.metalness;
   if (customProps.ior !== null && customProps.ior !== undefined)
     finalProps.ior = customProps.ior;
-  if (customProps.transmission !== null && customProps.transmission !== undefined)
+  if (
+    customProps.transmission !== null &&
+    customProps.transmission !== undefined
+  )
     finalProps.transmission = customProps.transmission;
   if (customProps.thickness !== null && customProps.thickness !== undefined)
     finalProps.thickness = customProps.thickness;
-  if (customProps.emissiveIntensity !== null && customProps.emissiveIntensity !== undefined)
+  if (
+    customProps.emissiveIntensity !== null &&
+    customProps.emissiveIntensity !== undefined
+  )
     finalProps.emissiveIntensity = customProps.emissiveIntensity;
-
-  // Determine material base color: white if map texture exists, otherwise use shapeColor
-  let materialEffectiveBaseColor = colorInput;
-  if (customProps.mapUrl && customProps.mapUrl.trim() !== "") {
-    materialEffectiveBaseColor = new THREE.Color(0xffffff);
-  }
-
-  // Determine emissive base color for emissive materials
-  let emissiveEffectiveBaseColor;
   if (finalProps.useEmissive) {
-    emissiveEffectiveBaseColor = new THREE.Color(colorInput).multiplyScalar(0.8); // Default emissive based on shapeColor
-    if (customProps.emissiveMapUrl && customProps.emissiveMapUrl.trim() !== "") {
-      emissiveEffectiveBaseColor = new THREE.Color(0xffffff); // Use white if emissiveMap texture exists
-    }
-    // Ensure finalProps has the determined emissive color if useEmissive is true
-    finalProps.emissive = emissiveEffectiveBaseColor;
+    finalProps.emissive = new THREE.Color(color).multiplyScalar(0.8);
   }
-
-
   const materialConstructor =
     materialType === "glass" || materialType === "crystal"
       ? THREE.MeshPhysicalMaterial
       : THREE.MeshStandardMaterial;
-
   const sharedArgs = {
-    color: materialEffectiveBaseColor, // Use determined base color
+    color,
     metalness: finalProps.metalness,
     roughness: finalProps.roughness,
     envMap: envMap,
@@ -29916,11 +29902,10 @@ function createR3FMaterialProps(
       opacity: finalProps.opacity ?? 0.85,
     }),
     ...(finalProps.useEmissive && {
-      emissive: finalProps.emissive, // This is now correctly set if emissiveMap is used
+      emissive: finalProps.emissive,
       emissiveIntensity: finalProps.emissiveIntensity,
     }),
   };
-
   const textureUrls = {};
   const textureMapTypes = [
     "map",
@@ -29932,11 +29917,10 @@ function createR3FMaterialProps(
   ];
   textureMapTypes.forEach((mapType) => {
     const urlKey = `${mapType}Url`;
-    if (customProps[urlKey] && typeof customProps[urlKey] === 'string' && customProps[urlKey].trim() !== "") {
+    if (customProps[urlKey] && customProps[urlKey] !== "") {
       textureUrls[urlKey] = customProps[urlKey];
     }
   });
-
   return {
     constructor: materialConstructor,
     args: sharedArgs,
@@ -29944,6 +29928,55 @@ function createR3FMaterialProps(
   };
 }
 
+const AppliedMaterial = React.memo(
+  ({
+    materialProps = {
+      constructor: THREE.MeshStandardMaterial,
+      args: { color: "gray" },
+      textureUrls: {},
+    },
+    textureUrls = {},
+  }) => {
+    const validUrls = Object.fromEntries(
+      Object.entries(textureUrls).filter(
+        ([_, value]) =>
+          value && typeof value === "string" && value.trim() !== ""
+      )
+    );
+    const loadedTexturesFromDrei =
+      Object.keys(validUrls).length > 0 ? useTexture(validUrls) : {};
+    const textures = {};
+    Object.keys(validUrls).forEach((urlKey) => {
+      if (loadedTexturesFromDrei[urlKey]) {
+        textures[urlKey.replace("Url", "")] = loadedTexturesFromDrei[urlKey];
+      }
+    });
+    useEffect(() => {
+      if (textures.map) textures.map.colorSpace = THREE.SRGBColorSpace;
+      if (textures.emissiveMap)
+        textures.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+      Object.values(textures).forEach((tex) => {
+        if (tex) {
+          tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+          tex.needsUpdate = true;
+        }
+      });
+    }, [textures]);
+    const safeMaterialArgs =
+      materialProps && materialProps.args
+        ? materialProps.args
+        : { color: "magenta" };
+    const MaterialConstructor =
+      materialProps && materialProps.constructor
+        ? materialProps.constructor
+        : THREE.MeshStandardMaterial;
+    const allArgs = { ...safeMaterialArgs, ...textures };
+    if (MaterialConstructor === THREE.MeshPhysicalMaterial) {
+      return <meshPhysicalMaterial {...allArgs} />;
+    }
+    return <meshStandardMaterial {...allArgs} />;
+  }
+);
 AppliedMaterial.displayName = "AppliedMaterial";
 
 const ProceduralShape = React.memo(
@@ -33325,4 +33358,3 @@ const ModelViewer3D = () => {
   );
 };
 export default ModelViewer3D;
-// this is a very large component, and the complexity comes from managing many states and effects. The key to solving the "undefined element" error is almost always in the imports or the definition order of components within the same file. If this still fails, the very next step would be to simplify `SceneContentInternal` to its absolute bare minimum (e.g., just an `<ambientLight />` and a single `<mesh>`) and then add back components one by one.
