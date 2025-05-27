@@ -768,8 +768,7 @@
 //   );
 // }
 
-// src/components/3d/Create/PropertiesPanel.js
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Card,
@@ -799,18 +798,22 @@ import * as THREE from "three";
 
 export default function PropertiesPanel({
   selectedShape,
-  updateShape, // updateShapeAndSave from Model3DCreator
+  updateShape,
   removeShape,
   duplicateShape,
-  addShape, // For "Add Cube" etc. buttons in empty state
-  // CSG Props from Model3DCreator
-  shapes, // All shapes for dropdowns
+  addShape,
+  // CSG Props (if used, ensure they are passed from Model3DCreator)
+  shapes,
   operandAId,
   setOperandAId,
   operandBId,
   setOperandBId,
   performCsgSubtraction,
 }) {
+  useEffect(() => {
+    // console.log("PropertiesPanel: selectedShape updated", selectedShape);
+  }, [selectedShape]);
+
   const shapeDisplayOptions = [
     { name: "Cube", type: "box", icon: "🧊" },
     { name: "Sphere", type: "sphere", icon: "⚪" },
@@ -820,7 +823,7 @@ export default function PropertiesPanel({
     { name: "Pyramid", type: "pyramid", icon: "🔺" },
     { name: "3D Text", type: "text", icon: "📝" },
     { name: "Image Plane", type: "imagePlane", icon: "🖼️" },
-    { name: "Custom Mesh", type: "customMesh", icon: "✨" }, // For CSG results
+    { name: "Custom Mesh", type: "customMesh", icon: "✨" },
   ];
   const popularShapeIcons = {
     heart: "❤️",
@@ -844,142 +847,38 @@ export default function PropertiesPanel({
     { name: "Wireframe", type: "wireframe" },
   ];
 
+  // --- CONSTANT DECLARATIONS - ORDER IS CRITICAL ---
   const currentShapeType = selectedShape?.type;
-  const isPBRMaterial = ["standard", "physical"].includes(
-    selectedShape?.material || // For procedural primitives
-      selectedShape?.materialProps?.type // For customMesh
-  );
+
   const isCustomExtruded = currentShapeType === "customExtruded";
   const isImportedGLB = currentShapeType === "importedGLB";
   const isText = currentShapeType === "text";
   const isImagePlane = currentShapeType === "imagePlane";
-  const isCustomMesh = currentShapeType === "customMesh"; // CSG result
+  const isCustomMesh = currentShapeType === "customMesh"; // DEFINITION
 
-  const handleTransformUpdate = useCallback(
-    (property, index, valueStr) => {
-      if (!selectedShape) return;
-      const value = parseFloat(valueStr);
-      if (isNaN(value) && property !== "rotation") return;
+  const currentMaterialForPBRCheck = isCustomMesh // USAGE of isCustomMesh
+    ? selectedShape?.materialProps?.type
+    : selectedShape?.material;
 
-      const newTransform = [...selectedShape[property]];
-      newTransform[index] =
-        property === "rotation"
-          ? THREE.MathUtils.degToRad(value || 0)
-          : Math.max(property === "scale" ? 0.01 : -Infinity, value);
-
-      updateShape(selectedShape.id, { [property]: newTransform });
-    },
-    [selectedShape, updateShape]
+  const isPBRMaterial = ["standard", "physical"].includes(
+    currentMaterialForPBRCheck
   );
 
-  const handleGenericUpdate = useCallback(
-    (property, value) => {
-      if (!selectedShape) return;
-      if (
-        isCustomMesh &&
-        (property === "color" ||
-          property === "roughness" ||
-          property === "metalness" ||
-          property === "material")
-      ) {
-        // For customMesh, update materialProps
-        const newMaterialProps = {
-          ...(selectedShape.materialProps || {}),
-          [property === "material" ? "type" : property]: value,
-        };
-        updateShape(selectedShape.id, { materialProps: newMaterialProps });
-      } else {
-        updateShape(selectedShape.id, { [property]: value });
-      }
-    },
-    [selectedShape, updateShape, isCustomMesh]
-  );
+  const currentMaterialType = isCustomMesh
+    ? selectedShape?.materialProps?.type
+    : selectedShape?.material;
 
-  const handleAnimationUpdate = useCallback(
-    (property, value) => {
-      if (!selectedShape) return;
-      const currentAnimation = selectedShape.animation || {
-        type: "none",
-        speed: 1,
-        axis: "y",
-        orbitCenter: [0, 0, 0],
-        orbitRadius: 5,
-        orbitPlane: "xz",
-      };
-      updateShape(selectedShape.id, {
-        animation: { ...currentAnimation, [property]: value },
-      });
-    },
-    [selectedShape, updateShape]
-  );
+  const currentColor = isCustomMesh
+    ? selectedShape?.materialProps?.color
+    : selectedShape?.color;
 
-  const handleOrbitCenterUpdate = useCallback(
-    (index, valueStr) => {
-      if (!selectedShape || !selectedShape.animation) return;
-      const value = parseFloat(valueStr);
-      if (isNaN(value)) return;
+  const currentRoughness = isCustomMesh
+    ? selectedShape?.materialProps?.roughness
+    : selectedShape?.roughness;
 
-      const newOrbitCenter = [
-        ...(selectedShape.animation.orbitCenter || [0, 0, 0]),
-      ];
-      newOrbitCenter[index] = value;
-      handleAnimationUpdate("orbitCenter", newOrbitCenter);
-    },
-    [selectedShape, handleAnimationUpdate]
-  );
-
-  const handleQuickAction = useCallback(
-    (action) => {
-      if (!selectedShape) return;
-      const actions = {
-        resetScale: () => updateShape(selectedShape.id, { scale: [1, 1, 1] }),
-        resetRotation: () =>
-          updateShape(selectedShape.id, { rotation: [0, 0, 0] }),
-        centerObject: () => {
-          let yOffset = 0;
-          if (selectedShape.scale && selectedShape.scale[1]) {
-            if (selectedShape.type === "pyramid") yOffset = 0;
-            else if (selectedShape.type === "imagePlane")
-              yOffset =
-                ((selectedShape.planeHeight || 1) * selectedShape.scale[1]) / 2;
-            else if (
-              selectedShape.type === "importedGLB" ||
-              selectedShape.type === "customMesh"
-            ) {
-              yOffset = 0; // Centering complex meshes is non-trivial, place pivot at 0
-            } else yOffset = selectedShape.scale[1] * 0.5;
-          }
-          updateShape(selectedShape.id, { position: [0, yOffset, 0] });
-        },
-        randomColor: () => {
-          if (isImportedGLB || isImagePlane) {
-            // customMesh can have color changed via materialProps
-            alert(
-              "Cannot apply random color to imported models or image planes directly."
-            );
-            return;
-          }
-          const newColor = `#${Math.floor(Math.random() * 16777215)
-            .toString(16)
-            .padStart(6, "0")}`;
-          if (isCustomMesh) {
-            handleGenericUpdate("color", newColor);
-          } else {
-            updateShape(selectedShape.id, { color: newColor });
-          }
-        },
-      };
-      actions[action]?.();
-    },
-    [
-      selectedShape,
-      updateShape,
-      isImportedGLB,
-      isImagePlane,
-      isCustomMesh,
-      handleGenericUpdate,
-    ]
-  );
+  const currentMetalness = isCustomMesh
+    ? selectedShape?.materialProps?.metalness
+    : selectedShape?.metalness;
 
   const animation = selectedShape?.animation
     ? {
@@ -1004,21 +903,129 @@ export default function PropertiesPanel({
         orbitRadius: 5,
         orbitPlane: "xz",
       };
+  // --- END OF CONSTANT DECLARATIONS ---
 
-  // Determine current material properties, considering customMesh
-  // CORRECTED LINES:
-  const currentMaterialType = isCustomMesh
-    ? selectedShape?.materialProps?.type
-    : selectedShape?.material;
-  const currentColor = isCustomMesh
-    ? selectedShape?.materialProps?.color
-    : selectedShape?.color;
-  const currentRoughness = isCustomMesh
-    ? selectedShape?.materialProps?.roughness
-    : selectedShape?.roughness;
-  const currentMetalness = isCustomMesh
-    ? selectedShape?.materialProps?.metalness
-    : selectedShape?.metalness;
+  const handleTransformUpdate = useCallback(
+    (property, index, valueStr) => {
+      if (!selectedShape) return;
+      const value = parseFloat(valueStr);
+      if (isNaN(value) && property !== "rotation") return;
+      const newTransform = [...selectedShape[property]];
+      newTransform[index] =
+        property === "rotation"
+          ? THREE.MathUtils.degToRad(value || 0)
+          : Math.max(property === "scale" ? 0.01 : -Infinity, value);
+      updateShape(selectedShape.id, { [property]: newTransform });
+    },
+    [selectedShape, updateShape]
+  );
+
+  const handleGenericUpdate = useCallback(
+    (property, value) => {
+      if (!selectedShape) return;
+      if (
+        isCustomMesh &&
+        (property === "color" ||
+          property === "roughness" ||
+          property === "metalness" ||
+          property === "material")
+      ) {
+        const newMaterialProps = {
+          ...(selectedShape.materialProps || {}),
+          [property === "material" ? "type" : property]: value,
+        };
+        updateShape(selectedShape.id, { materialProps: newMaterialProps });
+      } else {
+        updateShape(selectedShape.id, { [property]: value });
+      }
+    },
+    [selectedShape, updateShape, isCustomMesh]
+  );
+
+  const handleAnimationUpdate = useCallback(
+    (property, value) => {
+      if (!selectedShape) return;
+      const currentAnimationData = selectedShape.animation || {
+        type: "none",
+        speed: 1,
+        axis: "y",
+        orbitCenter: [0, 0, 0],
+        orbitRadius: 5,
+        orbitPlane: "xz",
+      };
+      updateShape(selectedShape.id, {
+        animation: { ...currentAnimationData, [property]: value },
+      });
+    },
+    [selectedShape, updateShape]
+  );
+
+  const handleOrbitCenterUpdate = useCallback(
+    (index, valueStr) => {
+      if (!selectedShape || !selectedShape.animation) return;
+      const value = parseFloat(valueStr);
+      if (isNaN(value)) return;
+      const newOrbitCenter = [
+        ...(selectedShape.animation.orbitCenter || [0, 0, 0]),
+      ];
+      newOrbitCenter[index] = value;
+      handleAnimationUpdate("orbitCenter", newOrbitCenter);
+    },
+    [selectedShape, handleAnimationUpdate]
+  );
+
+  const handleQuickAction = useCallback(
+    (action) => {
+      if (!selectedShape) return;
+      const actions = {
+        resetScale: () => updateShape(selectedShape.id, { scale: [1, 1, 1] }),
+        resetRotation: () =>
+          updateShape(selectedShape.id, { rotation: [0, 0, 0] }),
+        centerObject: () => {
+          let yOffset = 0;
+          if (selectedShape.scale && selectedShape.scale[1]) {
+            if (selectedShape.type === "pyramid") yOffset = 0;
+            else if (selectedShape.type === "text")
+              yOffset =
+                (selectedShape.textSize || 0.5) * selectedShape.scale[1] * 0.5;
+            else if (selectedShape.type === "imagePlane")
+              yOffset =
+                ((selectedShape.planeHeight || 1) * selectedShape.scale[1]) / 2;
+            else if (
+              selectedShape.type === "importedGLB" ||
+              selectedShape.type === "customMesh"
+            )
+              yOffset = 0;
+            else yOffset = selectedShape.scale[1] * 0.5;
+          }
+          updateShape(selectedShape.id, { position: [0, yOffset, 0] });
+        },
+        randomColor: () => {
+          if (isImportedGLB || isImagePlane) {
+            alert(
+              "Cannot apply random color to imported models or image planes directly."
+            );
+            return;
+          }
+          const newColor = `#${Math.floor(Math.random() * 16777215)
+            .toString(16)
+            .padStart(6, "0")}`;
+          if (isCustomMesh) handleGenericUpdate("color", newColor);
+          else updateShape(selectedShape.id, { color: newColor });
+        },
+      };
+      actions[action]?.();
+    },
+    [
+      selectedShape,
+      updateShape,
+      isImportedGLB,
+      isImagePlane,
+      isCustomMesh,
+      isText,
+      handleGenericUpdate,
+    ]
+  );
 
   return (
     <motion.div
@@ -1087,6 +1094,8 @@ export default function PropertiesPanel({
                       ? "📦"
                       : isCustomMesh
                       ? "✨"
+                      : isText
+                      ? "📝"
                       : isCustomExtruded
                       ? popularShapeIcons[
                           selectedShape.shapeType?.toLowerCase()
@@ -1106,7 +1115,11 @@ export default function PropertiesPanel({
                       : isCustomMesh
                       ? selectedShape.name || "Custom Mesh"
                       : isText
-                      ? `Text: "${selectedShape.text || "Empty"}"`
+                      ? `Text: "${
+                          (selectedShape.text?.length > 15
+                            ? selectedShape.text?.substring(0, 12) + "..."
+                            : selectedShape.text) || "Empty"
+                        }"`
                       : isCustomExtruded && selectedShape.shapeType
                       ? selectedShape.shapeType
                       : selectedShape.name || currentShapeType}
@@ -1163,6 +1176,21 @@ export default function PropertiesPanel({
                       max={2}
                       min={0.1}
                       step={0.05}
+                      className='mt-2'
+                    />
+                  </div>
+                  <div>
+                    <Label>
+                      Thickness: {selectedShape.extrudeDepth?.toFixed(2) || 0.2}
+                    </Label>
+                    <Slider
+                      value={[selectedShape.extrudeDepth || 0.2]}
+                      onValueChange={([v]) =>
+                        handleGenericUpdate("extrudeDepth", v)
+                      }
+                      max={1}
+                      min={0.01}
+                      step={0.01}
                       className='mt-2'
                     />
                   </div>
@@ -1286,94 +1314,91 @@ export default function PropertiesPanel({
               </CardContent>
             </Card>
 
-            {!isImportedGLB &&
-              !isImagePlane && ( // This includes customMesh now
-                <Card className='bg-background/50'>
-                  <CardHeader>
-                    <CardTitle className='text-base'>Appearance</CardTitle>
-                  </CardHeader>
-                  <CardContent className='space-y-4'>
-                    <div>
-                      <Label>Material</Label>
-                      <Select
-                        value={currentMaterialType || "standard"}
-                        onValueChange={(v) =>
-                          handleGenericUpdate("material", v)
+            {!isImportedGLB && !isImagePlane && (
+              <Card className='bg-background/50'>
+                <CardHeader>
+                  <CardTitle className='text-base'>Appearance</CardTitle>
+                </CardHeader>
+                <CardContent className='space-y-4'>
+                  <div>
+                    <Label>Material</Label>
+                    <Select
+                      value={currentMaterialType || "standard"}
+                      onValueChange={(v) => handleGenericUpdate("material", v)}
+                    >
+                      <SelectTrigger className='mt-1'>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {materialOptions.map((m) => (
+                          <SelectItem key={m.type} value={m.type}>
+                            {m.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Color</Label>
+                    <div className='flex items-center space-x-2 mt-1'>
+                      <Input
+                        type='color'
+                        value={currentColor || "#ffffff"}
+                        onChange={(e) =>
+                          handleGenericUpdate("color", e.target.value)
                         }
-                      >
-                        <SelectTrigger className='mt-1'>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {materialOptions.map((m) => (
-                            <SelectItem key={m.type} value={m.type}>
-                              {m.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        className='p-1 h-10 w-14 rounded-md border cursor-pointer'
+                      />
+                      <Input
+                        value={currentColor || "#ffffff"}
+                        onChange={(e) =>
+                          handleGenericUpdate("color", e.target.value)
+                        }
+                        className='flex-1 h-10'
+                      />
                     </div>
-                    <div>
-                      <Label>Color</Label>
-                      <div className='flex items-center space-x-2 mt-1'>
-                        <Input
-                          type='color'
-                          value={currentColor || "#ffffff"}
-                          onChange={(e) =>
-                            handleGenericUpdate("color", e.target.value)
+                  </div>
+                  {isPBRMaterial && (
+                    <>
+                      <Separator className='my-3' />
+                      <div>
+                        <Label>
+                          Roughness:{" "}
+                          {Number(currentRoughness || 0.5).toFixed(2)}
+                        </Label>
+                        <Slider
+                          value={[currentRoughness || 0.5]}
+                          onValueChange={([v]) =>
+                            handleGenericUpdate("roughness", v)
                           }
-                          className='p-1 h-10 w-14 rounded-md border cursor-pointer'
-                        />
-                        <Input
-                          value={currentColor || "#ffffff"}
-                          onChange={(e) =>
-                            handleGenericUpdate("color", e.target.value)
-                          }
-                          className='flex-1 h-10'
+                          max={1}
+                          min={0}
+                          step={0.01}
+                          className='mt-2'
                         />
                       </div>
-                    </div>
-                    {isPBRMaterial && ( // Check uses currentMaterialType effectively via selectedShape.materialProps.type for customMesh
-                      <>
-                        <Separator className='my-3' />
-                        <div>
-                          <Label>
-                            Roughness:{" "}
-                            {Number(currentRoughness || 0.5).toFixed(2)}
-                          </Label>
-                          <Slider
-                            value={[currentRoughness || 0.5]}
-                            onValueChange={([v]) =>
-                              handleGenericUpdate("roughness", v)
-                            }
-                            max={1}
-                            min={0}
-                            step={0.01}
-                            className='mt-2'
-                          />
-                        </div>
-                        <div>
-                          <Label>
-                            Metalness:{" "}
-                            {Number(currentMetalness || 0.0).toFixed(2)}
-                          </Label>
-                          <Slider
-                            value={[currentMetalness || 0.0]}
-                            onValueChange={([v]) =>
-                              handleGenericUpdate("metalness", v)
-                            }
-                            max={1}
-                            min={0}
-                            step={0.01}
-                            className='mt-2'
-                          />
-                        </div>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-            {(isImportedGLB || isImagePlane) && ( // Keep this for GLB/Image specific messages
+                      <div>
+                        <Label>
+                          Metalness:{" "}
+                          {Number(currentMetalness || 0.0).toFixed(2)}
+                        </Label>
+                        <Slider
+                          value={[currentMetalness || 0.0]}
+                          onValueChange={([v]) =>
+                            handleGenericUpdate("metalness", v)
+                          }
+                          max={1}
+                          min={0}
+                          step={0.01}
+                          className='mt-2'
+                        />
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+            {(isImportedGLB || isImagePlane) && (
               <Card className='bg-background/50'>
                 <CardHeader>
                   <CardTitle className='text-base'>Appearance</CardTitle>
@@ -1552,16 +1577,15 @@ export default function PropertiesPanel({
                   >
                     Center Object
                   </Button>
-                  {!isImportedGLB &&
-                    !isImagePlane && ( // customMesh can have random color
-                      <Button
-                        onClick={() => handleQuickAction("randomColor")}
-                        variant='outline'
-                        size='sm'
-                      >
-                        Random Color
-                      </Button>
-                    )}
+                  {!isImportedGLB && !isImagePlane && (
+                    <Button
+                      onClick={() => handleQuickAction("randomColor")}
+                      variant='outline'
+                      size='sm'
+                    >
+                      Random Color
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1584,21 +1608,19 @@ export default function PropertiesPanel({
                 🧊 Add Cube
               </Button>
               <Button
-                onClick={() =>
-                  addShape("customExtruded", { shapeType: "heart" })
-                }
+                onClick={() => addShape("text")}
                 variant='outline'
                 className='w-full'
               >
-                ❤️ Add Heart
+                📝 Add 3D Text
               </Button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* CSG Operations Card - Always visible if there are enough shapes */}
-      {Array.isArray(shapes) && shapes.length >= 1 && (
+      {/* CSG Operations Card */}
+      {Array.isArray(shapes) && shapes.length >= 1 && performCsgSubtraction && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1628,7 +1650,10 @@ export default function PropertiesPanel({
                     <SelectContent>
                       {shapes
                         .filter(
-                          (s) => s.id !== operandBId && s.type !== "imagePlane"
+                          (s) =>
+                            s.id !== operandBId &&
+                            s.type !== "imagePlane" &&
+                            s.type !== "importedGLB"
                         )
                         .map((s) => (
                           <SelectItem key={s.id} value={s.id}>
@@ -1640,7 +1665,8 @@ export default function PropertiesPanel({
                   {selectedShape &&
                     selectedShape.id !== operandAId &&
                     selectedShape.id !== operandBId &&
-                    selectedShape.type !== "imagePlane" && (
+                    selectedShape.type !== "imagePlane" &&
+                    selectedShape.type !== "importedGLB" && (
                       <Button
                         variant='outline'
                         size='sm'
@@ -1664,7 +1690,10 @@ export default function PropertiesPanel({
                     <SelectContent>
                       {shapes
                         .filter(
-                          (s) => s.id !== operandAId && s.type !== "imagePlane"
+                          (s) =>
+                            s.id !== operandAId &&
+                            s.type !== "imagePlane" &&
+                            s.type !== "importedGLB"
                         )
                         .map((s) => (
                           <SelectItem key={s.id} value={s.id}>
@@ -1676,7 +1705,8 @@ export default function PropertiesPanel({
                   {selectedShape &&
                     selectedShape.id !== operandBId &&
                     selectedShape.id !== operandAId &&
-                    selectedShape.type !== "imagePlane" && (
+                    selectedShape.type !== "imagePlane" &&
+                    selectedShape.type !== "importedGLB" && (
                       <Button
                         variant='outline'
                         size='sm'
