@@ -29200,6 +29200,4527 @@
 
 // components/3d/Display/SceneContent.jsx
 
+// import React, {
+//   useRef,
+//   useEffect,
+//   useState,
+//   useCallback,
+//   useMemo,
+//   Suspense,
+// } from "react";
+// import * as THREE from "three";
+// import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
+// import { FontLoader } from "three/examples/jsm/loaders/FontLoader.js";
+// import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
+
+// import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+// import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+// import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+// import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+// import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
+// import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
+// import { TDSLoader } from "three/examples/jsm/loaders/TDSLoader.js";
+
+// import { Canvas, useFrame, useThree, useLoader } from "@react-three/fiber";
+// import {
+//   Text3D,
+//   Center,
+//   OrbitControls as DreiOrbitControls,
+//   Environment,
+//   useGLTF,
+//   useFBX,
+//   useTexture,
+//   Stats,
+//   Grid,
+//   Loader as DreiLoader,
+//   useProgress,
+// } from "@react-three/drei";
+// import { EffectComposer, N8AO, Bloom } from "@react-three/postprocessing";
+// import { KernelSize } from "postprocessing";
+
+// import {
+//   Download,
+//   Play,
+//   Pause,
+//   RotateCcw,
+//   Camera,
+//   Shuffle,
+//   UploadCloud,
+//   XCircle,
+//   Loader2,
+//   Undo,
+//   Redo,
+//   StopCircle,
+//   Repeat,
+//   Settings2,
+//   Maximize,
+//   Minimize,
+//   ImageUp,
+//   Trash2,
+//   Type,
+//   Palette,
+//   LayersIcon,
+//   SunMedium,
+//   Zap,
+//   Sparkles,
+//   Eye,
+//   EyeOff,
+// } from "lucide-react";
+
+// import { Button } from "@/components/ui/button"; // Assuming these paths are correct
+// import {
+//   Card,
+//   CardContent,
+//   CardDescription,
+//   CardFooter,
+//   CardHeader,
+//   CardTitle,
+// } from "@/components/ui/card";
+// import {
+//   Select,
+//   SelectContent,
+//   SelectItem,
+//   SelectTrigger,
+//   SelectValue,
+// } from "@/components/ui/select";
+// import { Label } from "@/components/ui/label";
+// import { Input } from "@/components/ui/input";
+// import { Slider } from "@/components/ui/slider";
+// import { Toaster as SonnerToaster, toast as sonnerToast } from "sonner";
+// import { Progress } from "@/components/ui/progress";
+// import { Switch } from "@/components/ui/switch";
+// import { Separator } from "@/components/ui/separator";
+// import {
+//   Sheet,
+//   SheetContent,
+//   SheetDescription,
+//   SheetHeader,
+//   SheetTitle,
+//   SheetTrigger,
+//   SheetFooter,
+//   SheetClose,
+// } from "@/components/ui/sheet";
+// import {
+//   Tooltip,
+//   TooltipContent,
+//   TooltipProvider,
+//   TooltipTrigger,
+// } from "@/components/ui/tooltip";
+// import { ScrollArea } from "@/components/ui/scroll-area";
+
+// import { clsx } from "clsx";
+// import { twMerge } from "tailwind-merge";
+
+// // --- UTILITY FUNCTIONS ---
+// export function cn(...inputs) {
+//   return twMerge(clsx(inputs));
+// }
+// const saneNumber = (value, defaultValue = 0) => {
+//   const num = Number(value);
+//   return isNaN(num) || !isFinite(num) ? defaultValue : num;
+// };
+
+// // --- SHAPE CREATION FUNCTIONS ---
+// const createCatShape = (size = 1) => {
+//   const s = saneNumber(size, 1);
+//   const shape = new THREE.Shape();
+//   shape.moveTo(saneNumber(0), saneNumber(s * 0.8));
+//   shape.bezierCurveTo(
+//     saneNumber(-s * 0.6),
+//     saneNumber(s * 0.8),
+//     saneNumber(-s * 0.8),
+//     saneNumber(s * 0.4),
+//     saneNumber(-s * 0.8),
+//     saneNumber(0)
+//   );
+//   shape.bezierCurveTo(
+//     saneNumber(-s * 0.8),
+//     saneNumber(-s * 0.6),
+//     saneNumber(-s * 0.4),
+//     saneNumber(-s * 0.8),
+//     saneNumber(0),
+//     saneNumber(-s * 0.8)
+//   );
+//   shape.bezierCurveTo(
+//     saneNumber(s * 0.4),
+//     saneNumber(-s * 0.8),
+//     saneNumber(s * 0.8),
+//     saneNumber(-s * 0.6),
+//     saneNumber(s * 0.8),
+//     saneNumber(0)
+//   );
+//   shape.bezierCurveTo(
+//     saneNumber(s * 0.8),
+//     saneNumber(s * 0.4),
+//     saneNumber(s * 0.6),
+//     saneNumber(s * 0.8),
+//     saneNumber(0),
+//     saneNumber(s * 0.8)
+//   );
+//   const ear1 = new THREE.Path();
+//   ear1.moveTo(saneNumber(-s * 0.4), saneNumber(s * 0.6));
+//   ear1.lineTo(saneNumber(-s * 0.7), saneNumber(s * 1.2));
+//   ear1.lineTo(saneNumber(-s * 0.1), saneNumber(s * 0.9));
+//   ear1.closePath();
+//   const ear2 = new THREE.Path();
+//   ear2.moveTo(saneNumber(s * 0.4), saneNumber(s * 0.6));
+//   ear2.lineTo(saneNumber(s * 0.7), saneNumber(s * 1.2));
+//   ear2.lineTo(saneNumber(s * 0.1), saneNumber(s * 0.9));
+//   ear2.closePath();
+//   shape.holes.push(ear1);
+//   shape.holes.push(ear2);
+//   return shape;
+// };
+// const createBirdShape = (size = 1) => {
+//   const s = saneNumber(size, 1);
+//   const shape = new THREE.Shape();
+//   shape.moveTo(saneNumber(0), saneNumber(s * 0.6));
+//   shape.bezierCurveTo(
+//     saneNumber(-s * 0.8),
+//     saneNumber(s * 0.4),
+//     saneNumber(-s * 0.9),
+//     saneNumber(-s * 0.2),
+//     saneNumber(-s * 0.6),
+//     saneNumber(-s * 0.6)
+//   );
+//   shape.bezierCurveTo(
+//     saneNumber(-s * 0.3),
+//     saneNumber(-s * 0.8),
+//     saneNumber(s * 0.3),
+//     saneNumber(-s * 0.8),
+//     saneNumber(s * 0.6),
+//     saneNumber(-s * 0.6)
+//   );
+//   shape.bezierCurveTo(
+//     saneNumber(s * 0.9),
+//     saneNumber(-s * 0.2),
+//     saneNumber(s * 0.8),
+//     saneNumber(s * 0.4),
+//     saneNumber(0),
+//     saneNumber(s * 0.6)
+//   );
+//   const wing = new THREE.Path();
+//   wing.moveTo(saneNumber(-s * 0.3), saneNumber(s * 0.2));
+//   wing.bezierCurveTo(
+//     saneNumber(-s * 0.7),
+//     saneNumber(s * 0.3),
+//     saneNumber(-s * 0.8),
+//     saneNumber(0),
+//     saneNumber(-s * 0.5),
+//     saneNumber(-s * 0.3)
+//   );
+//   wing.bezierCurveTo(
+//     saneNumber(-s * 0.2),
+//     saneNumber(-s * 0.1),
+//     saneNumber(-s * 0.1),
+//     saneNumber(s * 0.1),
+//     saneNumber(-s * 0.3),
+//     saneNumber(s * 0.2)
+//   );
+//   shape.holes.push(wing);
+//   return shape;
+// };
+// const createFishShape = (size = 1) => {
+//   const s = saneNumber(size, 1);
+//   const shape = new THREE.Shape();
+//   shape.moveTo(saneNumber(-s * 0.8), saneNumber(0));
+//   shape.bezierCurveTo(
+//     saneNumber(-s * 0.6),
+//     saneNumber(s * 0.4),
+//     saneNumber(-s * 0.2),
+//     saneNumber(s * 0.5),
+//     saneNumber(s * 0.2),
+//     saneNumber(s * 0.3)
+//   );
+//   shape.bezierCurveTo(
+//     saneNumber(s * 0.6),
+//     saneNumber(s * 0.2),
+//     saneNumber(s * 0.8),
+//     saneNumber(0),
+//     saneNumber(s * 0.8),
+//     saneNumber(0)
+//   );
+//   shape.bezierCurveTo(
+//     saneNumber(s * 0.6),
+//     saneNumber(-s * 0.2),
+//     saneNumber(s * 0.2),
+//     saneNumber(-s * 0.3),
+//     saneNumber(-s * 0.2),
+//     saneNumber(-s * 0.5)
+//   );
+//   shape.bezierCurveTo(
+//     saneNumber(-s * 0.6),
+//     saneNumber(-s * 0.4),
+//     saneNumber(-s * 0.8),
+//     saneNumber(0),
+//     saneNumber(-s * 0.8),
+//     saneNumber(0)
+//   );
+//   shape.moveTo(saneNumber(s * 0.8), saneNumber(0));
+//   shape.lineTo(saneNumber(s * 1.2), saneNumber(s * 0.3));
+//   shape.lineTo(saneNumber(s * 1.0), saneNumber(0));
+//   shape.lineTo(saneNumber(s * 1.2), saneNumber(-s * 0.3));
+//   shape.lineTo(saneNumber(s * 0.8), saneNumber(0));
+//   return shape;
+// };
+// const createSoccerBallShape = (size = 1) => {
+//   const s = saneNumber(size, 1);
+//   const shape = new THREE.Shape();
+//   const r = s * 0.8;
+//   for (let i = 0; i < 6; i++) {
+//     const a = (i / 6) * Math.PI * 2;
+//     const x = saneNumber(Math.cos(a) * r);
+//     const y = saneNumber(Math.sin(a) * r);
+//     if (i === 0) shape.moveTo(x, y);
+//     else shape.lineTo(x, y);
+//   }
+//   shape.closePath();
+//   const ih = new THREE.Path();
+//   const ir = s * 0.4;
+//   for (let i = 0; i < 6; i++) {
+//     const a = (i / 6) * Math.PI * 2;
+//     const x = saneNumber(Math.cos(a) * ir);
+//     const y = saneNumber(Math.sin(a) * ir);
+//     if (i === 0) ih.moveTo(x, y);
+//     else ih.lineTo(x, y);
+//   }
+//   ih.closePath();
+//   shape.holes.push(ih);
+//   return shape;
+// };
+// const createTennisRacketShape = (size = 1) => {
+//   const s = saneNumber(size, 1);
+//   const shape = new THREE.Shape();
+//   const a = s * 0.6;
+//   const b = s * 0.4;
+//   for (let i = 0; i <= 32; i++) {
+//     const ang = (i / 32) * Math.PI * 2;
+//     const x = saneNumber(Math.cos(ang) * a);
+//     const y = saneNumber(Math.sin(ang) * b + s * 0.3);
+//     if (i === 0) shape.moveTo(x, y);
+//     else shape.lineTo(x, y);
+//   }
+//   shape.lineTo(saneNumber(s * 0.1), saneNumber(-s * 0.8));
+//   shape.lineTo(saneNumber(-s * 0.1), saneNumber(-s * 0.8));
+//   shape.closePath();
+//   return shape;
+// };
+// const createBasketballShape = (size = 1) => {
+//   const s = saneNumber(size, 1);
+//   const shape = new THREE.Shape();
+//   const r = s * 0.8;
+//   for (let i = 0; i <= 32; i++) {
+//     const a = (i / 32) * Math.PI * 2;
+//     const x = saneNumber(Math.cos(a) * r);
+//     const y = saneNumber(Math.sin(a) * r);
+//     if (i === 0) shape.moveTo(x, y);
+//     else shape.lineTo(x, y);
+//   }
+//   shape.closePath();
+//   return shape;
+// };
+// const createPersonShape = (size = 1) => {
+//   const s = saneNumber(size, 1);
+//   const shape = new THREE.Shape();
+//   const hr = s * 0.2;
+//   for (let i = 0; i <= 16; i++) {
+//     const a = (i / 16) * Math.PI * 2;
+//     const x = saneNumber(Math.cos(a) * hr);
+//     const y = saneNumber(Math.sin(a) * hr + s * 0.6);
+//     if (i === 0) shape.moveTo(x, y);
+//     else shape.lineTo(x, y);
+//   }
+//   shape.lineTo(saneNumber(-s * 0.3), saneNumber(s * 0.2));
+//   shape.lineTo(saneNumber(-s * 0.4), saneNumber(-s * 0.4));
+//   shape.lineTo(saneNumber(-s * 0.2), saneNumber(-s * 0.8));
+//   shape.lineTo(saneNumber(s * 0.2), saneNumber(-s * 0.8));
+//   shape.lineTo(saneNumber(s * 0.4), saneNumber(-s * 0.4));
+//   shape.lineTo(saneNumber(s * 0.3), saneNumber(s * 0.2));
+//   shape.closePath();
+//   return shape;
+// };
+// const createRobotShape = (size = 1) => {
+//   const sval = saneNumber(size, 1);
+//   const shape = new THREE.Shape();
+//   shape.moveTo(saneNumber(-sval * 0.4), saneNumber(sval * 0.8));
+//   shape.lineTo(saneNumber(sval * 0.4), saneNumber(sval * 0.8));
+//   shape.lineTo(saneNumber(sval * 0.4), saneNumber(sval * 0.4));
+//   shape.lineTo(saneNumber(-sval * 0.4), saneNumber(sval * 0.4));
+//   shape.closePath();
+//   shape.moveTo(saneNumber(-sval * 0.5), saneNumber(sval * 0.4));
+//   shape.lineTo(saneNumber(sval * 0.5), saneNumber(sval * 0.4));
+//   shape.lineTo(saneNumber(sval * 0.5), saneNumber(-sval * 0.4));
+//   shape.lineTo(saneNumber(-sval * 0.5), saneNumber(-sval * 0.4));
+//   shape.closePath();
+//   shape.moveTo(saneNumber(-sval * 0.3), saneNumber(-sval * 0.4));
+//   shape.lineTo(saneNumber(-sval * 0.1), saneNumber(-sval * 0.4));
+//   shape.lineTo(saneNumber(-sval * 0.1), saneNumber(-sval * 0.8));
+//   shape.lineTo(saneNumber(-sval * 0.3), saneNumber(-sval * 0.8));
+//   shape.closePath();
+//   shape.moveTo(saneNumber(sval * 0.1), saneNumber(-sval * 0.4));
+//   shape.lineTo(saneNumber(sval * 0.3), saneNumber(-sval * 0.4));
+//   shape.lineTo(saneNumber(sval * 0.3), saneNumber(-sval * 0.8));
+//   shape.lineTo(saneNumber(sval * 0.1), saneNumber(-sval * 0.8));
+//   shape.closePath();
+//   return shape;
+// };
+// const createPhoneShape = (size = 1) => {
+//   const sval = saneNumber(size, 1);
+//   const shape = new THREE.Shape();
+//   const w = sval * 0.5;
+//   const h = sval * 1.0;
+//   const r = sval * 0.1;
+//   shape.moveTo(saneNumber(-w + r), saneNumber(h));
+//   shape.lineTo(saneNumber(w - r), saneNumber(h));
+//   shape.quadraticCurveTo(
+//     saneNumber(w),
+//     saneNumber(h),
+//     saneNumber(w),
+//     saneNumber(h - r)
+//   );
+//   shape.lineTo(saneNumber(w), saneNumber(-h + r));
+//   shape.quadraticCurveTo(
+//     saneNumber(w),
+//     saneNumber(-h),
+//     saneNumber(w - r),
+//     saneNumber(-h)
+//   );
+//   shape.lineTo(saneNumber(-w + r), saneNumber(-h));
+//   shape.quadraticCurveTo(
+//     saneNumber(-w),
+//     saneNumber(-h),
+//     saneNumber(-w),
+//     saneNumber(-h + r)
+//   );
+//   shape.lineTo(saneNumber(-w), saneNumber(h - r));
+//   shape.quadraticCurveTo(
+//     saneNumber(-w),
+//     saneNumber(h),
+//     saneNumber(-w + r),
+//     saneNumber(h)
+//   );
+//   shape.closePath();
+//   const screen = new THREE.Path();
+//   const sw = w * 0.8;
+//   const sh = h * 0.8;
+//   const sr = r * 0.5;
+//   screen.moveTo(saneNumber(-sw + sr), saneNumber(sh));
+//   screen.lineTo(saneNumber(sw - sr), saneNumber(sh));
+//   screen.quadraticCurveTo(
+//     saneNumber(sw),
+//     saneNumber(sh),
+//     saneNumber(sw),
+//     saneNumber(sh - sr)
+//   );
+//   screen.lineTo(saneNumber(sw), saneNumber(-sh + sr));
+//   screen.quadraticCurveTo(
+//     saneNumber(sw),
+//     saneNumber(-sh),
+//     saneNumber(sw - sr),
+//     saneNumber(-sh)
+//   );
+//   screen.lineTo(saneNumber(-sw + sr), saneNumber(-sh));
+//   screen.quadraticCurveTo(
+//     saneNumber(-sw),
+//     saneNumber(-sh),
+//     saneNumber(-sw),
+//     saneNumber(-sh + sr)
+//   );
+//   screen.lineTo(saneNumber(-sw), saneNumber(sh - sr));
+//   screen.quadraticCurveTo(
+//     saneNumber(-sw),
+//     saneNumber(sh),
+//     saneNumber(-sw + sr),
+//     saneNumber(sh)
+//   );
+//   screen.closePath();
+//   shape.holes.push(screen);
+//   return shape;
+// };
+// const createLightningBoltShape = (size = 1) => {
+//   const sval = saneNumber(size, 1);
+//   const shape = new THREE.Shape();
+//   shape.moveTo(saneNumber(-sval * 0.2), saneNumber(sval * 0.8));
+//   shape.lineTo(saneNumber(sval * 0.3), saneNumber(sval * 0.2));
+//   shape.lineTo(saneNumber(sval * 0.1), saneNumber(sval * 0.2));
+//   shape.lineTo(saneNumber(sval * 0.4), saneNumber(-sval * 0.8));
+//   shape.lineTo(saneNumber(-sval * 0.1), saneNumber(-sval * 0.2));
+//   shape.lineTo(saneNumber(sval * 0.1), saneNumber(-sval * 0.2));
+//   shape.lineTo(saneNumber(-sval * 0.4), saneNumber(sval * 0.8));
+//   shape.closePath();
+//   return shape;
+// };
+// const createMusicNoteShape = (size = 1) => {
+//   const sval = saneNumber(size, 1);
+//   const shape = new THREE.Shape();
+//   const nr = sval * 0.15;
+//   for (let i = 0; i <= 16; i++) {
+//     const a = (i / 16) * Math.PI * 2;
+//     const x = saneNumber(Math.cos(a) * nr - sval * 0.2);
+//     const y = saneNumber(Math.sin(a) * nr - sval * 0.4);
+//     if (i === 0) shape.moveTo(x, y);
+//     else shape.lineTo(x, y);
+//   }
+//   shape.lineTo(saneNumber(-sval * 0.05), saneNumber(sval * 0.6));
+//   shape.lineTo(saneNumber(sval * 0.05), saneNumber(sval * 0.6));
+//   shape.lineTo(saneNumber(sval * 0.05), saneNumber(-sval * 0.25));
+//   shape.closePath();
+//   shape.moveTo(saneNumber(sval * 0.05), saneNumber(sval * 0.6));
+//   shape.bezierCurveTo(
+//     saneNumber(sval * 0.4),
+//     saneNumber(sval * 0.5),
+//     saneNumber(sval * 0.3),
+//     saneNumber(sval * 0.2),
+//     saneNumber(sval * 0.05),
+//     saneNumber(sval * 0.3)
+//   );
+//   shape.closePath();
+//   return shape;
+// };
+
+// // --- DATA CONSTANTS ---
+// const animationPresets = {
+//   gentle: {
+//     rotationSpeed: [0.002, 0.004, 0.001],
+//     floatAmplitude: 0.03,
+//     floatSpeed: 0.0003,
+//   },
+//   energetic: {
+//     rotationSpeed: [0.008, 0.012, 0.004],
+//     floatAmplitude: 0.08,
+//     floatSpeed: 0.001,
+//   },
+//   dramatic: {
+//     rotationSpeed: [0.01, 0.005, 0.015],
+//     floatAmplitude: 0.12,
+//     floatSpeed: 0.0008,
+//   },
+//   bounce: {
+//     rotationSpeed: [0.003, 0.006, 0.002],
+//     floatAmplitude: 0.15,
+//     floatSpeed: 0.002,
+//   },
+//   spin: {
+//     rotationSpeed: [0.02, 0.02, 0.02],
+//     floatAmplitude: 0.02,
+//     floatSpeed: 0.0005,
+//   },
+// };
+// const baseMaterialPresets = {
+//   metallic: { metalness: 0.9, roughness: 0.1, envMapIntensity: 1.5 },
+//   glass: {
+//     metalness: 0.0,
+//     roughness: 0.0,
+//     transmission: 0.95,
+//     thickness: 0.7,
+//     transparent: true,
+//     opacity: 0.85,
+//     envMapIntensity: 2.0,
+//     ior: 1.52,
+//   },
+//   crystal: {
+//     metalness: 0.0,
+//     roughness: 0.01,
+//     transmission: 0.98,
+//     thickness: 0.6,
+//     transparent: true,
+//     opacity: 0.9,
+//     envMapIntensity: 2.5,
+//     ior: 1.7,
+//   },
+//   ceramic: { metalness: 0.1, roughness: 0.6, envMapIntensity: 0.8 },
+//   organic: { metalness: 0.0, roughness: 0.8, envMapIntensity: 0.5 },
+//   plastic: { metalness: 0.0, roughness: 0.3, envMapIntensity: 0.7 },
+//   neon: {
+//     metalness: 0.0,
+//     roughness: 0.1,
+//     emissiveIntensity: 1.0,
+//     envMapIntensity: 0.2,
+//     useEmissive: true,
+//   },
+// };
+// const CATEGORIES_DATA = [
+//   { id: "animals", name: "Animals", icon: "🐱" },
+//   { id: "sports", name: "Sports", icon: "⚽" },
+//   { id: "people", name: "People", icon: "👤" },
+//   { id: "objects", name: "Objects", icon: "📱" },
+// ];
+// const SHAPES_BY_CATEGORY_DATA = {
+//   animals: [
+//     { id: "cat", name: "Cat", icon: "🐱", autoMaterial: "organic" },
+//     { id: "bird", name: "Bird", icon: "🐦", autoMaterial: "organic" },
+//     { id: "fish", name: "Fish", icon: "🐟", autoMaterial: "metallic" },
+//   ],
+//   sports: [
+//     { id: "soccer", name: "Soccer", icon: "⚽", autoMaterial: "plastic" },
+//     { id: "tennis", name: "Tennis", icon: "🎾", autoMaterial: "plastic" },
+//     {
+//       id: "basketball",
+//       name: "Basketball",
+//       icon: "🏀",
+//       autoMaterial: "plastic",
+//     },
+//   ],
+//   people: [
+//     { id: "person", name: "Person", icon: "👤", autoMaterial: "organic" },
+//     { id: "robot", name: "Robot", icon: "🤖", autoMaterial: "metallic" },
+//   ],
+//   objects: [
+//     { id: "phone", name: "Phone", icon: "📱", autoMaterial: "glass" },
+//     { id: "lightning", name: "Lightning", icon: "⚡", autoMaterial: "neon" },
+//     { id: "music", name: "Music Note", icon: "🎵", autoMaterial: "metallic" },
+//   ],
+// };
+// const BACKGROUND_OPTIONS_DATA = {
+//   modernGradient: "Modern Gradient",
+//   darkSpace: "Dark Space",
+//   softLight: "Soft Light",
+//   studioDark: "Studio Dark",
+//   studioLight: "Studio Light",
+//   customImage: "Custom Image",
+// };
+// const initialSettings = {
+//   materialType: "auto",
+//   shapeColor: "#a78bfa",
+//   animationSpeed: 1.0,
+//   extrudeDepth: 0.4,
+//   quality: "medium",
+//   background: "studioDark",
+//   keyLight: { enabled: true, intensity: 0.7, color: "#ffffff" },
+//   fillLight: { enabled: true, intensity: 0.4, color: "#a0c0ff" },
+//   ambientLight: { enabled: true, intensity: 0.25, color: "#ffffff" },
+//   customMaterialProperties: {
+//     roughness: null,
+//     metalness: null,
+//     ior: null,
+//     transmission: null,
+//     thickness: null,
+//     emissiveIntensity: null,
+//     mapUrl: null,
+//     normalMapUrl: null,
+//     roughnessMapUrl: null,
+//     metalnessMapUrl: null,
+//     aoMapUrl: null,
+//     emissiveMapUrl: null,
+//   },
+//   textFontUrl: "/fonts/helvetiker_regular.typeface.json",
+//   textColor: "#E0E0E0",
+//   textSize: 0.5,
+//   textDepth: 0.05,
+//   n8ao: {
+//     enabled: true,
+//     aoRadius: 0.5,
+//     intensity: 1.5,
+//     distanceFalloff: 1.0,
+//     screenSpaceRadius: true,
+//     quality: "medium",
+//     halfRes: false,
+//     color: "#000000", // Corrected from "black"
+//   },
+//   bloom: {
+//     enabled: false,
+//     intensity: 1,
+//     luminanceThreshold: 0.8,
+//     luminanceSmoothing: 0.025,
+//     kernelSize: KernelSize.LARGE,
+//   },
+// };
+
+// let helvetikerFontForExport = null;
+// const globalFontLoaderForExport = new FontLoader();
+// const FONT_PATH_FOR_EXPORT = "/fonts/helvetiker_regular.typeface.json";
+// globalFontLoaderForExport.load(
+//   FONT_PATH_FOR_EXPORT,
+//   (font) => {
+//     helvetikerFontForExport = font;
+//     console.log("Font for GLB export loaded.");
+//   },
+//   undefined,
+//   (err) => {
+//     console.error("Failed to load font for GLB export:", err);
+//   }
+// );
+
+// let localGltfLoaderInstance;
+// const getGltfLoader = () => {
+//   if (!localGltfLoaderInstance) {
+//     localGltfLoaderInstance = new GLTFLoader();
+//     const dracoLoader = new DRACOLoader();
+//     dracoLoader.setDecoderPath("/draco/gltf/");
+//     localGltfLoaderInstance.setDRACOLoader(dracoLoader);
+//   }
+//   return localGltfLoaderInstance;
+// };
+
+// // --- R3F HELPER/SUB-COMPONENTS ---
+// function createR3FMaterialProps(
+//   baseColor,
+//   materialType = "standard",
+//   customProps = {},
+//   envMap
+// ) {
+//   const colorInput = new THREE.Color(baseColor);
+//   let preset = baseMaterialPresets[materialType] || baseMaterialPresets.ceramic;
+//   const finalProps = { ...preset };
+
+//   if (customProps.roughness !== null && customProps.roughness !== undefined)
+//     finalProps.roughness = customProps.roughness;
+//   if (customProps.metalness !== null && customProps.metalness !== undefined)
+//     finalProps.metalness = customProps.metalness;
+//   if (customProps.ior !== null && customProps.ior !== undefined)
+//     finalProps.ior = customProps.ior;
+//   if (
+//     customProps.transmission !== null &&
+//     customProps.transmission !== undefined
+//   )
+//     finalProps.transmission = customProps.transmission;
+//   if (customProps.thickness !== null && customProps.thickness !== undefined)
+//     finalProps.thickness = customProps.thickness;
+//   if (
+//     customProps.emissiveIntensity !== null &&
+//     customProps.emissiveIntensity !== undefined
+//   )
+//     finalProps.emissiveIntensity = customProps.emissiveIntensity;
+
+//   let materialEffectiveBaseColor = colorInput;
+//   if (
+//     customProps.mapUrl &&
+//     typeof customProps.mapUrl === "string" &&
+//     customProps.mapUrl.trim() !== ""
+//   ) {
+//     materialEffectiveBaseColor = new THREE.Color(0xffffff);
+//     console.log(
+//       "[createR3FMaterialProps] mapUrl found, setting materialEffectiveBaseColor to white. mapUrl:",
+//       customProps.mapUrl
+//     );
+//   } else {
+//     console.log(
+//       "[createR3FMaterialProps] No mapUrl, using baseColor for materialEffectiveBaseColor:",
+//       baseColor
+//     );
+//   }
+
+//   let emissiveEffectiveBaseColor;
+//   if (finalProps.useEmissive) {
+//     emissiveEffectiveBaseColor = new THREE.Color(colorInput).multiplyScalar(
+//       0.8
+//     );
+//     if (
+//       customProps.emissiveMapUrl &&
+//       typeof customProps.emissiveMapUrl === "string" &&
+//       customProps.emissiveMapUrl.trim() !== ""
+//     ) {
+//       emissiveEffectiveBaseColor = new THREE.Color(0xffffff);
+//     }
+//     finalProps.emissive = emissiveEffectiveBaseColor;
+//   }
+
+//   const materialConstructor =
+//     materialType === "glass" || materialType === "crystal"
+//       ? THREE.MeshPhysicalMaterial
+//       : THREE.MeshStandardMaterial;
+//   const sharedArgs = {
+//     color: materialEffectiveBaseColor,
+//     metalness: finalProps.metalness,
+//     roughness: finalProps.roughness,
+//     envMap: envMap,
+//     envMapIntensity: finalProps.envMapIntensity,
+//     side: THREE.DoubleSide,
+//     ...((materialType === "glass" || materialType === "crystal") && {
+//       transmission: finalProps.transmission,
+//       thickness: finalProps.thickness,
+//       ior: finalProps.ior,
+//       transparent: true,
+//       opacity: finalProps.opacity ?? 0.85,
+//     }),
+//     ...(finalProps.useEmissive && {
+//       emissive: finalProps.emissive,
+//       emissiveIntensity: finalProps.emissiveIntensity,
+//     }),
+//   };
+
+//   const textureUrls = {};
+//   const textureMapTypes = [
+//     "map",
+//     "normalMap",
+//     "roughnessMap",
+//     "metalnessMap",
+//     "aoMap",
+//     "emissiveMap",
+//   ];
+//   textureMapTypes.forEach((mapType) => {
+//     const urlKey = `${mapType}Url`;
+//     if (
+//       customProps[urlKey] &&
+//       typeof customProps[urlKey] === "string" &&
+//       customProps[urlKey].trim() !== ""
+//     ) {
+//       textureUrls[urlKey] = customProps[urlKey];
+//     }
+//   });
+
+//   return {
+//     constructor: materialConstructor,
+//     args: sharedArgs,
+//     textureUrls: textureUrls,
+//   };
+// }
+
+// // TextureLoaderInternal helper component
+// const TextureLoaderInternal = ({ urls, onLoaded }) => {
+//   const loadedTextures = useTexture(urls);
+//   useEffect(() => {
+//     console.log("[TextureLoaderInternal] Loaded textures:", loadedTextures);
+//     onLoaded(loadedTextures);
+//   }, [loadedTextures, onLoaded]); // onLoaded should be stable
+//   return null;
+// };
+// TextureLoaderInternal.displayName = "TextureLoaderInternal";
+
+// // SIMPLIFIED AppliedMaterial for testing
+// const AppliedMaterial = React.memo(
+//   ({
+//     materialProps = {
+//       constructor: THREE.MeshStandardMaterial,
+//       args: { color: "gray" },
+//       textureUrls: {},
+//     },
+//     textureUrls = {},
+//   }) => {
+//     console.log(
+//       "[AppliedMaterial SIMPLIFIED] Rendering. textureUrls:",
+//       textureUrls
+//     );
+
+//     const mapUrlToLoad = textureUrls.mapUrl;
+
+//     const [mapTexture, setMapTexture] = useState(null);
+
+//     const handleTextureLoaded = useCallback((loadedTextures) => {
+//       console.log(
+//         "[AppliedMaterial SIMPLIFIED handleTextureLoaded] Received:",
+//         loadedTextures
+//       );
+//       if (
+//         loadedTextures &&
+//         loadedTextures.mapUrl &&
+//         loadedTextures.mapUrl.isTexture
+//       ) {
+//         console.log("[AppliedMaterial SIMPLIFIED] Setting mapTexture state.");
+//         const tex = loadedTextures.mapUrl;
+//         tex.colorSpace = THREE.SRGBColorSpace;
+//         tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+//         setMapTexture(tex);
+//       } else {
+//         console.warn(
+//           "[AppliedMaterial SIMPLIFIED] No valid mapUrl texture received from internal loader."
+//         );
+//         setMapTexture(null);
+//       }
+//     }, []);
+
+//     useEffect(() => {
+//       console.log(
+//         "[AppliedMaterial SIMPLIFIED] mapTexture state updated:",
+//         mapTexture
+//       );
+//       if (mapTexture && mapTexture.image) {
+//         console.log(
+//           `[AppliedMaterial SIMPLIFIED] mapTexture image: ${mapTexture.image.width}x${mapTexture.image.height}`
+//         );
+//       }
+//     }, [mapTexture]);
+
+//     const MaterialConstructor =
+//       materialProps.constructor || THREE.MeshStandardMaterial;
+//     const baseArgs = materialProps.args || {
+//       color: new THREE.Color("magenta"),
+//     };
+//     const finalArgs = { ...baseArgs };
+
+//     if (mapTexture) {
+//       finalArgs.color = new THREE.Color(0xffffff);
+//       finalArgs.map = mapTexture;
+//       console.log(
+//         "[AppliedMaterial SIMPLIFIED] Applying mapTexture. finalArgs.color forced white."
+//       );
+//     } else {
+//       console.log(
+//         "[AppliedMaterial SIMPLIFIED] No mapTexture. Using baseArgs.color:",
+//         baseArgs.color?.getHexString
+//           ? baseArgs.color.getHexString()
+//           : baseArgs.color
+//       );
+//     }
+
+//     // Explicitly delete other map types for this simplified test
+//     delete finalArgs.normalMap;
+//     delete finalArgs.roughnessMap;
+//     delete finalArgs.metalnessMap;
+//     delete finalArgs.aoMap;
+//     delete finalArgs.emissiveMap;
+//     delete finalArgs.alphaMap; // etc.
+
+//     console.log("[AppliedMaterial SIMPLIFIED] Final args for material:", {
+//       ...finalArgs,
+//       color: finalArgs.color?.getHexString
+//         ? finalArgs.color.getHexString()
+//         : finalArgs.color,
+//       map: finalArgs.map ? "Texture Object" : "No Map",
+//     });
+
+//     return (
+//       <>
+//         {mapUrlToLoad && (
+//           <Suspense fallback={null}>
+//             <TextureLoaderInternal
+//               key={mapUrlToLoad}
+//               urls={{ mapUrl: mapUrlToLoad }}
+//               onLoaded={handleTextureLoaded}
+//             />
+//           </Suspense>
+//         )}
+//         {MaterialConstructor === THREE.MeshPhysicalMaterial ? (
+//           <meshPhysicalMaterial {...finalArgs} />
+//         ) : (
+//           <meshStandardMaterial {...finalArgs} />
+//         )}
+//       </>
+//     );
+//   }
+// );
+// AppliedMaterial.displayName = "AppliedMaterial (Simplified)";
+
+// const ProceduralShape = React.memo(
+//   React.forwardRef(
+//     ({ shapeId, settings, size, animationPresetKey, isAnimating }, ref) => {
+//       const { scene } = useThree();
+//       const internalMeshRef = useRef();
+//       React.useImperativeHandle(ref, () => internalMeshRef.current);
+
+//       const geometry = useMemo(() => {
+//         const shapeConfigs = {
+//           cat: { creator: createCatShape },
+//           bird: { creator: createBirdShape },
+//           fish: { creator: createFishShape },
+//           soccer: { creator: createSoccerBallShape },
+//           tennis: { creator: createTennisRacketShape },
+//           basketball: { creator: createBasketballShape },
+//           person: { creator: createPersonShape },
+//           robot: { creator: createRobotShape },
+//           phone: { creator: createPhoneShape },
+//           lightning: { creator: createLightningBoltShape },
+//           music: { creator: createMusicNoteShape },
+//         };
+
+//         let config = shapeConfigs[shapeId];
+//         if (!config || typeof config.creator !== "function") {
+//           console.warn(
+//             `[ProceduralShape] Invalid or missing shapeId: "${shapeId}". Defaulting to "cat".`
+//           );
+//           config = shapeConfigs.cat;
+//         }
+
+//         const shapeSizeVal = saneNumber(size, 1.5);
+//         const proceduralShape = config.creator(shapeSizeVal);
+
+//         const extrudeSettings = {
+//           depth: saneNumber(settings.extrudeDepth, 0.4),
+//           bevelEnabled: true,
+//           bevelSegments:
+//             settings.quality === "high"
+//               ? 10
+//               : settings.quality === "medium"
+//               ? 6
+//               : 3,
+//           steps:
+//             settings.quality === "high"
+//               ? 5
+//               : settings.quality === "medium"
+//               ? 3
+//               : 1,
+//           bevelSize: saneNumber(0.035 * (shapeSizeVal / 1.5), 0.02),
+//           bevelThickness: saneNumber(0.025 * (shapeSizeVal / 1.5), 0.015),
+//           curveSegments:
+//             settings.quality === "high"
+//               ? 48
+//               : settings.quality === "medium"
+//               ? 24
+//               : 12,
+//         };
+
+//         const geom = new THREE.ExtrudeGeometry(
+//           proceduralShape,
+//           extrudeSettings
+//         );
+//         geom.computeVertexNormals();
+//         geom.center();
+//         console.log(
+//           `[ProceduralShape ${shapeId || "defaulting"}] Geometry UVs:`,
+//           geom.attributes.uv
+//         ); // Added shapeId guard for logging
+//         return geom;
+//       }, [shapeId, settings.extrudeDepth, settings.quality, size]);
+
+//       const { materialDef, textureUrlsToLoad } = useMemo(() => {
+//         let autoMaterialType = "ceramic";
+//         for (const catId in SHAPES_BY_CATEGORY_DATA) {
+//           const foundShape = SHAPES_BY_CATEGORY_DATA[catId].find(
+//             (s) => s.id === shapeId
+//           );
+//           if (foundShape && foundShape.autoMaterial) {
+//             autoMaterialType = foundShape.autoMaterial;
+//             break;
+//           }
+//         }
+//         const materialTypeForPreset =
+//           settings.materialType === "auto"
+//             ? autoMaterialType
+//             : settings.materialType;
+
+//         const propsFromCreator = createR3FMaterialProps(
+//           settings.shapeColor,
+//           materialTypeForPreset,
+//           settings.customMaterialProperties,
+//           scene.environment
+//         );
+
+//         return {
+//           materialDef: {
+//             constructor: propsFromCreator.constructor,
+//             args: propsFromCreator.args,
+//           },
+//           textureUrlsToLoad: propsFromCreator.textureUrls,
+//         };
+//       }, [
+//         settings.shapeColor,
+//         settings.materialType,
+//         settings.customMaterialProperties,
+//         shapeId,
+//         scene.environment,
+//       ]);
+
+//       const animationState = useRef({
+//         rotation: new THREE.Euler(),
+//         targetRotation: new THREE.Euler(),
+//         floatY: 0,
+//         startTime: Date.now(),
+//       });
+//       useFrame((state, delta) => {
+//         if (internalMeshRef.current && isAnimating) {
+//           const animSettings = settings;
+//           const preset = animationPresets[animationPresetKey];
+//           if (preset) {
+//             const effDelta = delta * animSettings.animationSpeed;
+//             animationState.current.targetRotation.x +=
+//               preset.rotationSpeed[0] * 60 * effDelta;
+//             animationState.current.targetRotation.y +=
+//               preset.rotationSpeed[1] * 60 * effDelta;
+//             animationState.current.targetRotation.z +=
+//               preset.rotationSpeed[2] * 60 * effDelta;
+//             internalMeshRef.current.rotation.x = THREE.MathUtils.lerp(
+//               internalMeshRef.current.rotation.x,
+//               animationState.current.targetRotation.x,
+//               0.1
+//             );
+//             internalMeshRef.current.rotation.y = THREE.MathUtils.lerp(
+//               internalMeshRef.current.rotation.y,
+//               animationState.current.targetRotation.y,
+//               0.1
+//             );
+//             internalMeshRef.current.rotation.z = THREE.MathUtils.lerp(
+//               internalMeshRef.current.rotation.z,
+//               animationState.current.targetRotation.z,
+//               0.1
+//             );
+//             const floatTime =
+//               (Date.now() - animationState.current.startTime) *
+//               0.001 *
+//               animSettings.animationSpeed;
+//             animationState.current.floatY =
+//               Math.sin(floatTime * (preset.floatSpeed || 0.0001) * 100) *
+//               (preset.floatAmplitude || 0);
+//             internalMeshRef.current.position.y = animationState.current.floatY;
+//           }
+//         }
+//       });
+
+//       console.log(
+//         `[ProceduralShape ${
+//           shapeId || "defaulting"
+//         }] Rendering. Received settings.customMaterialProperties.mapUrl:`,
+//         settings.customMaterialProperties.mapUrl
+//       );
+//       console.log(
+//         `[ProceduralShape ${
+//           shapeId || "defaulting"
+//         }] Derived textureUrlsToLoad (passed to AppliedMaterial):`,
+//         textureUrlsToLoad
+//       );
+//       console.log(
+//         `[ProceduralShape ${
+//           shapeId || "defaulting"
+//         }] Derived materialDef (passed to AppliedMaterial):`,
+//         materialDef
+//       );
+
+//       return (
+//         <Center ref={internalMeshRef} castShadow receiveShadow>
+//           <mesh geometry={geometry} castShadow receiveShadow>
+//             <Suspense
+//               fallback={<meshStandardMaterial color='gray' wireframe />}
+//             >
+//               <AppliedMaterial
+//                 materialProps={materialDef}
+//                 textureUrls={textureUrlsToLoad}
+//               />
+//             </Suspense>
+//           </mesh>
+//         </Center>
+//       );
+//     }
+//   )
+// );
+// ProceduralShape.displayName = "ProceduralShape";
+
+// const ImportedModel = React.memo(
+//   React.forwardRef(
+//     (
+//       {
+//         modelUrl,
+//         fileType,
+//         mtlUrl,
+//         settings,
+//         onModelLoad,
+//         isAnimating,
+//         animationPresetKey,
+//         animationClipsRef,
+//         activeActionRef,
+//         mixerRef: externalMixerRef,
+//         selectedAnimationClipIndex,
+//         animationPlaybackState,
+//         isAnimationLooping,
+//         animationPlaybackSpeed,
+//         animationTime,
+//       },
+//       ref
+//     ) => {
+//       const internalGroupRef = useRef();
+//       const { scene: r3fScene } = useThree();
+//       React.useImperativeHandle(ref, () => internalGroupRef.current);
+//       const processLoadedObject = useCallback(
+//         (object, animations) => {
+//           const box = new THREE.Box3().setFromObject(object);
+//           const sizeVec = box.getSize(new THREE.Vector3());
+//           const maxDim = Math.max(
+//             saneNumber(sizeVec.x, 1),
+//             saneNumber(sizeVec.y, 1),
+//             saneNumber(sizeVec.z, 1)
+//           );
+//           const desiredDisplaySize = 3;
+//           const scaleFactor = maxDim > 0 ? desiredDisplaySize / maxDim : 1;
+//           object.scale.setScalar(saneNumber(scaleFactor, 1));
+//           const scaledBox = new THREE.Box3().setFromObject(object);
+//           const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+//           if (
+//             !isNaN(scaledCenter.x) &&
+//             !isNaN(scaledCenter.y) &&
+//             !isNaN(scaledCenter.z)
+//           ) {
+//             object.position.sub(scaledCenter);
+//           } else {
+//             object.position.set(0, 0, 0);
+//           }
+//           object.traverse((child) => {
+//             if (child.isMesh) {
+//               child.castShadow = true;
+//               child.receiveShadow = true;
+//               if (child.material) {
+//                 const materials = Array.isArray(child.material)
+//                   ? child.material
+//                   : [child.material];
+//                 materials.forEach((mat) => {
+//                   mat.side = THREE.DoubleSide;
+//                   mat.envMap = r3fScene.environment;
+//                   mat.envMapIntensity =
+//                     settings.customMaterialProperties.envMapIntensity ??
+//                     baseMaterialPresets[settings.materialType]
+//                       ?.envMapIntensity ??
+//                     1.0;
+//                   mat.needsUpdate = true;
+//                 });
+//               }
+//             }
+//           });
+//           onModelLoad(object, animations);
+//         },
+//         [
+//           onModelLoad,
+//           r3fScene.environment,
+//           settings.customMaterialProperties,
+//           settings.materialType,
+//         ]
+//       );
+//       let loadedObjectForPrimitive = null;
+//       if (fileType === "gltf" || fileType === "glb") {
+//         const { scene: loadedScene, animations: loadedAnims } = useGLTF(
+//           modelUrl,
+//           true
+//         );
+//         loadedObjectForPrimitive = loadedScene;
+//         useEffect(() => {
+//           if (loadedScene && internalGroupRef.current) {
+//             processLoadedObject(internalGroupRef.current, loadedAnims);
+//           }
+//         }, [loadedScene, loadedAnims, processLoadedObject]);
+//       } else if (fileType === "fbx") {
+//         const fbx = useFBX(modelUrl);
+//         loadedObjectForPrimitive = fbx;
+//         useEffect(() => {
+//           if (fbx && internalGroupRef.current) {
+//             processLoadedObject(internalGroupRef.current, fbx.animations || []);
+//           }
+//         }, [fbx, processLoadedObject]);
+//       } else if (fileType === "stl") {
+//         const geom = useLoader(STLLoader, modelUrl);
+//         const stlMesh = useMemo(() => {
+//           if (!geom) return null;
+//           const {
+//             constructor: MatConstructor,
+//             args,
+//             textureUrls,
+//           } = createR3FMaterialProps(
+//             settings.shapeColor,
+//             "plastic",
+//             settings.customMaterialProperties,
+//             r3fScene.environment
+//           );
+//           return (
+//             <mesh geometry={geom} castShadow receiveShadow>
+//               <AppliedMaterial
+//                 materialProps={{ constructor: MatConstructor, args }}
+//                 textureUrls={textureUrls}
+//               />
+//             </mesh>
+//           );
+//         }, [
+//           geom,
+//           settings.shapeColor,
+//           settings.customMaterialProperties,
+//           r3fScene.environment,
+//         ]);
+//         loadedObjectForPrimitive = stlMesh;
+//         useEffect(() => {
+//           if (
+//             internalGroupRef.current &&
+//             internalGroupRef.current.children.length > 0 &&
+//             internalGroupRef.current.children[0].isMesh
+//           ) {
+//             processLoadedObject(internalGroupRef.current, []);
+//           }
+//         }, [processLoadedObject]);
+//       } else if (fileType === "obj") {
+//         const materials = mtlUrl
+//           ? useLoader(MTLLoader, mtlUrl, (loader) => {
+//               if (mtlUrl)
+//                 loader.setResourcePath(
+//                   mtlUrl.substring(0, mtlUrl.lastIndexOf("/") + 1)
+//                 );
+//             })
+//           : null;
+//         const obj = useLoader(OBJLoader, modelUrl, (loader) => {
+//           if (materials) {
+//             materials.preload();
+//             loader.setMaterials(materials);
+//           }
+//         });
+//         loadedObjectForPrimitive = obj;
+//         useEffect(() => {
+//           if (obj && internalGroupRef.current) {
+//             processLoadedObject(internalGroupRef.current, []);
+//           }
+//         }, [obj, processLoadedObject]);
+//       }
+//       const animationState = useRef({ startTime: Date.now() });
+//       useFrame((state, delta) => {
+//         if (
+//           internalGroupRef.current &&
+//           isAnimating &&
+//           (!animationClipsRef.current || animationClipsRef.current.length === 0)
+//         ) {
+//           const animSettings = settings;
+//           const preset = animationPresets[animationPresetKey];
+//           if (preset) {
+//             const floatTime =
+//               (Date.now() - animationState.current.startTime) *
+//               0.001 *
+//               animSettings.animationSpeed;
+//             internalGroupRef.current.position.y =
+//               Math.sin(floatTime * (preset.floatSpeed || 0.0001) * 100) *
+//               (preset.floatAmplitude || 0);
+//           }
+//         }
+//         if (externalMixerRef.current && animationPlaybackState === "playing") {
+//           externalMixerRef.current.update(delta * animationPlaybackSpeed);
+//         }
+//       });
+//       useEffect(() => {
+//         if (
+//           internalGroupRef.current &&
+//           loadedObjectForPrimitive &&
+//           animationClipsRef.current &&
+//           animationClipsRef.current.length > 0
+//         ) {
+//           const objectForMixer =
+//             internalGroupRef.current.isGroup &&
+//             internalGroupRef.current.children.length > 0 &&
+//             internalGroupRef.current.children[0].isMesh &&
+//             fileType === "stl"
+//               ? internalGroupRef.current
+//               : loadedObjectForPrimitive;
+//           externalMixerRef.current = new THREE.AnimationMixer(objectForMixer);
+//           if (
+//             selectedAnimationClipIndex >= 0 &&
+//             selectedAnimationClipIndex < animationClipsRef.current.length
+//           ) {
+//             const clip = animationClipsRef.current[selectedAnimationClipIndex];
+//             activeActionRef.current = externalMixerRef.current.clipAction(clip);
+//             if (animationPlaybackState === "playing")
+//               activeActionRef.current.play();
+//             activeActionRef.current.setLoop(
+//               isAnimationLooping ? THREE.LoopRepeat : THREE.LoopOnce,
+//               Infinity
+//             );
+//             activeActionRef.current.timeScale = animationPlaybackSpeed;
+//             activeActionRef.current.time = animationTime * clip.duration;
+//           }
+//         }
+//         return () => {
+//           if (externalMixerRef.current) {
+//             externalMixerRef.current.stopAllAction();
+//           }
+//         };
+//       }, [
+//         internalGroupRef,
+//         loadedObjectForPrimitive,
+//         animationClipsRef,
+//         selectedAnimationClipIndex,
+//         animationPlaybackState,
+//         isAnimationLooping,
+//         animationPlaybackSpeed,
+//         animationTime,
+//         externalMixerRef,
+//         activeActionRef,
+//         fileType,
+//       ]);
+//       if (!loadedObjectForPrimitive) return <group ref={internalGroupRef} />;
+//       if (
+//         fileType === "stl" &&
+//         React.isValidElement(loadedObjectForPrimitive)
+//       ) {
+//         return <group ref={internalGroupRef}>{loadedObjectForPrimitive}</group>;
+//       }
+//       return (
+//         <primitive
+//           object={loadedObjectForPrimitive}
+//           ref={internalGroupRef}
+//           castShadow
+//           receiveShadow
+//         />
+//       );
+//     }
+//   )
+// );
+// ImportedModel.displayName = "ImportedModel";
+
+// const TextOverlay = React.memo(
+//   ({
+//     text,
+//     fontUrl,
+//     color,
+//     size,
+//     depth,
+//     isVisible,
+//     textYOffset,
+//     materialProps,
+//   }) => {
+//     const { scene } = useThree();
+//     const textMaterial = useMemo(() => {
+//       return new THREE.MeshStandardMaterial({
+//         color: new THREE.Color(color),
+//         metalness: saneNumber(materialProps?.metalness, 0.3),
+//         roughness: saneNumber(materialProps?.roughness, 0.5),
+//         envMap: scene.environment,
+//         envMapIntensity: saneNumber(materialProps?.envMapIntensity, 1.0),
+//         side: THREE.FrontSide,
+//       });
+//     }, [color, materialProps, scene.environment]);
+//     if (!isVisible || !text || !fontUrl) return null;
+//     return (
+//       <group position={[0, textYOffset, 0]}>
+//         <Center>
+//           <Text3D
+//             font={fontUrl}
+//             size={saneNumber(size, 0.5)}
+//             height={saneNumber(depth, 0.05)}
+//             curveSegments={12}
+//             bevelEnabled
+//             bevelThickness={saneNumber(0.02 * (size / 0.5), 0.01)}
+//             bevelSize={saneNumber(0.01 * (size / 0.5), 0.005)}
+//             material={textMaterial}
+//             castShadow
+//             receiveShadow
+//           >
+//             {text}
+//           </Text3D>
+//         </Center>
+//       </group>
+//     );
+//   }
+// );
+// TextOverlay.displayName = "TextOverlay";
+
+// const SceneContentInternal = ({
+//   settings,
+//   currentShape,
+//   animationPresetKey,
+//   isAnimating,
+//   importedModelUrl,
+//   importedFileType,
+//   importedMtlUrl,
+//   onModelLoad,
+//   isImportedModelDisplayed,
+//   current3DText,
+//   isTextVisible,
+//   customBgImageUrl,
+//   onMeshReady,
+//   onSceneRefForExport,
+//   animationClipsRef,
+//   activeActionRef,
+//   mixerRef,
+//   selectedAnimationClipIndex,
+//   animationPlaybackState,
+//   isAnimationLooping,
+//   animationPlaybackSpeed,
+//   animationTime,
+// }) => {
+//   const { scene, gl } = useThree();
+//   useEffect(() => {
+//     if (onSceneRefForExport) onSceneRefForExport(scene, gl);
+//   }, [scene, gl, onSceneRefForExport]);
+//   useEffect(() => {
+//     if (settings.background === "customImage" && customBgImageUrl) {
+//       if (scene.fog) scene.fog = null;
+//     } else {
+//       let fogColor = new THREE.Color(0x101012);
+//       let fogNear = 12;
+//       let fogFar = 40;
+//       switch (settings.background) {
+//         case "modernGradient":
+//           fogColor = new THREE.Color(0x2c5d72);
+//           break;
+//         case "darkSpace":
+//           fogColor = new THREE.Color(0x050508);
+//           fogNear = 10;
+//           fogFar = 35;
+//           break;
+//         case "softLight":
+//           fogColor = new THREE.Color(0xd0d8e0);
+//           fogNear = 7;
+//           fogFar = 28;
+//           break;
+//         case "studioLight":
+//           fogColor = new THREE.Color(0xe4e4e7);
+//           fogNear = 10;
+//           fogFar = 35;
+//           break;
+//         default:
+//           fogColor = new THREE.Color(0x18181b);
+//       }
+//       if (scene.fog) {
+//         scene.fog.color.set(fogColor);
+//         scene.fog.near = fogNear;
+//         scene.fog.far = fogFar;
+//       } else {
+//         scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
+//       }
+//     }
+//   }, [settings.background, customBgImageUrl, scene]);
+//   const internalMeshRef = useRef();
+//   useEffect(() => {
+//     onMeshReady(internalMeshRef.current || null);
+//   }, [
+//     internalMeshRef.current,
+//     onMeshReady,
+//     isImportedModelDisplayed,
+//     currentShape,
+//     importedModelUrl,
+//   ]);
+//   const [textYOffset, setTextYOffset] = useState(1.0);
+//   useEffect(() => {
+//     const meshToMeasure = internalMeshRef.current;
+//     if (meshToMeasure) {
+//       requestAnimationFrame(() => {
+//         if (meshToMeasure.parent) {
+//           const box = new THREE.Box3().setFromObject(meshToMeasure);
+//           if (!box.isEmpty()) {
+//             const modelHeight = box.max.y - box.min.y;
+//             const modelCenterY = box.getCenter(new THREE.Vector3()).y;
+//             setTextYOffset(
+//               modelCenterY +
+//                 modelHeight / 2 +
+//                 saneNumber(settings.textSize, 0.5) * 0.5 +
+//                 0.3
+//             );
+//           } else {
+//             setTextYOffset(
+//               1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3
+//             );
+//           }
+//         } else {
+//           setTextYOffset(1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3);
+//         }
+//       });
+//     } else {
+//       setTextYOffset(1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3);
+//     }
+//   }, [
+//     internalMeshRef.current,
+//     settings.textSize,
+//     isImportedModelDisplayed,
+//     currentShape,
+//     importedModelUrl,
+//     current3DText,
+//     isTextVisible,
+//   ]);
+
+//   return (
+//     <>
+//       <ambientLight
+//         intensity={
+//           settings.ambientLight.enabled
+//             ? saneNumber(settings.ambientLight.intensity, 0.25)
+//             : 0
+//         }
+//         color={settings.ambientLight.color}
+//       />
+//       <directionalLight
+//         position={[5, 8, 5]}
+//         intensity={
+//           settings.keyLight.enabled
+//             ? saneNumber(settings.keyLight.intensity, 0.7)
+//             : 0
+//         }
+//         color={settings.keyLight.color}
+//         castShadow
+//         shadow-mapSize-width={2048}
+//         shadow-mapSize-height={2048}
+//         shadow-camera-near={0.5}
+//         shadow-camera-far={50}
+//         shadow-bias={-0.0005}
+//       />
+//       <directionalLight
+//         position={[-5, 3, -3]}
+//         intensity={
+//           settings.fillLight.enabled
+//             ? saneNumber(settings.fillLight.intensity, 0.4)
+//             : 0
+//         }
+//         color={settings.fillLight.color}
+//       />
+//       <Suspense fallback={null}>
+//         {settings.background === "customImage" && customBgImageUrl ? (
+//           <Environment background files={customBgImageUrl} />
+//         ) : settings.background !== "modernGradient" &&
+//           settings.background !== "darkSpace" ? (
+//           <Environment
+//             files='/brown_photostudio_02_4k.hdr'
+//             background={
+//               settings.background === "studioLight" ||
+//               settings.background === "softLight"
+//             }
+//             environmentIntensity={
+//               settings.background === "studioLight" ||
+//               settings.background === "softLight"
+//                 ? 1
+//                 : 0.7
+//             }
+//           />
+//         ) : null}
+//         {(settings.background === "modernGradient" ||
+//           settings.background === "darkSpace") && (
+//           <Environment
+//             files='/brown_photostudio_02_4k.hdr'
+//             background={false}
+//             environmentIntensity={0.5}
+//           />
+//         )}
+//       </Suspense>
+//       <Grid
+//         infiniteGrid
+//         cellSize={0.5}
+//         cellThickness={0.5}
+//         sectionSize={2.5}
+//         sectionThickness={1}
+//         sectionColor={new THREE.Color(0x6f6f6f)}
+//         cellColor={new THREE.Color(0x444444)}
+//         fadeDistance={50}
+//       />
+//       {!isImportedModelDisplayed ? (
+//         <Suspense fallback={null}>
+//           <ProceduralShape
+//             ref={internalMeshRef}
+//             shapeId={currentShape}
+//             settings={settings}
+//             size={1.5}
+//             animationPresetKey={animationPresetKey}
+//             isAnimating={isAnimating}
+//           />
+//         </Suspense>
+//       ) : importedModelUrl ? (
+//         <Suspense fallback={null}>
+//           <ImportedModel
+//             ref={internalMeshRef}
+//             modelUrl={importedModelUrl}
+//             fileType={importedFileType}
+//             mtlUrl={importedMtlUrl}
+//             settings={settings}
+//             onModelLoad={onModelLoad}
+//             isAnimating={isAnimating}
+//             animationPresetKey={animationPresetKey}
+//             animationClipsRef={animationClipsRef}
+//             activeActionRef={activeActionRef}
+//             mixerRef={mixerRef}
+//             selectedAnimationClipIndex={selectedAnimationClipIndex}
+//             animationPlaybackState={animationPlaybackState}
+//             isAnimationLooping={isAnimationLooping}
+//             animationPlaybackSpeed={animationPlaybackSpeed}
+//             animationTime={animationTime}
+//           />
+//         </Suspense>
+//       ) : null}
+//       <TextOverlay
+//         text={current3DText}
+//         fontUrl={settings.textFontUrl}
+//         color={settings.textColor}
+//         size={settings.textSize}
+//         depth={settings.textDepth}
+//         isVisible={isTextVisible}
+//         textYOffset={textYOffset}
+//         materialProps={{ metalness: 0.4, roughness: 0.6 }}
+//       />
+//       <DreiOrbitControls
+//         makeDefault
+//         enableDamping
+//         dampingFactor={0.05}
+//         screenSpacePanning={false}
+//         minDistance={1}
+//         maxDistance={30}
+//         maxPolarAngle={Math.PI / 1.6}
+//         target={[0, 0.2, 0]}
+//       />
+//       {(settings.n8ao?.enabled || settings.bloom?.enabled) && (
+//         <EffectComposer enableNormalPass>
+//           <N8AO
+//             aoRadius={saneNumber(settings.n8ao.aoRadius, 0.5)}
+//             intensity={saneNumber(settings.n8ao.intensity, 1.5)}
+//             distanceFalloff={saneNumber(settings.n8ao.distanceFalloff, 1.0)}
+//             screenSpaceRadius={settings.n8ao.screenSpaceRadius ?? true}
+//             quality={settings.n8ao.quality}
+//             halfRes={settings.n8ao.halfRes}
+//             color={new THREE.Color(settings.n8ao.color)}
+//           />
+//           {settings.bloom?.enabled && (
+//             <Bloom
+//               intensity={saneNumber(settings.bloom.intensity, 1.0)}
+//               luminanceThreshold={saneNumber(
+//                 settings.bloom.luminanceThreshold,
+//                 0.8
+//               )}
+//               luminanceSmoothing={saneNumber(
+//                 settings.bloom.luminanceSmoothing,
+//                 0.025
+//               )}
+//               kernelSize={settings.bloom.kernelSize}
+//             />
+//           )}
+//         </EffectComposer>
+//       )}
+//     </>
+//   );
+// };
+// SceneContentInternal.displayName = "SceneContentInternal";
+
+// // --- MAIN COMPONENT ---
+// const ModelViewer3D = () => {
+//   const [isMounted, setIsMounted] = useState(false);
+//   const fileInputRef = useRef(null);
+//   const textureFileInputRefs = useRef({});
+//   const viewerCardRef = useRef(null);
+//   const [isFullscreen, setIsFullscreen] = useState(false);
+//   const [importedModel, setImportedModel] = useState(null);
+//   const [isImportedModelDisplayed, setIsImportedModelDisplayed] =
+//     useState(false);
+//   const [importedModelName, setImportedModelName] = useState("Imported Model");
+//   const [currentCategory, setCurrentCategory] = useState(CATEGORIES_DATA[0].id);
+//   const [currentShape, setCurrentShape] = useState(
+//     SHAPES_BY_CATEGORY_DATA[CATEGORIES_DATA[0].id][0].id
+//   );
+//   const [isAnimating, setIsAnimating] = useState(true);
+//   const [animationPreset, setAnimationPreset] = useState("gentle");
+//   const [settings, setSettings] = useState(
+//     JSON.parse(JSON.stringify(initialSettings))
+//   );
+//   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
+//   const [isExporting, setIsExporting] = useState(false);
+//   const [exportProgress, setExportProgress] = useState(0);
+//   const [customBgImageUrl, setCustomBgImageUrl] = useState(null);
+//   const [textInput, setTextInput] = useState("Hello 3D");
+//   const [current3DText, setCurrent3DText] = useState("");
+//   const [isTextVisible, setIsTextVisible] = useState(false);
+//   const meshToExportOrScreenshotRef = useRef(null);
+//   const r3fSceneForExportRef = useRef(null);
+//   const r3fGLContextRef = useRef(null);
+//   const mixerRef = useRef(null);
+//   const animationClipsRef = useRef([]);
+//   const activeActionRef = useRef(null);
+//   const [selectedAnimationClipIndex, setSelectedAnimationClipIndex] =
+//     useState(-1);
+//   const [animationPlaybackState, setAnimationPlaybackState] =
+//     useState("stopped");
+//   const [animationTime, setAnimationTime] = useState(0);
+//   const [animationDuration, setAnimationDuration] = useState(0);
+//   const [isAnimationLooping, setIsAnimationLooping] = useState(true);
+//   const [animationPlaybackSpeed, setAnimationPlaybackSpeed] = useState(1.0);
+//   const historyStackRef = useRef([]);
+//   const historyPointerRef = useRef(-1);
+//   const isUndoingRedoingRef = useRef(false);
+//   const MAX_HISTORY = 50;
+//   const captureAppState = useCallback(() => {
+//     return JSON.parse(
+//       JSON.stringify({
+//         settings,
+//         currentCategory,
+//         currentShape,
+//         animationPreset,
+//         isAnimating,
+//         importedModelName,
+//         isImportedModelDisplayed,
+//         importedModelUrl: importedModel?.url,
+//         importedModelType: importedModel?.type,
+//         importedModelMtlUrl: importedModel?.mtlUrl,
+//         selectedAnimationClipIndex,
+//         animationPlaybackState,
+//         animationTime,
+//         isAnimationLooping,
+//         animationPlaybackSpeed,
+//         customBgImageUrl,
+//         current3DText,
+//         isTextVisible,
+//       })
+//     );
+//   }, [
+//     settings,
+//     currentCategory,
+//     currentShape,
+//     animationPreset,
+//     isAnimating,
+//     importedModelName,
+//     isImportedModelDisplayed,
+//     importedModel,
+//     selectedAnimationClipIndex,
+//     animationPlaybackState,
+//     animationTime,
+//     isAnimationLooping,
+//     animationPlaybackSpeed,
+//     customBgImageUrl,
+//     current3DText,
+//     isTextVisible,
+//   ]);
+//   const applyState = useCallback(
+//     (stateToApply) => {
+//       isUndoingRedoingRef.current = true;
+//       setSettings(stateToApply.settings);
+//       setCurrentCategory(stateToApply.currentCategory);
+//       setCurrentShape(stateToApply.currentShape);
+//       setAnimationPreset(stateToApply.animationPreset);
+//       setIsAnimating(stateToApply.isAnimating);
+//       setImportedModelName(stateToApply.importedModelName);
+//       if (
+//         stateToApply.importedModelUrl &&
+//         stateToApply.importedModelUrl !== importedModel?.url
+//       ) {
+//         setImportedModel({
+//           url: stateToApply.importedModelUrl,
+//           type: stateToApply.importedModelType,
+//           mtlUrl: stateToApply.importedModelMtlUrl,
+//         });
+//       } else if (!stateToApply.importedModelUrl && importedModel) {
+//         setImportedModel(null);
+//       }
+//       setIsImportedModelDisplayed(stateToApply.isImportedModelDisplayed);
+//       setSelectedAnimationClipIndex(stateToApply.selectedAnimationClipIndex);
+//       setAnimationPlaybackState(stateToApply.animationPlaybackState);
+//       setAnimationTime(stateToApply.animationTime);
+//       setIsAnimationLooping(stateToApply.isAnimationLooping);
+//       setAnimationPlaybackSpeed(stateToApply.animationPlaybackSpeed);
+//       setCustomBgImageUrl(stateToApply.customBgImageUrl);
+//       setCurrent3DText(stateToApply.current3DText);
+//       setIsTextVisible(stateToApply.isTextVisible);
+//       setTextInput(stateToApply.current3DText);
+//       requestAnimationFrame(() => {
+//         isUndoingRedoingRef.current = false;
+//       });
+//     },
+//     [importedModel]
+//   );
+//   const pushHistory = useCallback(
+//     (actionName = "action") => {
+//       if (isUndoingRedoingRef.current) return;
+//       const currentState = captureAppState();
+//       const previousState = historyStackRef.current[historyPointerRef.current];
+//       if (
+//         previousState &&
+//         JSON.stringify(currentState) === JSON.stringify(previousState)
+//       )
+//         return;
+//       const stack = historyStackRef.current.slice(
+//         0,
+//         historyPointerRef.current + 1
+//       );
+//       stack.push(currentState);
+//       if (stack.length > MAX_HISTORY) stack.shift();
+//       historyStackRef.current = stack;
+//       historyPointerRef.current = stack.length - 1;
+//     },
+//     [captureAppState]
+//   );
+//   const handleUndo = useCallback(() => {
+//     if (historyPointerRef.current > 0) {
+//       historyPointerRef.current--;
+//       applyState(historyStackRef.current[historyPointerRef.current]);
+//       sonnerToast.info("Undo");
+//     } else {
+//       sonnerToast.warning("Nothing more to undo.");
+//     }
+//   }, [applyState]);
+//   const handleRedo = useCallback(() => {
+//     if (historyPointerRef.current < historyStackRef.current.length - 1) {
+//       historyPointerRef.current++;
+//       applyState(historyStackRef.current[historyPointerRef.current]);
+//       sonnerToast.info("Redo");
+//     } else {
+//       sonnerToast.warning("Nothing more to redo.");
+//     }
+//   }, [applyState]);
+//   useEffect(() => {
+//     setIsMounted(true);
+//   }, []);
+//   useEffect(() => {
+//     if (isMounted) {
+//       const timeoutId = setTimeout(() => {
+//         pushHistory("initial load");
+//       }, 100);
+//       return () => clearTimeout(timeoutId);
+//     }
+//   }, [isMounted, pushHistory]);
+//   const debouncedPushHistoryRef = useRef(null);
+//   useEffect(() => {
+//     if (!isMounted) return;
+//     if (debouncedPushHistoryRef.current)
+//       clearTimeout(debouncedPushHistoryRef.current);
+//     debouncedPushHistoryRef.current = setTimeout(() => {
+//       if (isMounted && !isUndoingRedoingRef.current)
+//         pushHistory("settings/state changed");
+//     }, 750);
+//     return () => {
+//       if (debouncedPushHistoryRef.current)
+//         clearTimeout(debouncedPushHistoryRef.current);
+//     };
+//   }, [
+//     settings,
+//     currentCategory,
+//     currentShape,
+//     animationPreset,
+//     isAnimating,
+//     importedModelName,
+//     isImportedModelDisplayed,
+//     importedModel,
+//     selectedAnimationClipIndex,
+//     animationPlaybackState,
+//     animationTime,
+//     isAnimationLooping,
+//     animationPlaybackSpeed,
+//     customBgImageUrl,
+//     current3DText,
+//     isTextVisible,
+//     pushHistory,
+//     isMounted,
+//   ]);
+//   const toggleFullscreen = useCallback(async () => {
+//     if (!viewerCardRef.current) return;
+//     if (!document.fullscreenElement) {
+//       try {
+//         await viewerCardRef.current.requestFullscreen();
+//       } catch (err) {
+//         sonnerToast.error("Fullscreen Failed", { description: err.message });
+//       }
+//     } else {
+//       if (document.exitFullscreen) {
+//         try {
+//           await document.exitFullscreen();
+//         } catch (err) {
+//           sonnerToast.error("Exit Fullscreen Failed", {
+//             description: err.message,
+//           });
+//         }
+//       }
+//     }
+//   }, []);
+//   useEffect(() => {
+//     const handleFullscreenChange = () =>
+//       setIsFullscreen(!!document.fullscreenElement);
+//     document.addEventListener("fullscreenchange", handleFullscreenChange);
+//     document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+//     document.addEventListener("mozfullscreenchange", handleFullscreenChange);
+//     document.addEventListener("MSFullscreenChange", handleFullscreenChange);
+//     return () => {
+//       document.removeEventListener("fullscreenchange", handleFullscreenChange);
+//       document.removeEventListener(
+//         "webkitfullscreenchange",
+//         handleFullscreenChange
+//       );
+//       document.removeEventListener(
+//         "mozfullscreenchange",
+//         handleFullscreenChange
+//       );
+//       document.removeEventListener(
+//         "MSFullscreenChange",
+//         handleFullscreenChange
+//       );
+//     };
+//   }, []);
+//   const handleMeshReadyForParent = useCallback((mesh) => {
+//     meshToExportOrScreenshotRef.current = mesh;
+//   }, []);
+//   const handleSceneRefForExportCallback = useCallback((scene, gl) => {
+//     r3fSceneForExportRef.current = scene;
+//     r3fGLContextRef.current = gl;
+//   }, []);
+//   const handleModelLoadedForScene = useCallback((loadedObject, loadedAnims) => {
+//     animationClipsRef.current = loadedAnims || [];
+//     if (loadedObject && animationClipsRef.current.length > 0) {
+//       setSelectedAnimationClipIndex(0);
+//       setAnimationDuration(animationClipsRef.current[0].duration);
+//       setAnimationPlaybackState("stopped");
+//       setAnimationTime(0);
+//     } else {
+//       setSelectedAnimationClipIndex(-1);
+//       setAnimationDuration(0);
+//     }
+//   }, []);
+//   const handleResetAnimation = useCallback(() => {
+//     if (activeActionRef.current) {
+//       activeActionRef.current.reset();
+//       if (animationPlaybackState !== "playing") activeActionRef.current.stop();
+//       else activeActionRef.current.play();
+//       setAnimationTime(0);
+//     }
+//     sonnerToast.info("View Reset (OrbitControls)");
+//     if (activeActionRef.current) pushHistory("reset imported animation");
+//   }, [pushHistory, animationPlaybackState]);
+//   const handleToggleGlobalAnimation = useCallback(() => {
+//     setIsAnimating((prev) => {
+//       const nextState = !prev;
+//       sonnerToast.info(
+//         `Floating Animation ${nextState ? "Resumed" : "Paused"}`
+//       );
+//       return nextState;
+//     });
+//   }, []);
+//   const handleSettingsChange = (key, value, subKey = null) => {
+//     setSettings((s) => {
+//       const newSettings = { ...s };
+//       if (subKey) {
+//         newSettings[key] = { ...s[key], [subKey]: value };
+//       } else {
+//         newSettings[key] = value;
+//       }
+//       return newSettings;
+//     });
+//   };
+//   const resetCustomMaterialProperties = () => {
+//     const currentPresetKey = settings.materialType;
+//     if (
+//       currentPresetKey &&
+//       currentPresetKey !== "auto" &&
+//       baseMaterialPresets[currentPresetKey]
+//     ) {
+//       const presetDefaults = baseMaterialPresets[currentPresetKey];
+//       const textureUrlKeys = [
+//         "mapUrl",
+//         "normalMapUrl",
+//         "roughnessMapUrl",
+//         "metalnessMapUrl",
+//         "aoMapUrl",
+//         "emissiveMapUrl",
+//       ];
+//       const resetTextureUrls = {};
+//       textureUrlKeys.forEach((key) => (resetTextureUrls[key] = null));
+//       setSettings((s) => ({
+//         ...s,
+//         customMaterialProperties: {
+//           roughness:
+//             presetDefaults.roughness ??
+//             initialSettings.customMaterialProperties.roughness,
+//           metalness:
+//             presetDefaults.metalness ??
+//             initialSettings.customMaterialProperties.metalness,
+//           ior:
+//             presetDefaults.ior ?? initialSettings.customMaterialProperties.ior,
+//           transmission:
+//             presetDefaults.transmission ??
+//             initialSettings.customMaterialProperties.transmission,
+//           thickness:
+//             presetDefaults.thickness ??
+//             initialSettings.customMaterialProperties.thickness,
+//           emissiveIntensity:
+//             presetDefaults.emissiveIntensity ??
+//             initialSettings.customMaterialProperties.emissiveIntensity,
+//           ...resetTextureUrls,
+//         },
+//       }));
+//       sonnerToast.info("Material Properties Reset to Preset Defaults");
+//     }
+//   };
+//   const handleCategorySelect = useCallback((categoryId) => {
+//     setIsImportedModelDisplayed(false);
+//     setImportedModel(null);
+//     setCurrentCategory(categoryId);
+//     setCurrentShape(SHAPES_BY_CATEGORY_DATA[categoryId][0].id);
+//   }, []);
+//   const handleShapeSelect = useCallback((shapeId) => {
+//     setIsImportedModelDisplayed(false);
+//     setImportedModel(null);
+//     setCurrentShape(shapeId);
+//   }, []);
+//   const handleRandomize = useCallback(() => {
+//     setIsImportedModelDisplayed(false);
+//     setImportedModel(null);
+//     setCustomBgImageUrl(null);
+//     const randCat =
+//       CATEGORIES_DATA[Math.floor(Math.random() * CATEGORIES_DATA.length)];
+//     const randShapeList = SHAPES_BY_CATEGORY_DATA[randCat.id];
+//     const randShape =
+//       randShapeList[Math.floor(Math.random() * randShapeList.length)];
+//     const randPresetKey =
+//       Object.keys(animationPresets)[
+//         Math.floor(Math.random() * Object.keys(animationPresets).length)
+//       ];
+//     const randColor = `hsl(${Math.floor(Math.random() * 360)}, 70%, 70%)`;
+//     const bgKeys = Object.keys(BACKGROUND_OPTIONS_DATA).filter(
+//       (key) => key !== "customImage"
+//     );
+//     const randBgKey = bgKeys[Math.floor(Math.random() * bgKeys.length)];
+//     const matKeys = [
+//       "auto",
+//       "metallic",
+//       "glass",
+//       "crystal",
+//       "ceramic",
+//       "organic",
+//       "plastic",
+//       "neon",
+//     ];
+//     const randMat = matKeys[Math.floor(Math.random() * matKeys.length)];
+//     setCurrentCategory(randCat.id);
+//     setCurrentShape(randShape.id);
+//     setAnimationPreset(randPresetKey);
+//     const newKeyLight = {
+//       enabled: true,
+//       intensity: saneNumber(Math.random() * (1.5 - 0.3) + 0.3, 0.7),
+//       color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 85%)`,
+//     };
+//     const newFillLight = {
+//       enabled: true,
+//       intensity: saneNumber(Math.random() * (1.0 - 0.2) + 0.2, 0.4),
+//       color: `hsl(${Math.floor(Math.random() * 360)}, 60%, 75%)`,
+//     };
+//     const newAmbientLight = {
+//       enabled: true,
+//       intensity: saneNumber(Math.random() * (0.5 - 0.1) + 0.1, 0.25),
+//       color: `hsl(${Math.floor(Math.random() * 360)}, 50%, 70%)`,
+//     };
+//     const randomText = ["Hello!", "3D Fun", "Awesome", "Shapes", "Text"][
+//       Math.floor(Math.random() * 5)
+//     ];
+//     const randomTextColor = `hsl(${Math.floor(Math.random() * 360)}, 80%, 75%)`;
+//     setCurrent3DText(randomText);
+//     setTextInput(randomText);
+//     setIsTextVisible(Math.random() > 0.5);
+//     setSettings((prev) => ({
+//       ...prev,
+//       materialType: randMat,
+//       shapeColor: randColor,
+//       background: randBgKey,
+//       extrudeDepth: saneNumber(Math.random() * (1.0 - 0.1) + 0.1, 0.4),
+//       animationSpeed: saneNumber(Math.random() * (2.0 - 0.5) + 0.5, 1.0),
+//       keyLight: newKeyLight,
+//       fillLight: newFillLight,
+//       ambientLight: newAmbientLight,
+//       customMaterialProperties: JSON.parse(
+//         JSON.stringify(initialSettings.customMaterialProperties)
+//       ),
+//       textColor: randomTextColor,
+//       textSize: saneNumber(Math.random() * (0.8 - 0.3) + 0.3, 0.5),
+//       textDepth: saneNumber(Math.random() * (0.2 - 0.02) + 0.02, 0.05),
+//       n8ao: {
+//         ...initialSettings.n8ao,
+//         enabled: Math.random() > 0.5,
+//         intensity: saneNumber(Math.random() * 2 + 0.5, 1.5),
+//         aoRadius: saneNumber(Math.random() * 0.8 + 0.1, 0.5),
+//       },
+//       bloom: {
+//         ...initialSettings.bloom,
+//         enabled: Math.random() > 0.3,
+//         intensity: saneNumber(Math.random() * 2, 1),
+//       },
+//     }));
+//     sonnerToast.success("Scene Randomized!");
+//   }, []);
+//   const currentShapeRef = useRef(currentShape);
+//   useEffect(() => {
+//     currentShapeRef.current = currentShape;
+//   }, [currentShape]);
+//   const currentImportedModelNameRef = useRef(importedModelName);
+//   useEffect(() => {
+//     currentImportedModelNameRef.current = importedModelName;
+//   }, [importedModelName]);
+//   const handleExportGLB = useCallback(async () => {
+//     if (isExporting) return;
+//     const sceneToExport = new THREE.Scene();
+//     let hasContentToExport = false;
+//     if (meshToExportOrScreenshotRef.current) {
+//       const modelClone = meshToExportOrScreenshotRef.current.clone(true);
+//       sceneToExport.add(modelClone);
+//       hasContentToExport = true;
+//     }
+//     if (isTextVisible && current3DText && settings.textFontUrl) {
+//       if (!helvetikerFontForExport) {
+//         try {
+//           helvetikerFontForExport = await new Promise((resolve, reject) =>
+//             globalFontLoaderForExport.load(
+//               FONT_PATH_FOR_EXPORT,
+//               resolve,
+//               undefined,
+//               reject
+//             )
+//           );
+//         } catch (e) {
+//           sonnerToast.error("Text Export Failed", {
+//             description: "Font for text geometry failed to load.",
+//           });
+//         }
+//       }
+//       if (helvetikerFontForExport) {
+//         const textGeom = new TextGeometry(current3DText, {
+//           font: helvetikerFontForExport,
+//           size: saneNumber(settings.textSize, 0.5),
+//           height: saneNumber(settings.textDepth, 0.05),
+//           curveSegments: 12,
+//           bevelEnabled: true,
+//           bevelThickness: saneNumber(0.02 * (settings.textSize / 0.5), 0.01),
+//           bevelSize: saneNumber(0.01 * (settings.textSize / 0.5), 0.005),
+//         });
+//         textGeom.center();
+//         const { constructor: MatConstructor, args } = createR3FMaterialProps(
+//           settings.textColor,
+//           "ceramic",
+//           {},
+//           r3fSceneForExportRef.current?.environment
+//         );
+//         const textMeshMaterial = new MatConstructor(args);
+//         const textMesh = new THREE.Mesh(textGeom, textMeshMaterial);
+//         let textExportYOffset = 0;
+//         if (meshToExportOrScreenshotRef.current) {
+//           const mainModelBox = new THREE.Box3().setFromObject(
+//             meshToExportOrScreenshotRef.current
+//           );
+//           if (!mainModelBox.isEmpty()) {
+//             const modelHeight = mainModelBox.max.y - mainModelBox.min.y;
+//             const modelCenterY = mainModelBox.getCenter(new THREE.Vector3()).y;
+//             textExportYOffset =
+//               modelCenterY +
+//               modelHeight / 2 +
+//               saneNumber(settings.textSize, 0.5) / 2 +
+//               0.3;
+//           } else {
+//             textExportYOffset = saneNumber(settings.textSize, 0.5) / 2 + 0.3;
+//           }
+//         } else {
+//           textExportYOffset = saneNumber(settings.textSize, 0.5) / 2;
+//         }
+//         textMesh.position.y = textExportYOffset;
+//         sceneToExport.add(textMesh);
+//         hasContentToExport = true;
+//       }
+//     }
+//     if (!hasContentToExport) {
+//       sonnerToast.warning("Export Failed", {
+//         description: "Nothing visible to export.",
+//       });
+//       return;
+//     }
+//     setIsExporting(true);
+//     setExportProgress(0);
+//     const exportToastId = sonnerToast.loading("Exporting GLB...", {
+//       description: "Preparing model...",
+//     });
+//     try {
+//       await new Promise((resolve) => setTimeout(resolve, 500));
+//       setExportProgress(50);
+//       sonnerToast.info("Finalizing export...", {
+//         id: exportToastId,
+//         description: "Almost there...",
+//       });
+//       const exporter = new GLTFExporter();
+//       const exportOptions = {
+//         binary: true,
+//         embedImages: true,
+//         animations:
+//           isImportedModelDisplayed &&
+//           importedModel &&
+//           animationClipsRef.current.length > 0
+//             ? animationClipsRef.current
+//             : [],
+//       };
+//       exporter.parse(
+//         sceneToExport,
+//         (gltf) => {
+//           if (!(gltf instanceof ArrayBuffer)) {
+//             throw new Error("Exported GLTF is not an ArrayBuffer.");
+//           }
+//           const blob = new Blob([gltf], { type: "application/octet-stream" });
+//           const link = document.createElement("a");
+//           link.href = URL.createObjectURL(blob);
+//           const baseName = isImportedModelDisplayed
+//             ? (currentImportedModelNameRef.current || "imported-model")
+//                 .replace(/[^a-z0-9]/gi, "_")
+//                 .toLowerCase()
+//             : currentShapeRef.current || "model";
+//           const textSuffix = isTextVisible && current3DText ? "-with-text" : "";
+//           link.download = `shape-${baseName}${textSuffix}.glb`;
+//           document.body.appendChild(link);
+//           link.click();
+//           document.body.removeChild(link);
+//           URL.revokeObjectURL(link.href);
+//           setExportProgress(100);
+//           sonnerToast.success("GLB Export Ready", {
+//             id: exportToastId,
+//             description: "Download started.",
+//           });
+//           setTimeout(() => {
+//             setIsExporting(false);
+//             setExportProgress(0);
+//           }, 500);
+//         },
+//         (error) => {
+//           console.error("GLTFExporter error:", error);
+//           sonnerToast.error("GLB Export Failed", {
+//             id: exportToastId,
+//             description: error?.message || "GLTF parsing error.",
+//           });
+//           setIsExporting(false);
+//           setExportProgress(0);
+//         },
+//         exportOptions
+//       );
+//     } catch (e) {
+//       console.error("Export GLB general error:", e);
+//       setIsExporting(false);
+//       setExportProgress(0);
+//       sonnerToast.error("GLB Export Failed", {
+//         id: exportToastId,
+//         description: e.message || "Unexpected error during export preparation.",
+//       });
+//     }
+//   }, [
+//     isExporting,
+//     isTextVisible,
+//     current3DText,
+//     settings.textFontUrl,
+//     settings.textSize,
+//     settings.textDepth,
+//     settings.textColor,
+//     isImportedModelDisplayed,
+//     importedModel,
+//   ]);
+//   const handleSimulatedExportOBJ = useCallback(() => {
+//     if (isExporting) return;
+//     setIsExporting(true);
+//     setExportProgress(0);
+//     const exportToastId = sonnerToast.loading("Exporting OBJ (Simulated)...", {
+//       description: "Processing...",
+//     });
+//     let p = 0;
+//     const i = setInterval(() => {
+//       p += Math.floor(Math.random() * 15 + 10);
+//       const currentProgress = Math.min(p, 100);
+//       setExportProgress(currentProgress);
+//       sonnerToast.loading("Exporting OBJ (Simulated)...", {
+//         id: exportToastId,
+//         description: `Processing... ${currentProgress}%`,
+//       });
+//       if (currentProgress >= 100) {
+//         clearInterval(i);
+//         const l = document.createElement("a");
+//         const baseName = isImportedModelDisplayed
+//           ? (currentImportedModelNameRef.current || "imported")
+//               .replace(/[^a-z0-9]/gi, "_")
+//               .toLowerCase()
+//           : currentShapeRef.current || "model";
+//         const textSuffix = isTextVisible && current3DText ? "-with-text" : "";
+//         l.download = `shape-${baseName}${textSuffix}.obj`;
+//         l.href =
+//           "data:text/plain;charset=utf-8," +
+//           encodeURIComponent(
+//             "# OBJ file simulated\n# Actual OBJ Exporter needed for full geometry"
+//           );
+//         document.body.appendChild(l);
+//         l.click();
+//         document.body.removeChild(l);
+//         sonnerToast.success("OBJ Export (Simulated) Ready", {
+//           id: exportToastId,
+//           description: "Simulated OBJ downloaded.",
+//         });
+//         setTimeout(() => {
+//           setIsExporting(false);
+//           setExportProgress(0);
+//         }, 500);
+//       }
+//     }, 150);
+//   }, [isExporting, isImportedModelDisplayed, isTextVisible, current3DText]);
+//   const handleTakeScreenshot = useCallback(() => {
+//     if (!r3fGLContextRef.current) {
+//       sonnerToast.error("Screenshot Failed", {
+//         description: "Renderer not ready.",
+//       });
+//       return;
+//     }
+//     const gl = r3fGLContextRef.current;
+//     const screenshotToastId = sonnerToast.loading("Taking Screenshot...", {
+//       description: "Capturing image...",
+//     });
+//     requestAnimationFrame(() => {
+//       try {
+//         const canvas = gl.domElement;
+//         const link = document.createElement("a");
+//         const baseName = isImportedModelDisplayed
+//           ? (currentImportedModelNameRef.current || "view")
+//               .replace(/[^a-z0-9]/gi, "_")
+//               .toLowerCase()
+//           : currentShapeRef.current || "view";
+//         const textSuffix = isTextVisible && current3DText ? "-with-text" : "";
+//         link.download = `screenshot-${baseName}${textSuffix}.png`;
+//         link.href = canvas.toDataURL("image/png");
+//         document.body.appendChild(link);
+//         link.click();
+//         document.body.removeChild(link);
+//         sonnerToast.success("Screenshot Saved!", {
+//           id: screenshotToastId,
+//           description: `${link.download} saved.`,
+//         });
+//       } catch (e) {
+//         sonnerToast.error("Screenshot Failed", {
+//           id: screenshotToastId,
+//           description: e.message || "Could not save.",
+//         });
+//       }
+//     });
+//   }, [isImportedModelDisplayed, current3DText, isTextVisible]);
+//   const processAndSetImportedModel = useCallback(
+//     (fileUrl, fileType, mtlFileUrl = null, originalFileName) => {
+//       const nameOnly =
+//         originalFileName.split(".").slice(0, -1).join(".") || "Imported Model";
+//       setImportedModelName(nameOnly);
+//       setImportedModel({ url: fileUrl, type: fileType, mtlUrl: mtlFileUrl });
+//       setIsImportedModelDisplayed(true);
+//       animationClipsRef.current = [];
+//       setSelectedAnimationClipIndex(-1);
+//       setAnimationPlaybackState("stopped");
+//       setAnimationTime(0);
+//       setAnimationDuration(0);
+//       if (mixerRef.current) {
+//         mixerRef.current.stopAllAction();
+//         mixerRef.current = null;
+//       }
+//       activeActionRef.current = null;
+//     },
+//     []
+//   );
+//   const handleFiles = useCallback(
+//     async (files) => {
+//       if (!files || files.length === 0) return;
+//       const importToastId = sonnerToast.loading("Processing File(s)...", {
+//         duration: Infinity,
+//       });
+//       let modelFile = null;
+//       let mtlFile = null;
+//       let modelFileType = "";
+//       const modelFileExtensions = [".glb", ".gltf", ".fbx", ".stl", ".obj"];
+//       for (const ext of modelFileExtensions) {
+//         modelFile = Array.from(files).find((f) =>
+//           f.name.toLowerCase().endsWith(ext)
+//         );
+//         if (modelFile) {
+//           modelFileType = ext.substring(1);
+//           break;
+//         }
+//       }
+//       if (!modelFile) {
+//         modelFile = Array.from(files).find((f) =>
+//           f.name.toLowerCase().endsWith(".3ds")
+//         );
+//         if (modelFile) modelFileType = "3ds";
+//       }
+//       if (modelFileType === "obj") {
+//         mtlFile = Array.from(files).find((f) =>
+//           f.name.toLowerCase().endsWith(".mtl")
+//         );
+//       }
+//       if (modelFile) {
+//         const modelUrl = URL.createObjectURL(modelFile);
+//         const mtlUrl = mtlFile ? URL.createObjectURL(mtlFile) : null;
+//         if (importedModel?.url && importedModel.url.startsWith("blob:")) {
+//           URL.revokeObjectURL(importedModel.url);
+//         }
+//         if (importedModel?.mtlUrl && importedModel.mtlUrl.startsWith("blob:")) {
+//           URL.revokeObjectURL(importedModel.mtlUrl);
+//         }
+//         processAndSetImportedModel(
+//           modelUrl,
+//           modelFileType,
+//           mtlUrl,
+//           modelFile.name
+//         );
+//         sonnerToast.success("Model Ready", {
+//           id: importToastId,
+//           description: `${modelFile.name} prepared for display.`,
+//         });
+//       } else {
+//         sonnerToast.error("No Compatible Model", {
+//           id: importToastId,
+//           description:
+//             "Please select a supported file type (GLB, GLTF, FBX, STL, OBJ, 3DS).",
+//         });
+//       }
+//       if (fileInputRef.current) fileInputRef.current.value = null;
+//     },
+//     [processAndSetImportedModel, importedModel]
+//   );
+//   const triggerImport = useCallback(() => {
+//     if (fileInputRef.current) fileInputRef.current.click();
+//   }, []);
+//   const handleFileDropOnViewer = useCallback(
+//     (event) => {
+//       event.preventDefault();
+//       event.stopPropagation();
+//       if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+//         handleFiles(Array.from(event.dataTransfer.files));
+//       }
+//     },
+//     [handleFiles]
+//   );
+//   const handlePlayPauseAnimation = () => {
+//     if (!activeActionRef.current) return;
+//     if (animationPlaybackState === "playing") {
+//       activeActionRef.current.paused = true;
+//       setAnimationPlaybackState("paused");
+//     } else {
+//       activeActionRef.current.paused = false;
+//       if (!activeActionRef.current.isRunning()) activeActionRef.current.play();
+//       setAnimationPlaybackState("playing");
+//     }
+//   };
+//   const handleStopAnimation = () => {
+//     if (!activeActionRef.current) return;
+//     activeActionRef.current.reset().stop();
+//     setAnimationPlaybackState("stopped");
+//     setAnimationTime(0);
+//   };
+//   const handleAnimationClipChange = (indexStr) => {
+//     const index = parseInt(indexStr, 10);
+//     if (
+//       mixerRef.current &&
+//       index >= 0 &&
+//       index < animationClipsRef.current.length
+//     ) {
+//       if (activeActionRef.current) {
+//         activeActionRef.current.stop();
+//       }
+//       const clip = animationClipsRef.current[index];
+//       activeActionRef.current = mixerRef.current.clipAction(clip);
+//       activeActionRef.current.setLoop(
+//         isAnimationLooping ? THREE.LoopRepeat : THREE.LoopOnce,
+//         Infinity
+//       );
+//       activeActionRef.current.timeScale = animationPlaybackSpeed;
+//       activeActionRef.current.play();
+//       setSelectedAnimationClipIndex(index);
+//       setAnimationPlaybackState("playing");
+//       setAnimationDuration(clip.duration);
+//       setAnimationTime(0);
+//     }
+//   };
+//   const handleAnimationTimeChange = (value) => {
+//     const normalizedTime = value[0];
+//     if (activeActionRef.current && animationDuration > 0) {
+//       const newTimeInSeconds = normalizedTime * animationDuration;
+//       activeActionRef.current.time = newTimeInSeconds;
+//       if (
+//         animationPlaybackState === "paused" ||
+//         animationPlaybackState === "stopped"
+//       ) {
+//         if (mixerRef.current) mixerRef.current.update(0);
+//       }
+//       setAnimationTime(normalizedTime);
+//     }
+//   };
+//   const handleAnimationLoopToggle = (checked) => {
+//     setIsAnimationLooping(checked);
+//     if (activeActionRef.current)
+//       activeActionRef.current.setLoop(
+//         checked ? THREE.LoopRepeat : THREE.LoopOnce,
+//         Infinity
+//       );
+//   };
+//   const handleAnimationSpeedChange = (value) => {
+//     const speed = value[0];
+//     setAnimationPlaybackSpeed(speed);
+//     if (activeActionRef.current) activeActionRef.current.timeScale = speed;
+//   };
+//   const handleCustomBgImageUpload = (event) => {
+//     const file = event.target.files[0];
+//     if (file) {
+//       const reader = new FileReader();
+//       reader.onload = (e) => {
+//         setCustomBgImageUrl(e.target.result);
+//         sonnerToast.success("Background image set.");
+//       };
+//       reader.readAsDataURL(file);
+//     }
+//   };
+//   const handleClearCustomBgImage = () => {
+//     setCustomBgImageUrl(null);
+//     sonnerToast.info("Custom background image cleared.");
+//   };
+
+//   // MODIFIED handleTextureUpload for testing with picsum.photos
+//   const handleTextureUpload = (mapType, event) => {
+//     if (mapType !== "map") {
+//       sonnerToast.info(
+//         `Texture slot "${mapType}" upload disabled for this simplified test.`
+//       );
+//       if (textureFileInputRefs.current[mapType])
+//         textureFileInputRefs.current[mapType].value = null;
+//       return;
+//     }
+
+//     const urlKey = `${mapType}Url`;
+//     const newTextureUrl = "https://picsum.photos/seed/r3ftexture/256/256"; // TEST URL
+//     console.log(
+//       `[handleTextureUpload SIMPLIFIED TEST] Setting ${urlKey} to TEST URL: ${newTextureUrl}`
+//     );
+
+//     const resetCustomProps = {
+//       roughness: null,
+//       metalness: null,
+//       ior: null,
+//       transmission: null,
+//       thickness: null,
+//       emissiveIntensity: null,
+//       mapUrl: null,
+//       normalMapUrl: null,
+//       roughnessMapUrl: null,
+//       metalnessMapUrl: null,
+//       aoMapUrl: null,
+//       emissiveMapUrl: null,
+//     };
+
+//     setSettings((s) => ({
+//       ...s,
+//       customMaterialProperties: {
+//         ...resetCustomProps,
+//         [urlKey]: newTextureUrl,
+//       },
+//     }));
+//     sonnerToast.success(
+//       `${mapType.replace("Map", "")} texture slot set to TEST URL.`
+//     );
+//     if (textureFileInputRefs.current[mapType])
+//       textureFileInputRefs.current[mapType].value = null;
+//   };
+
+//   const handleClearTexture = (mapType) => {
+//     const urlKey = `${mapType}Url`;
+//     setSettings((s) => ({
+//       ...s,
+//       customMaterialProperties: {
+//         ...s.customMaterialProperties,
+//         [urlKey]: null,
+//       },
+//     }));
+//     sonnerToast.info(`${mapType.replace("Map", "")} texture cleared.`);
+//   };
+//   const handleSet3DText = () => {
+//     const trimmedText = textInput.trim();
+//     setCurrent3DText(trimmedText);
+//     if (trimmedText !== "") {
+//       setIsTextVisible(true);
+//       sonnerToast.info("3D Text Updated", {
+//         description: `Displaying: "${trimmedText}"`,
+//       });
+//     } else {
+//       setIsTextVisible(false);
+//       sonnerToast.info("3D Text Cleared");
+//     }
+//   };
+
+//   const { active: isLoadingModel, progress: modelLoadProgress } = useProgress();
+
+//   console.log(
+//     "[ModelViewer3D] Rendering. Current settings.customMaterialProperties.mapUrl:",
+//     settings.customMaterialProperties.mapUrl
+//   ); // Log in parent
+
+//   if (!isMounted) {
+//     return (
+//       <div className='min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-100 p-4'>
+//         <Loader2 className='h-12 w-12 animate-spin text-purple-400 mb-4' />
+//         <p className='text-lg font-medium'>Initializing 3D Studio...</p>
+//       </div>
+//     );
+//   }
+//   let canvasBgColor = "transparent";
+//   if (settings.background !== "customImage") {
+//     if (settings.background === "darkSpace") canvasBgColor = "#0a0a10";
+//     else if (settings.background === "studioDark") canvasBgColor = "#18181b";
+//     else if (settings.background === "softLight" && !customBgImageUrl)
+//       canvasBgColor = "#e0e8f0";
+//     else if (settings.background === "studioLight" && !customBgImageUrl)
+//       canvasBgColor = "#f4f4f5";
+//     else if (settings.background === "modernGradient")
+//       canvasBgColor = "#1e3b49";
+//   }
+//   const canUndo = historyPointerRef.current > 0;
+//   const canRedo =
+//     historyPointerRef.current < historyStackRef.current.length - 1;
+//   const proceduralMaterialTypeForPanel =
+//     settings.materialType === "auto"
+//       ? SHAPES_BY_CATEGORY_DATA[currentCategory]?.find(
+//           (s) => s.id === currentShape
+//         )?.autoMaterial || "ceramic"
+//       : settings.materialType;
+//   const textureSlots = [
+//     { id: "map", name: "Color/Albedo" },
+//     { id: "normalMap", name: "Normal" },
+//     { id: "roughnessMap", name: "Roughness" },
+//     { id: "metalnessMap", name: "Metalness" },
+//     { id: "aoMap", name: "Ambient Occlusion" },
+//     { id: "emissiveMap", name: "Emissive" },
+//   ];
+
+//   return (
+//     <TooltipProvider>
+//       <>
+//         <SonnerToaster richColors position='top-right' />
+//         <div className='min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-purple-950 p-3 sm:p-4 md:p-6 text-slate-100 select-none'>
+//           <input
+//             type='file'
+//             accept='.glb,.gltf,.stl,.obj,.mtl,.fbx,.3ds'
+//             multiple
+//             ref={fileInputRef}
+//             onChange={(e) => handleFiles(Array.from(e.target.files))}
+//             style={{ display: "none" }}
+//           />
+//           <div className='max-w-screen-2xl mx-auto'>
+//             <header className='text-center mb-8 sm:mb-10'>
+//               <h1 className='text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-3 sm:mb-4 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent'>
+//                 3D Shape Studio Pro
+//               </h1>
+//               <p className='text-slate-400 text-base sm:text-lg max-w-3xl mx-auto'>
+//                 Craft, view, and animate 3D masterpieces. Import GLB,
+//                 GLTF,STL,OBJ, FBX or 3DS models. Drag & drop supported.
+//               </p>
+//             </header>
+//             <div className='grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6'>
+//               <div className='lg:col-span-3 space-y-4 sm:space-y-5 order-last lg:order-first'>
+//                 {!isImportedModelDisplayed && (
+//                   <>
+//                     <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
+//                       <CardHeader>
+//                         <CardTitle className='text-slate-100'>
+//                           Categories
+//                         </CardTitle>
+//                       </CardHeader>
+//                       <CardContent>
+//                         <div className='grid grid-cols-2 gap-3'>
+//                           {CATEGORIES_DATA.map((category) => (
+//                             <Button
+//                               key={category.id}
+//                               variant={
+//                                 currentCategory === category.id
+//                                   ? "default"
+//                                   : "outline"
+//                               }
+//                               className={cn(
+//                                 "h-auto py-3 flex flex-col items-center justify-center gap-1.5 text-xs sm:text-sm transition-all",
+//                                 currentCategory === category.id
+//                                   ? "bg-purple-600 hover:bg-purple-700 text-white ring-2 ring-purple-400"
+//                                   : "text-slate-300 border-slate-600 hover:bg-slate-700/50"
+//                               )}
+//                               onClick={() => handleCategorySelect(category.id)}
+//                             >
+//                               <span className='text-2xl sm:text-3xl'>
+//                                 {category.icon}
+//                               </span>
+//                               <span>{category.name}</span>
+//                             </Button>
+//                           ))}
+//                         </div>
+//                       </CardContent>
+//                     </Card>
+//                     <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
+//                       <CardHeader>
+//                         <CardTitle className='text-slate-100'>Shapes</CardTitle>
+//                       </CardHeader>
+//                       <CardContent>
+//                         <ScrollArea className='h-48'>
+//                           <div className='grid grid-cols-2 gap-2 pr-1'>
+//                             {SHAPES_BY_CATEGORY_DATA[currentCategory].map(
+//                               (shape) => (
+//                                 <Button
+//                                   key={shape.id}
+//                                   variant={
+//                                     currentShape === shape.id
+//                                       ? "secondary"
+//                                       : "ghost"
+//                                   }
+//                                   className={cn(
+//                                     "justify-start gap-2",
+//                                     currentShape === shape.id
+//                                       ? "bg-purple-500 text-white hover:bg-purple-600"
+//                                       : "text-slate-300 hover:bg-slate-700/50"
+//                                   )}
+//                                   onClick={() => handleShapeSelect(shape.id)}
+//                                 >
+//                                   <span className='text-xl'>{shape.icon}</span>
+//                                   {shape.name}
+//                                 </Button>
+//                               )
+//                             )}
+//                           </div>
+//                         </ScrollArea>
+//                       </CardContent>
+//                     </Card>
+//                   </>
+//                 )}
+//                 {isImportedModelDisplayed && importedModel && (
+//                   <Card className='bg-slate-800/70 border-slate-700 shadow-xl text-center'>
+//                     <CardHeader>
+//                       <CardTitle className='text-slate-100'>
+//                         Current Model
+//                       </CardTitle>
+//                     </CardHeader>
+//                     <CardContent>
+//                       <p
+//                         className='text-sm text-slate-300 truncate font-medium'
+//                         title={importedModelName}
+//                       >
+//                         {importedModelName}
+//                       </p>
+//                     </CardContent>
+//                     <CardFooter>
+//                       <Button
+//                         variant='destructive'
+//                         size='sm'
+//                         className='w-full'
+//                         onClick={() => {
+//                           if (
+//                             importedModel?.url &&
+//                             importedModel.url.startsWith("blob:")
+//                           ) {
+//                             URL.revokeObjectURL(importedModel.url);
+//                           }
+//                           if (
+//                             importedModel?.mtlUrl &&
+//                             importedModel.mtlUrl.startsWith("blob:")
+//                           ) {
+//                             URL.revokeObjectURL(importedModel.mtlUrl);
+//                           }
+//                           setImportedModel(null);
+//                           setIsImportedModelDisplayed(false);
+//                           setImportedModelName("Imported Model");
+//                           const defaultCategoryId = CATEGORIES_DATA[0].id;
+//                           setCurrentCategory(defaultCategoryId);
+//                           setCurrentShape(
+//                             SHAPES_BY_CATEGORY_DATA[defaultCategoryId][0].id
+//                           );
+//                           animationClipsRef.current = [];
+//                           setSelectedAnimationClipIndex(-1);
+//                           setAnimationPlaybackState("stopped");
+//                           setAnimationTime(0);
+//                           setAnimationDuration(0);
+//                           sonnerToast.info("Imported Model Cleared");
+//                         }}
+//                       >
+//                         <XCircle size={16} className='mr-2' />
+//                         Clear Imported
+//                       </Button>
+//                     </CardFooter>
+//                   </Card>
+//                 )}
+//                 <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
+//                   <CardHeader>
+//                     <CardTitle className='text-slate-100'>
+//                       3D Text Overlay
+//                     </CardTitle>
+//                   </CardHeader>
+//                   <CardContent className='space-y-3'>
+//                     <Input
+//                       type='text'
+//                       placeholder='Enter text for 3D display'
+//                       value={textInput}
+//                       onChange={(e) => setTextInput(e.target.value)}
+//                       className='bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
+//                     />
+//                     <Button
+//                       onClick={handleSet3DText}
+//                       className='w-full bg-teal-600 hover:bg-teal-700'
+//                     >
+//                       <Type size={16} className='mr-2' />
+//                       Set 3D Text
+//                     </Button>
+//                     <div className='flex items-center space-x-2 pt-1'>
+//                       <Switch
+//                         id='text-visibility-switch'
+//                         checked={isTextVisible}
+//                         onCheckedChange={(checked) => {
+//                           setIsTextVisible(checked);
+//                         }}
+//                       />
+//                       <Label
+//                         htmlFor='text-visibility-switch'
+//                         className='text-sm text-slate-300'
+//                       >
+//                         Show 3D Text
+//                       </Label>
+//                     </div>
+//                   </CardContent>
+//                 </Card>
+//                 <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
+//                   <CardHeader>
+//                     <CardTitle className='text-slate-100'>
+//                       Global Animation & View
+//                     </CardTitle>
+//                   </CardHeader>
+//                   <CardContent className='space-y-4'>
+//                     <Button
+//                       onClick={handleToggleGlobalAnimation}
+//                       variant={isAnimating ? "destructive" : "default"}
+//                       className='w-full bg-green-600 hover:bg-green-700 data-[state=destructive]:bg-red-600 data-[state=destructive]:hover:bg-red-700'
+//                       data-state={isAnimating ? "destructive" : "default"}
+//                     >
+//                       {isAnimating ? (
+//                         <Pause size={16} className='mr-2' />
+//                       ) : (
+//                         <Play size={16} className='mr-2' />
+//                       )}
+//                       {isAnimating ? "Pause Float" : "Play Float"}
+//                     </Button>
+//                     <Select
+//                       value={animationPreset}
+//                       onValueChange={(val) => {
+//                         setAnimationPreset(val);
+//                       }}
+//                     >
+//                       <SelectTrigger className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'>
+//                         <SelectValue placeholder='Select float style' />
+//                       </SelectTrigger>
+//                       <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
+//                         {Object.keys(animationPresets).map((presetKey) => (
+//                           <SelectItem
+//                             key={presetKey}
+//                             value={presetKey}
+//                             className='capitalize focus:bg-purple-600 focus:text-white'
+//                           >
+//                             {presetKey.charAt(0).toUpperCase() +
+//                               presetKey.slice(1)}
+//                           </SelectItem>
+//                         ))}
+//                       </SelectContent>
+//                     </Select>
+//                     <div className='grid grid-cols-2 gap-3'>
+//                       <Button
+//                         variant='outline'
+//                         onClick={handleResetAnimation}
+//                         className='border-slate-600 text-slate-300 hover:bg-slate-700/50 hover:text-slate-100'
+//                       >
+//                         <RotateCcw size={14} className='mr-2' />
+//                         Reset View
+//                       </Button>
+//                       <Button
+//                         variant='default'
+//                         onClick={handleRandomize}
+//                         className='bg-indigo-600 hover:bg-indigo-700'
+//                       >
+//                         <Shuffle size={14} className='mr-2' />
+//                         Randomize
+//                       </Button>
+//                     </div>
+//                     <div className='grid grid-cols-2 gap-3 pt-2'>
+//                       <Button
+//                         variant='outline'
+//                         onClick={handleUndo}
+//                         disabled={!canUndo}
+//                         className='border-slate-600 text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-50'
+//                       >
+//                         <Undo size={14} className='mr-2' />
+//                         Undo
+//                       </Button>
+//                       <Button
+//                         variant='outline'
+//                         onClick={handleRedo}
+//                         disabled={!canRedo}
+//                         className='border-slate-600 text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-50'
+//                       >
+//                         <Redo size={14} className='mr-2' />
+//                         Redo
+//                       </Button>
+//                     </div>
+//                   </CardContent>
+//                 </Card>
+//                 <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
+//                   <CardHeader>
+//                     <CardTitle className='text-slate-100'>
+//                       File & Export
+//                     </CardTitle>
+//                   </CardHeader>
+//                   <CardContent className='space-y-3'>
+//                     <Button
+//                       onClick={triggerImport}
+//                       disabled={isExporting}
+//                       className='w-full bg-green-600 hover:bg-green-700'
+//                     >
+//                       <UploadCloud size={16} className='mr-2' />
+//                       Import Model
+//                     </Button>
+//                     <Button
+//                       onClick={handleExportGLB}
+//                       disabled={isExporting}
+//                       className='w-full bg-blue-600 hover:bg-blue-700'
+//                     >
+//                       <Download size={16} className='mr-2' />
+//                       {isExporting &&
+//                       exportProgress > 0 &&
+//                       exportProgress <= 100
+//                         ? `GLB... ${Math.round(exportProgress)}%`
+//                         : "Export GLB"}
+//                     </Button>
+//                     <Button
+//                       onClick={handleSimulatedExportOBJ}
+//                       disabled={isExporting}
+//                       className='w-full bg-teal-600 hover:bg-teal-700'
+//                     >
+//                       <Download size={16} className='mr-2' />
+//                       {isExporting &&
+//                       exportProgress > 0 &&
+//                       exportProgress <= 100
+//                         ? `OBJ... ${Math.round(exportProgress)}%`
+//                         : "Export OBJ (Sim.)"}
+//                     </Button>
+//                     <Button
+//                       onClick={handleTakeScreenshot}
+//                       disabled={isExporting}
+//                       className='w-full bg-purple-600 hover:bg-purple-700'
+//                     >
+//                       <Camera size={16} className='mr-2' />
+//                       Screenshot
+//                     </Button>
+//                   </CardContent>
+//                 </Card>
+//               </div>
+//               <div className='lg:col-span-9 order-first lg:order-last'>
+//                 <Card
+//                   ref={viewerCardRef}
+//                   className='bg-slate-800/50 border-slate-700/80 shadow-2xl aspect-[4/3] sm:aspect-video lg:aspect-[16/10] overflow-hidden relative'
+//                 >
+//                   <div className='absolute top-2 right-2 sm:top-3 sm:right-3 z-20 flex items-center space-x-2'>
+//                     <Tooltip>
+//                       <TooltipTrigger asChild>
+//                         <Button
+//                           variant='ghost'
+//                           size='icon'
+//                           className='bg-slate-800/60 hover:bg-slate-700/90 text-slate-300 hover:text-purple-300 rounded-full p-2 shadow-md'
+//                           onClick={toggleFullscreen}
+//                         >
+//                           {isFullscreen ? (
+//                             <Minimize size={20} />
+//                           ) : (
+//                             <Maximize size={20} />
+//                           )}
+//                         </Button>
+//                       </TooltipTrigger>
+//                       <TooltipContent>
+//                         <p>
+//                           {isFullscreen
+//                             ? "Exit Fullscreen"
+//                             : "Enter Fullscreen"}
+//                         </p>
+//                       </TooltipContent>
+//                     </Tooltip>
+//                     <Sheet
+//                       open={isSettingsPanelOpen}
+//                       onOpenChange={setIsSettingsPanelOpen}
+//                     >
+//                       <Tooltip>
+//                         <TooltipTrigger asChild>
+//                           <SheetTrigger asChild>
+//                             <Button
+//                               variant='ghost'
+//                               size='icon'
+//                               className='bg-slate-800/60 hover:bg-slate-700/90 text-slate-300 hover:text-purple-300 rounded-full p-2 shadow-md'
+//                             >
+//                               <Settings2 size={20} />
+//                             </Button>
+//                           </SheetTrigger>
+//                         </TooltipTrigger>
+//                         <TooltipContent>
+//                           <p>Open Detailed Settings</p>
+//                         </TooltipContent>
+//                       </Tooltip>
+//                       <SheetContent
+//                         side='right'
+//                         className='bg-slate-800/95 border-l border-slate-700 text-slate-100 p-0 w-full sm:max-w-sm md:max-w-md backdrop-blur-sm'
+//                       >
+//                         <SheetHeader className='p-4 border-b border-slate-700'>
+//                           <SheetTitle className='text-xl text-slate-100'>
+//                             Viewer & Model Settings
+//                           </SheetTitle>
+//                           <SheetDescription className='text-slate-400 text-xs'>
+//                             Fine-tune the appearance, lighting, and animation
+//                             playback.
+//                           </SheetDescription>
+//                         </SheetHeader>
+//                         <ScrollArea className='h-[calc(100vh-128px)]'>
+//                           <div className='space-y-6 p-4'>
+//                             {!isImportedModelDisplayed && (
+//                               <section className='space-y-4'>
+//                                 <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
+//                                   <Palette
+//                                     size={16}
+//                                     className='mr-2 text-purple-400'
+//                                   />
+//                                   Procedural Shape Material
+//                                 </h3>
+//                                 <div className='space-y-1.5'>
+//                                   <Label
+//                                     htmlFor='materialTypePanelSheet'
+//                                     className='text-sm text-slate-300'
+//                                   >
+//                                     Base Material
+//                                   </Label>
+//                                   <Select
+//                                     value={settings.materialType}
+//                                     onValueChange={(value) => {
+//                                       handleSettingsChange(
+//                                         "materialType",
+//                                         value
+//                                       );
+//                                       if (value !== settings.materialType) {
+//                                         resetCustomMaterialProperties();
+//                                       }
+//                                     }}
+//                                   >
+//                                     <SelectTrigger
+//                                       id='materialTypePanelSheet'
+//                                       className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
+//                                     >
+//                                       <SelectValue placeholder='Select material' />
+//                                     </SelectTrigger>
+//                                     <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
+//                                       {[
+//                                         "auto",
+//                                         "metallic",
+//                                         "glass",
+//                                         "crystal",
+//                                         "ceramic",
+//                                         "organic",
+//                                         "plastic",
+//                                         "neon",
+//                                       ].map((type) => (
+//                                         <SelectItem
+//                                           key={type}
+//                                           value={type}
+//                                           className='capitalize focus:bg-purple-600 focus:text-white'
+//                                         >
+//                                           {type}
+//                                         </SelectItem>
+//                                       ))}
+//                                     </SelectContent>
+//                                   </Select>
+//                                 </div>
+//                                 <div className='space-y-1.5'>
+//                                   <Label
+//                                     htmlFor='shapeColorPanelSheet'
+//                                     className='text-sm text-slate-300'
+//                                   >
+//                                     Base Color (Used if no Color Texture)
+//                                   </Label>
+//                                   <Input
+//                                     id='shapeColorPanelSheet'
+//                                     type='color'
+//                                     value={settings.shapeColor}
+//                                     onChange={(e) =>
+//                                       handleSettingsChange(
+//                                         "shapeColor",
+//                                         e.target.value
+//                                       )
+//                                     }
+//                                     className='w-full p-1 h-9 bg-slate-700 border-slate-600 cursor-pointer focus-visible:ring-purple-500'
+//                                   />
+//                                 </div>
+//                                 {settings.materialType !== "auto" && (
+//                                   <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30'>
+//                                     <div className='flex justify-between items-center'>
+//                                       <h4 className='text-xs font-semibold text-purple-300'>
+//                                         Fine-tune '{settings.materialType}'
+//                                       </h4>
+//                                       <Button
+//                                         variant='ghost'
+//                                         size='xs'
+//                                         onClick={resetCustomMaterialProperties}
+//                                         className='text-slate-400 hover:text-purple-300 h-7 px-2'
+//                                       >
+//                                         Reset to Preset
+//                                       </Button>
+//                                     </div>
+//                                     {(proceduralMaterialTypeForPanel ===
+//                                       "metallic" ||
+//                                       proceduralMaterialTypeForPanel ===
+//                                         "glass" ||
+//                                       proceduralMaterialTypeForPanel ===
+//                                         "crystal" ||
+//                                       proceduralMaterialTypeForPanel ===
+//                                         "ceramic" ||
+//                                       proceduralMaterialTypeForPanel ===
+//                                         "organic" ||
+//                                       proceduralMaterialTypeForPanel ===
+//                                         "plastic" ||
+//                                       proceduralMaterialTypeForPanel ===
+//                                         "neon") && (
+//                                       <div className='space-y-1.5'>
+//                                         <div className='flex justify-between items-center'>
+//                                           <Label
+//                                             htmlFor='customRoughnessPanelSheet'
+//                                             className='text-xs text-slate-300'
+//                                           >
+//                                             Roughness
+//                                           </Label>
+//                                           <span className='text-xs text-slate-400'>
+//                                             {(
+//                                               settings.customMaterialProperties
+//                                                 .roughness ??
+//                                               baseMaterialPresets[
+//                                                 proceduralMaterialTypeForPanel
+//                                               ]?.roughness ??
+//                                               0
+//                                             ).toFixed(2)}
+//                                           </span>
+//                                         </div>
+//                                         <Slider
+//                                           id='customRoughnessPanelSheet'
+//                                           min={0}
+//                                           max={1}
+//                                           step={0.01}
+//                                           value={[
+//                                             settings.customMaterialProperties
+//                                               .roughness ??
+//                                               baseMaterialPresets[
+//                                                 proceduralMaterialTypeForPanel
+//                                               ]?.roughness ??
+//                                               0,
+//                                           ]}
+//                                           onValueChange={([val]) =>
+//                                             handleSettingsChange(
+//                                               "customMaterialProperties",
+//                                               val,
+//                                               "roughness"
+//                                             )
+//                                           }
+//                                           className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                         />
+//                                       </div>
+//                                     )}
+//                                     {(proceduralMaterialTypeForPanel ===
+//                                       "metallic" ||
+//                                       proceduralMaterialTypeForPanel ===
+//                                         "ceramic" ||
+//                                       proceduralMaterialTypeForPanel ===
+//                                         "plastic") && (
+//                                       <div className='space-y-1.5'>
+//                                         <div className='flex justify-between items-center'>
+//                                           <Label
+//                                             htmlFor='customMetalnessPanelSheet'
+//                                             className='text-xs text-slate-300'
+//                                           >
+//                                             Metalness
+//                                           </Label>
+//                                           <span className='text-xs text-slate-400'>
+//                                             {(
+//                                               settings.customMaterialProperties
+//                                                 .metalness ??
+//                                               baseMaterialPresets[
+//                                                 proceduralMaterialTypeForPanel
+//                                               ]?.metalness ??
+//                                               0
+//                                             ).toFixed(2)}
+//                                           </span>
+//                                         </div>
+//                                         <Slider
+//                                           id='customMetalnessPanelSheet'
+//                                           min={0}
+//                                           max={1}
+//                                           step={0.01}
+//                                           value={[
+//                                             settings.customMaterialProperties
+//                                               .metalness ??
+//                                               baseMaterialPresets[
+//                                                 proceduralMaterialTypeForPanel
+//                                               ]?.metalness ??
+//                                               0,
+//                                           ]}
+//                                           onValueChange={([val]) =>
+//                                             handleSettingsChange(
+//                                               "customMaterialProperties",
+//                                               val,
+//                                               "metalness"
+//                                             )
+//                                           }
+//                                           className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                         />
+//                                       </div>
+//                                     )}
+//                                     {(proceduralMaterialTypeForPanel ===
+//                                       "glass" ||
+//                                       proceduralMaterialTypeForPanel ===
+//                                         "crystal") && (
+//                                       <>
+//                                         <div className='space-y-1.5'>
+//                                           <div className='flex justify-between items-center'>
+//                                             <Label
+//                                               htmlFor='customIorPanelSheet'
+//                                               className='text-xs text-slate-300'
+//                                             >
+//                                               IOR
+//                                             </Label>
+//                                             <span className='text-xs text-slate-400'>
+//                                               {(
+//                                                 settings
+//                                                   .customMaterialProperties
+//                                                   .ior ??
+//                                                 baseMaterialPresets[
+//                                                   proceduralMaterialTypeForPanel
+//                                                 ]?.ior ??
+//                                                 1.5
+//                                               ).toFixed(2)}
+//                                             </span>
+//                                           </div>
+//                                           <Slider
+//                                             id='customIorPanelSheet'
+//                                             min={1}
+//                                             max={2.33}
+//                                             step={0.01}
+//                                             value={[
+//                                               settings.customMaterialProperties
+//                                                 .ior ??
+//                                                 baseMaterialPresets[
+//                                                   proceduralMaterialTypeForPanel
+//                                                 ]?.ior ??
+//                                                 1.5,
+//                                             ]}
+//                                             onValueChange={([val]) =>
+//                                               handleSettingsChange(
+//                                                 "customMaterialProperties",
+//                                                 val,
+//                                                 "ior"
+//                                               )
+//                                             }
+//                                             className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                           />
+//                                         </div>
+//                                         <div className='space-y-1.5'>
+//                                           <div className='flex justify-between items-center'>
+//                                             <Label
+//                                               htmlFor='customTransmissionPanelSheet'
+//                                               className='text-xs text-slate-300'
+//                                             >
+//                                               Transmission
+//                                             </Label>
+//                                             <span className='text-xs text-slate-400'>
+//                                               {(
+//                                                 settings
+//                                                   .customMaterialProperties
+//                                                   .transmission ??
+//                                                 baseMaterialPresets[
+//                                                   proceduralMaterialTypeForPanel
+//                                                 ]?.transmission ??
+//                                                 0
+//                                               ).toFixed(2)}
+//                                             </span>
+//                                           </div>
+//                                           <Slider
+//                                             id='customTransmissionPanelSheet'
+//                                             min={0}
+//                                             max={1}
+//                                             step={0.01}
+//                                             value={[
+//                                               settings.customMaterialProperties
+//                                                 .transmission ??
+//                                                 baseMaterialPresets[
+//                                                   proceduralMaterialTypeForPanel
+//                                                 ]?.transmission ??
+//                                                 0,
+//                                             ]}
+//                                             onValueChange={([val]) =>
+//                                               handleSettingsChange(
+//                                                 "customMaterialProperties",
+//                                                 val,
+//                                                 "transmission"
+//                                               )
+//                                             }
+//                                             className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                           />
+//                                         </div>
+//                                         <div className='space-y-1.5'>
+//                                           <div className='flex justify-between items-center'>
+//                                             <Label
+//                                               htmlFor='customThicknessPanelSheet'
+//                                               className='text-xs text-slate-300'
+//                                             >
+//                                               Thickness
+//                                             </Label>
+//                                             <span className='text-xs text-slate-400'>
+//                                               {(
+//                                                 settings
+//                                                   .customMaterialProperties
+//                                                   .thickness ??
+//                                                 baseMaterialPresets[
+//                                                   proceduralMaterialTypeForPanel
+//                                                 ]?.thickness ??
+//                                                 0
+//                                               ).toFixed(2)}
+//                                             </span>
+//                                           </div>
+//                                           <Slider
+//                                             id='customThicknessPanelSheet'
+//                                             min={0}
+//                                             max={2}
+//                                             step={0.01}
+//                                             value={[
+//                                               settings.customMaterialProperties
+//                                                 .thickness ??
+//                                                 baseMaterialPresets[
+//                                                   proceduralMaterialTypeForPanel
+//                                                 ]?.thickness ??
+//                                                 0,
+//                                             ]}
+//                                             onValueChange={([val]) =>
+//                                               handleSettingsChange(
+//                                                 "customMaterialProperties",
+//                                                 val,
+//                                                 "thickness"
+//                                               )
+//                                             }
+//                                             className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                           />
+//                                         </div>
+//                                       </>
+//                                     )}
+//                                     {proceduralMaterialTypeForPanel ===
+//                                       "neon" && (
+//                                       <div className='space-y-1.5'>
+//                                         <div className='flex justify-between items-center'>
+//                                           <Label
+//                                             htmlFor='customEmissiveIntensityPanelSheet'
+//                                             className='text-xs text-slate-300'
+//                                           >
+//                                             Emissive Intensity
+//                                           </Label>
+//                                           <span className='text-xs text-slate-400'>
+//                                             {(
+//                                               settings.customMaterialProperties
+//                                                 .emissiveIntensity ??
+//                                               baseMaterialPresets.neon
+//                                                 ?.emissiveIntensity ??
+//                                               1.0
+//                                             ).toFixed(2)}
+//                                           </span>
+//                                         </div>
+//                                         <Slider
+//                                           id='customEmissiveIntensityPanelSheet'
+//                                           min={0}
+//                                           max={5}
+//                                           step={0.1}
+//                                           value={[
+//                                             settings.customMaterialProperties
+//                                               .emissiveIntensity ??
+//                                               baseMaterialPresets.neon
+//                                                 ?.emissiveIntensity ??
+//                                               1.0,
+//                                           ]}
+//                                           onValueChange={([val]) =>
+//                                             handleSettingsChange(
+//                                               "customMaterialProperties",
+//                                               val,
+//                                               "emissiveIntensity"
+//                                             )
+//                                           }
+//                                           className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                         />
+//                                       </div>
+//                                     )}
+//                                     <Separator className='my-2 bg-slate-500/50' />
+//                                     <h5 className='text-xs font-medium text-purple-300 pt-1 flex items-center'>
+//                                       <ImageUp size={14} className='mr-1.5' />
+//                                       Textures (For Procedural Shape)
+//                                     </h5>
+//                                     <div className='grid grid-cols-2 gap-x-3 gap-y-4'>
+//                                       {textureSlots.map((slot) => {
+//                                         if (
+//                                           (slot.id === "emissiveMap" &&
+//                                             proceduralMaterialTypeForPanel !==
+//                                               "neon" &&
+//                                             !baseMaterialPresets[
+//                                               proceduralMaterialTypeForPanel
+//                                             ]?.useEmissive) ||
+//                                           ((slot.id === "metalnessMap" ||
+//                                             slot.id === "roughnessMap") &&
+//                                             (proceduralMaterialTypeForPanel ===
+//                                               "glass" ||
+//                                               proceduralMaterialTypeForPanel ===
+//                                                 "crystal")) ||
+//                                           (slot.id === "aoMap" &&
+//                                             (proceduralMaterialTypeForPanel ===
+//                                               "glass" ||
+//                                               proceduralMaterialTypeForPanel ===
+//                                                 "crystal" ||
+//                                               proceduralMaterialTypeForPanel ===
+//                                                 "neon"))
+//                                         )
+//                                           return null;
+//                                         const urlKey = `${slot.id}Url`;
+//                                         const currentTextureUrl =
+//                                           settings.customMaterialProperties[
+//                                             urlKey
+//                                           ];
+//                                         return (
+//                                           <div
+//                                             key={slot.id}
+//                                             className='space-y-1'
+//                                           >
+//                                             <Label
+//                                               htmlFor={`texture-${slot.id}-sheet`}
+//                                               className='text-xs text-slate-300'
+//                                             >
+//                                               {slot.name}
+//                                             </Label>
+//                                             {currentTextureUrl && (
+//                                               <div className='relative group w-full aspect-square bg-slate-600/50 rounded overflow-hidden mb-1'>
+//                                                 <img
+//                                                   src={currentTextureUrl}
+//                                                   alt={`${slot.name} preview`}
+//                                                   className='w-full h-full object-cover'
+//                                                 />
+//                                                 <Button
+//                                                   variant='destructive'
+//                                                   size='icon'
+//                                                   className='absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity'
+//                                                   onClick={() =>
+//                                                     handleClearTexture(slot.id)
+//                                                   }
+//                                                   title={`Clear ${slot.name} Texture`}
+//                                                 >
+//                                                   <Trash2 size={12} />
+//                                                 </Button>
+//                                               </div>
+//                                             )}
+//                                             <Input
+//                                               id={`texture-${slot.id}-sheet`}
+//                                               type='file'
+//                                               accept='image/png, image/jpeg, image/webp, .hdr'
+//                                               ref={(el) =>
+//                                                 (textureFileInputRefs.current[
+//                                                   slot.id
+//                                                 ] = el)
+//                                               }
+//                                               onChange={(e) =>
+//                                                 handleTextureUpload(slot.id, e)
+//                                               }
+//                                               className={cn(
+//                                                 "w-full text-xs file:mr-1.5 file:py-1 file:px-1.5 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700 cursor-pointer",
+//                                                 "bg-slate-700 border-slate-600 text-slate-100",
+//                                                 currentTextureUrl ? "mt-1" : ""
+//                                               )}
+//                                             />
+//                                           </div>
+//                                         );
+//                                       })}
+//                                     </div>
+//                                   </div>
+//                                 )}
+//                                 <Separator className='my-3 bg-slate-600' />
+//                                 <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
+//                                   <LayersIcon
+//                                     size={16}
+//                                     className='mr-2 text-purple-400'
+//                                   />
+//                                   Procedural Shape Geometry
+//                                 </h3>
+//                                 <div className='space-y-1.5'>
+//                                   <div className='flex justify-between items-center'>
+//                                     <Label
+//                                       htmlFor='extrudeDepthPanelSheet'
+//                                       className='text-sm text-slate-300'
+//                                     >
+//                                       Depth
+//                                     </Label>
+//                                     <span className='text-xs text-slate-400'>
+//                                       {settings.extrudeDepth.toFixed(2)}
+//                                     </span>
+//                                   </div>
+//                                   <Slider
+//                                     id='extrudeDepthPanelSheet'
+//                                     min={0.05}
+//                                     max={1.5}
+//                                     step={0.05}
+//                                     value={[settings.extrudeDepth]}
+//                                     onValueChange={([value]) =>
+//                                       handleSettingsChange(
+//                                         "extrudeDepth",
+//                                         value
+//                                       )
+//                                     }
+//                                     className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                   />
+//                                 </div>
+//                                 <div className='space-y-1.5'>
+//                                   <Label
+//                                     htmlFor='qualityPanelSheet'
+//                                     className='text-sm text-slate-300'
+//                                   >
+//                                     Quality
+//                                   </Label>
+//                                   <Select
+//                                     value={settings.quality}
+//                                     onValueChange={(value) =>
+//                                       handleSettingsChange("quality", value)
+//                                     }
+//                                   >
+//                                     <SelectTrigger
+//                                       id='qualityPanelSheet'
+//                                       className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
+//                                     >
+//                                       <SelectValue placeholder='Select quality' />
+//                                     </SelectTrigger>
+//                                     <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
+//                                       {["low", "medium", "high"].map((q) => (
+//                                         <SelectItem
+//                                           key={q}
+//                                           value={q}
+//                                           className='capitalize focus:bg-purple-600 focus:text-white'
+//                                         >
+//                                           {q}
+//                                         </SelectItem>
+//                                       ))}
+//                                     </SelectContent>
+//                                   </Select>
+//                                 </div>
+//                               </section>
+//                             )}
+//                             <Separator className='my-3 bg-slate-600' />
+//                             <section className='space-y-4'>
+//                               <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
+//                                 <Type
+//                                   size={16}
+//                                   className='mr-2 text-teal-400'
+//                                 />
+//                                 3D Text Settings
+//                               </h3>
+//                               <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30'>
+//                                 <div className='space-y-1.5'>
+//                                   <Label
+//                                     htmlFor='textColorPanelSheet'
+//                                     className='text-sm text-slate-300'
+//                                   >
+//                                     Text Color
+//                                   </Label>
+//                                   <Input
+//                                     id='textColorPanelSheet'
+//                                     type='color'
+//                                     value={settings.textColor}
+//                                     onChange={(e) =>
+//                                       handleSettingsChange(
+//                                         "textColor",
+//                                         e.target.value
+//                                       )
+//                                     }
+//                                     className='w-full p-1 h-9 bg-slate-700 border-slate-600 cursor-pointer'
+//                                   />
+//                                 </div>
+//                                 <div className='space-y-1.5'>
+//                                   <div className='flex justify-between items-center'>
+//                                     <Label
+//                                       htmlFor='textSizePanelSheet'
+//                                       className='text-sm text-slate-300'
+//                                     >
+//                                       Text Size
+//                                     </Label>
+//                                     <span className='text-xs text-slate-400'>
+//                                       {settings.textSize.toFixed(2)}
+//                                     </span>
+//                                   </div>
+//                                   <Slider
+//                                     id='textSizePanelSheet'
+//                                     min={0.1}
+//                                     max={2.0}
+//                                     step={0.05}
+//                                     value={[settings.textSize]}
+//                                     onValueChange={([v]) =>
+//                                       handleSettingsChange("textSize", v)
+//                                     }
+//                                     className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                   />
+//                                 </div>
+//                                 <div className='space-y-1.5'>
+//                                   <div className='flex justify-between items-center'>
+//                                     <Label
+//                                       htmlFor='textDepthPanelSheet'
+//                                       className='text-sm text-slate-300'
+//                                     >
+//                                       Text Depth (Extrusion)
+//                                     </Label>
+//                                     <span className='text-xs text-slate-400'>
+//                                       {settings.textDepth.toFixed(3)}
+//                                     </span>
+//                                   </div>
+//                                   <Slider
+//                                     id='textDepthPanelSheet'
+//                                     min={0.005}
+//                                     max={0.5}
+//                                     step={0.005}
+//                                     value={[settings.textDepth]}
+//                                     onValueChange={([v]) =>
+//                                       handleSettingsChange("textDepth", v)
+//                                     }
+//                                     className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                   />
+//                                 </div>
+//                                 <div className='space-y-1.5'>
+//                                   <Label
+//                                     htmlFor='textFontPanelSheet'
+//                                     className='text-sm text-slate-300'
+//                                   >
+//                                     Font URL (JSON Typeface)
+//                                   </Label>
+//                                   <Input
+//                                     id='textFontPanelSheet'
+//                                     type='text'
+//                                     value={settings.textFontUrl}
+//                                     onChange={(e) =>
+//                                       handleSettingsChange(
+//                                         "textFontUrl",
+//                                         e.target.value
+//                                       )
+//                                     }
+//                                     placeholder='/fonts/your_font.json'
+//                                     className='w-full bg-slate-700 border-slate-600 text-slate-100 text-xs'
+//                                   />
+//                                   <p className='text-xs text-slate-400'>
+//                                     Place font in `public` folder. Example:
+//                                     `/fonts/helvetiker_regular.typeface.json`
+//                                   </p>
+//                                 </div>
+//                               </div>
+//                             </section>
+//                             <Separator className='my-3 bg-slate-600' />
+//                             <section className='space-y-4'>
+//                               <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
+//                                 <Sparkles
+//                                   size={16}
+//                                   className='mr-2 text-amber-400'
+//                                 />
+//                                 General Display
+//                               </h3>
+//                               <div className='space-y-1.5'>
+//                                 <div className='flex justify-between items-center'>
+//                                   <Label
+//                                     htmlFor='animationSpeedPanelSheet'
+//                                     className='text-sm text-slate-300'
+//                                   >
+//                                     Float Anim. Speed
+//                                   </Label>
+//                                   <span className='text-xs text-slate-400'>
+//                                     {settings.animationSpeed.toFixed(1)}x
+//                                   </span>
+//                                 </div>
+//                                 <Slider
+//                                   id='animationSpeedPanelSheet'
+//                                   min={0.1}
+//                                   max={3}
+//                                   step={0.1}
+//                                   value={[settings.animationSpeed]}
+//                                   onValueChange={([value]) =>
+//                                     handleSettingsChange(
+//                                       "animationSpeed",
+//                                       value
+//                                     )
+//                                   }
+//                                   className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                 />
+//                               </div>
+//                               <div className='space-y-1.5'>
+//                                 <Label
+//                                   htmlFor='backgroundPanelSheet'
+//                                   className='text-sm text-slate-300'
+//                                 >
+//                                   Background / Environment
+//                                 </Label>
+//                                 <Select
+//                                   value={settings.background}
+//                                   onValueChange={(value) =>
+//                                     handleSettingsChange("background", value)
+//                                   }
+//                                 >
+//                                   <SelectTrigger
+//                                     id='backgroundPanelSheet'
+//                                     className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
+//                                   >
+//                                     <SelectValue placeholder='Select background' />
+//                                   </SelectTrigger>
+//                                   <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
+//                                     {Object.entries(
+//                                       BACKGROUND_OPTIONS_DATA
+//                                     ).map(([key, name]) => (
+//                                       <SelectItem
+//                                         key={key}
+//                                         value={key}
+//                                         className='focus:bg-purple-600 focus:text-white'
+//                                       >
+//                                         {name}
+//                                       </SelectItem>
+//                                     ))}
+//                                   </SelectContent>
+//                                 </Select>
+//                                 {settings.background === "customImage" && (
+//                                   <div className='mt-2 space-y-1.5 p-3 border border-slate-600 rounded-md bg-slate-700/30'>
+//                                     <Label
+//                                       htmlFor='customBgImagePanelSheet'
+//                                       className='text-sm text-slate-300'
+//                                     >
+//                                       Upload Background Image (HDR, PNG, JPG)
+//                                     </Label>
+//                                     <Input
+//                                       id='customBgImagePanelSheet'
+//                                       type='file'
+//                                       accept='image/png, image/jpeg, image/webp, .hdr'
+//                                       onChange={handleCustomBgImageUpload}
+//                                       className='w-full text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700 cursor-pointer bg-slate-700 border-slate-600 text-slate-100'
+//                                     />
+//                                     {customBgImageUrl && (
+//                                       <Button
+//                                         variant='ghost'
+//                                         size='xs'
+//                                         onClick={handleClearCustomBgImage}
+//                                         className='text-red-400 hover:text-red-300 hover:bg-transparent mt-1 w-full justify-start px-1'
+//                                       >
+//                                         <Trash2 size={12} className='mr-1' />
+//                                         Clear Custom Image
+//                                       </Button>
+//                                     )}
+//                                   </div>
+//                                 )}
+//                               </div>
+//                             </section>
+//                             <Separator className='my-3 bg-slate-600' />
+//                             <section className='space-y-4'>
+//                               <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
+//                                 <SunMedium
+//                                   size={16}
+//                                   className='mr-2 text-yellow-400'
+//                                 />
+//                                 Lighting
+//                               </h3>
+//                               {["keyLight", "fillLight", "ambientLight"].map(
+//                                 (lightKey) => {
+//                                   const lightName =
+//                                     lightKey
+//                                       .replace("Light", "")
+//                                       .charAt(0)
+//                                       .toUpperCase() +
+//                                     lightKey.replace("Light", "").slice(1);
+//                                   return (
+//                                     <div
+//                                       key={lightKey}
+//                                       className='p-3 border border-slate-600 rounded-md space-y-2 text-xs bg-slate-700/30'
+//                                     >
+//                                       <div className='flex items-center justify-between'>
+//                                         <Label
+//                                           htmlFor={`${lightKey}EnablePanelSheet`}
+//                                           className='text-slate-200 text-sm'
+//                                         >
+//                                           {lightName} Light
+//                                         </Label>
+//                                         <Switch
+//                                           id={`${lightKey}EnablePanelSheet`}
+//                                           checked={settings[lightKey].enabled}
+//                                           onCheckedChange={(checked) =>
+//                                             handleSettingsChange(
+//                                               lightKey,
+//                                               checked,
+//                                               "enabled"
+//                                             )
+//                                           }
+//                                         />
+//                                       </div>
+//                                       {settings[lightKey].enabled && (
+//                                         <>
+//                                           <div className='flex justify-between items-center'>
+//                                             <Label
+//                                               htmlFor={`${lightKey}IntensityPanelSheet`}
+//                                               className='text-slate-300'
+//                                             >
+//                                               Intensity
+//                                             </Label>
+//                                             <span className='text-xs text-slate-400'>
+//                                               {settings[
+//                                                 lightKey
+//                                               ].intensity.toFixed(2)}
+//                                             </span>
+//                                           </div>
+//                                           <Slider
+//                                             id={`${lightKey}IntensityPanelSheet`}
+//                                             min={0}
+//                                             max={2}
+//                                             step={0.05}
+//                                             value={[
+//                                               settings[lightKey].intensity,
+//                                             ]}
+//                                             onValueChange={([val]) =>
+//                                               handleSettingsChange(
+//                                                 lightKey,
+//                                                 val,
+//                                                 "intensity"
+//                                               )
+//                                             }
+//                                             className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                           />
+//                                           <Label
+//                                             htmlFor={`${lightKey}ColorPanelSheet`}
+//                                             className='text-slate-300'
+//                                           >
+//                                             Color
+//                                           </Label>
+//                                           <Input
+//                                             id={`${lightKey}ColorPanelSheet`}
+//                                             type='color'
+//                                             value={settings[lightKey].color}
+//                                             onChange={(e) =>
+//                                               handleSettingsChange(
+//                                                 lightKey,
+//                                                 e.target.value,
+//                                                 "color"
+//                                               )
+//                                             }
+//                                             className='w-full h-7 p-0.5 bg-slate-600 border-slate-500 cursor-pointer'
+//                                           />
+//                                         </>
+//                                       )}
+//                                     </div>
+//                                   );
+//                                 }
+//                               )}
+//                             </section>
+//                             <Separator className='my-3 bg-slate-600' />
+//                             <section className='space-y-4'>
+//                               <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
+//                                 <Sparkles
+//                                   size={16}
+//                                   className='mr-2 text-sky-400'
+//                                 />
+//                                 Post-Processing
+//                               </h3>
+//                               <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30'>
+//                                 <div className='flex items-center justify-between'>
+//                                   <Label
+//                                     htmlFor='n8aoEnableSheet'
+//                                     className='text-sm text-slate-200'
+//                                   >
+//                                     N8AO (Ambient Occlusion)
+//                                   </Label>
+//                                   <Switch
+//                                     id='n8aoEnableSheet'
+//                                     checked={settings.n8ao.enabled}
+//                                     onCheckedChange={(checked) =>
+//                                       handleSettingsChange(
+//                                         "n8ao",
+//                                         checked,
+//                                         "enabled"
+//                                       )
+//                                     }
+//                                   />
+//                                 </div>
+//                                 {settings.n8ao.enabled && (
+//                                   <>
+//                                     <div className='space-y-1.5'>
+//                                       <div className='flex justify-between items-center'>
+//                                         <Label
+//                                           htmlFor='n8aoIntensitySheet'
+//                                           className='text-xs text-slate-300'
+//                                         >
+//                                           Intensity
+//                                         </Label>
+//                                         <span className='text-xs text-slate-400'>
+//                                           {settings.n8ao.intensity.toFixed(1)}
+//                                         </span>
+//                                       </div>
+//                                       <Slider
+//                                         id='n8aoIntensitySheet'
+//                                         min={0.1}
+//                                         max={5}
+//                                         step={0.1}
+//                                         value={[settings.n8ao.intensity]}
+//                                         onValueChange={([v]) =>
+//                                           handleSettingsChange(
+//                                             "n8ao",
+//                                             v,
+//                                             "intensity"
+//                                           )
+//                                         }
+//                                         className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                       />
+//                                     </div>
+//                                     <div className='space-y-1.5'>
+//                                       <div className='flex justify-between items-center'>
+//                                         <Label
+//                                           htmlFor='n8aoRadiusSheet'
+//                                           className='text-xs text-slate-300'
+//                                         >
+//                                           AO Radius
+//                                         </Label>
+//                                         <span className='text-xs text-slate-400'>
+//                                           {settings.n8ao.aoRadius.toFixed(2)}
+//                                         </span>
+//                                       </div>
+//                                       <Slider
+//                                         id='n8aoRadiusSheet'
+//                                         min={0.01}
+//                                         max={2}
+//                                         step={0.01}
+//                                         value={[settings.n8ao.aoRadius]}
+//                                         onValueChange={([v]) =>
+//                                           handleSettingsChange(
+//                                             "n8ao",
+//                                             v,
+//                                             "aoRadius"
+//                                           )
+//                                         }
+//                                         className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                       />
+//                                     </div>
+//                                     <div className='flex items-center justify-between'>
+//                                       <Label
+//                                         htmlFor='n8aoSsrSheet'
+//                                         className='text-sm text-slate-300'
+//                                       >
+//                                         Screen Space Radius
+//                                       </Label>
+//                                       <Switch
+//                                         id='n8aoSsrSheet'
+//                                         checked={
+//                                           settings.n8ao.screenSpaceRadius
+//                                         }
+//                                         onCheckedChange={(checked) =>
+//                                           handleSettingsChange(
+//                                             "n8ao",
+//                                             checked,
+//                                             "screenSpaceRadius"
+//                                           )
+//                                         }
+//                                       />
+//                                     </div>
+//                                     <div className='space-y-1.5'>
+//                                       <Label
+//                                         htmlFor='n8aoQualitySheet'
+//                                         className='text-xs text-slate-300'
+//                                       >
+//                                         Quality
+//                                       </Label>
+//                                       <Select
+//                                         value={settings.n8ao.quality}
+//                                         onValueChange={(val) =>
+//                                           handleSettingsChange(
+//                                             "n8ao",
+//                                             val,
+//                                             "quality"
+//                                           )
+//                                         }
+//                                       >
+//                                         <SelectTrigger
+//                                           id='n8aoQualitySheet'
+//                                           className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
+//                                         >
+//                                           <SelectValue />
+//                                         </SelectTrigger>
+//                                         <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
+//                                           {[
+//                                             "low",
+//                                             "medium",
+//                                             "high",
+//                                             "ultra",
+//                                           ].map((q) => (
+//                                             <SelectItem
+//                                               key={q}
+//                                               value={q}
+//                                               className='capitalize focus:bg-purple-600 focus:text-white'
+//                                             >
+//                                               {q}
+//                                             </SelectItem>
+//                                           ))}
+//                                         </SelectContent>
+//                                       </Select>
+//                                     </div>
+//                                     <div className='flex items-center justify-between'>
+//                                       <Label
+//                                         htmlFor='n8aoHalfResSheet'
+//                                         className='text-sm text-slate-300'
+//                                       >
+//                                         Half Resolution
+//                                       </Label>
+//                                       <Switch
+//                                         id='n8aoHalfResSheet'
+//                                         checked={settings.n8ao.halfRes}
+//                                         onCheckedChange={(checked) =>
+//                                           handleSettingsChange(
+//                                             "n8ao",
+//                                             checked,
+//                                             "halfRes"
+//                                           )
+//                                         }
+//                                       />
+//                                     </div>
+//                                     <div className='space-y-1.5'>
+//                                       <Label
+//                                         htmlFor='n8aoColorSheet'
+//                                         className='text-xs text-slate-300'
+//                                       >
+//                                         Occlusion Color
+//                                       </Label>
+//                                       <Input
+//                                         id='n8aoColorSheet'
+//                                         type='color'
+//                                         value={settings.n8ao.color}
+//                                         onChange={(e) =>
+//                                           handleSettingsChange(
+//                                             "n8ao",
+//                                             e.target.value,
+//                                             "color"
+//                                           )
+//                                         }
+//                                         className='w-full h-7 p-0.5 bg-slate-600 border-slate-500 cursor-pointer'
+//                                       />
+//                                     </div>
+//                                   </>
+//                                 )}
+//                               </div>
+//                               <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30 mt-4'>
+//                                 <div className='flex items-center justify-between'>
+//                                   <Label
+//                                     htmlFor='bloomEnableSheet'
+//                                     className='text-sm text-slate-200'
+//                                   >
+//                                     Bloom
+//                                   </Label>
+//                                   <Switch
+//                                     id='bloomEnableSheet'
+//                                     checked={settings.bloom.enabled}
+//                                     onCheckedChange={(checked) =>
+//                                       handleSettingsChange(
+//                                         "bloom",
+//                                         checked,
+//                                         "enabled"
+//                                       )
+//                                     }
+//                                   />
+//                                 </div>
+//                                 {settings.bloom.enabled && (
+//                                   <>
+//                                     <div className='space-y-1.5'>
+//                                       <div className='flex justify-between items-center'>
+//                                         <Label
+//                                           htmlFor='bloomIntensitySheet'
+//                                           className='text-xs text-slate-300'
+//                                         >
+//                                           Intensity
+//                                         </Label>
+//                                         <span className='text-xs text-slate-400'>
+//                                           {settings.bloom.intensity.toFixed(2)}
+//                                         </span>
+//                                       </div>
+//                                       <Slider
+//                                         id='bloomIntensitySheet'
+//                                         min={0}
+//                                         max={3}
+//                                         step={0.05}
+//                                         value={[settings.bloom.intensity]}
+//                                         onValueChange={([v]) =>
+//                                           handleSettingsChange(
+//                                             "bloom",
+//                                             v,
+//                                             "intensity"
+//                                           )
+//                                         }
+//                                         className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                       />
+//                                     </div>
+//                                     <div className='space-y-1.5'>
+//                                       <div className='flex justify-between items-center'>
+//                                         <Label
+//                                           htmlFor='bloomLuminanceThresholdSheet'
+//                                           className='text-xs text-slate-300'
+//                                         >
+//                                           Luminance Threshold
+//                                         </Label>
+//                                         <span className='text-xs text-slate-400'>
+//                                           {settings.bloom.luminanceThreshold.toFixed(
+//                                             2
+//                                           )}
+//                                         </span>
+//                                       </div>
+//                                       <Slider
+//                                         id='bloomLuminanceThresholdSheet'
+//                                         min={0}
+//                                         max={1}
+//                                         step={0.01}
+//                                         value={[
+//                                           settings.bloom.luminanceThreshold,
+//                                         ]}
+//                                         onValueChange={([v]) =>
+//                                           handleSettingsChange(
+//                                             "bloom",
+//                                             v,
+//                                             "luminanceThreshold"
+//                                           )
+//                                         }
+//                                         className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                       />
+//                                     </div>
+//                                     <div className='space-y-1.5'>
+//                                       <div className='flex justify-between items-center'>
+//                                         <Label
+//                                           htmlFor='bloomLuminanceSmoothingSheet'
+//                                           className='text-xs text-slate-300'
+//                                         >
+//                                           Luminance Smoothing
+//                                         </Label>
+//                                         <span className='text-xs text-slate-400'>
+//                                           {settings.bloom.luminanceSmoothing.toFixed(
+//                                             3
+//                                           )}
+//                                         </span>
+//                                       </div>
+//                                       <Slider
+//                                         id='bloomLuminanceSmoothingSheet'
+//                                         min={0}
+//                                         max={0.5}
+//                                         step={0.001}
+//                                         value={[
+//                                           settings.bloom.luminanceSmoothing,
+//                                         ]}
+//                                         onValueChange={([v]) =>
+//                                           handleSettingsChange(
+//                                             "bloom",
+//                                             v,
+//                                             "luminanceSmoothing"
+//                                           )
+//                                         }
+//                                         className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                       />
+//                                     </div>
+//                                     <div className='space-y-1.5'>
+//                                       <Label
+//                                         htmlFor='bloomKernelSheet'
+//                                         className='text-xs text-slate-300'
+//                                       >
+//                                         Kernel Size
+//                                       </Label>
+//                                       <Select
+//                                         value={settings.bloom.kernelSize?.toString()}
+//                                         onValueChange={(val) =>
+//                                           handleSettingsChange(
+//                                             "bloom",
+//                                             parseInt(val),
+//                                             "kernelSize"
+//                                           )
+//                                         }
+//                                       >
+//                                         <SelectTrigger
+//                                           id='bloomKernelSheet'
+//                                           className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
+//                                         >
+//                                           <SelectValue />
+//                                         </SelectTrigger>
+//                                         <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
+//                                           <SelectItem
+//                                             value={KernelSize.VERY_SMALL.toString()}
+//                                           >
+//                                             Very Small
+//                                           </SelectItem>
+//                                           <SelectItem
+//                                             value={KernelSize.SMALL.toString()}
+//                                           >
+//                                             Small
+//                                           </SelectItem>
+//                                           <SelectItem
+//                                             value={KernelSize.MEDIUM.toString()}
+//                                           >
+//                                             Medium
+//                                           </SelectItem>
+//                                           <SelectItem
+//                                             value={KernelSize.LARGE.toString()}
+//                                           >
+//                                             Large
+//                                           </SelectItem>
+//                                           <SelectItem
+//                                             value={KernelSize.VERY_LARGE.toString()}
+//                                           >
+//                                             Very Large
+//                                           </SelectItem>
+//                                           <SelectItem
+//                                             value={KernelSize.HUGE.toString()}
+//                                           >
+//                                             Huge
+//                                           </SelectItem>
+//                                         </SelectContent>
+//                                       </Select>
+//                                     </div>
+//                                   </>
+//                                 )}
+//                               </div>
+//                             </section>
+//                             {isImportedModelDisplayed &&
+//                               animationClipsRef.current.length > 0 && (
+//                                 <>
+//                                   <Separator className='my-3 bg-slate-600' />
+//                                   <section className='space-y-4'>
+//                                     <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
+//                                       <Zap
+//                                         size={16}
+//                                         className='mr-2 text-orange-400'
+//                                       />
+//                                       Animation Playback
+//                                     </h3>
+//                                     <div className='space-y-4 p-3 border border-slate-600 rounded-md bg-slate-700/30'>
+//                                       <Select
+//                                         value={selectedAnimationClipIndex.toString()}
+//                                         onValueChange={
+//                                           handleAnimationClipChange
+//                                         }
+//                                         disabled={
+//                                           animationClipsRef.current.length === 0
+//                                         }
+//                                       >
+//                                         <SelectTrigger className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'>
+//                                           <SelectValue placeholder='Select animation clip' />
+//                                         </SelectTrigger>
+//                                         <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
+//                                           {animationClipsRef.current.map(
+//                                             (clip, index) => (
+//                                               <SelectItem
+//                                                 key={index}
+//                                                 value={index.toString()}
+//                                                 className='focus:bg-purple-600 focus:text-white'
+//                                               >
+//                                                 {clip.name ||
+//                                                   `Animation ${index + 1}`}
+//                                               </SelectItem>
+//                                             )
+//                                           )}
+//                                         </SelectContent>
+//                                       </Select>
+//                                       <div className='grid grid-cols-3 gap-2'>
+//                                         <Button
+//                                           onClick={handlePlayPauseAnimation}
+//                                           disabled={
+//                                             selectedAnimationClipIndex < 0
+//                                           }
+//                                           className={cn(
+//                                             "bg-green-600 hover:bg-green-700",
+//                                             animationPlaybackState ===
+//                                               "playing" &&
+//                                               "bg-yellow-500 hover:bg-yellow-600"
+//                                           )}
+//                                         >
+//                                           {animationPlaybackState ===
+//                                           "playing" ? (
+//                                             <Pause size={16} />
+//                                           ) : (
+//                                             <Play size={16} />
+//                                           )}
+//                                         </Button>
+//                                         <Button
+//                                           onClick={handleStopAnimation}
+//                                           disabled={
+//                                             selectedAnimationClipIndex < 0 ||
+//                                             animationPlaybackState === "stopped"
+//                                           }
+//                                           className='bg-red-600 hover:bg-red-700'
+//                                         >
+//                                           <StopCircle size={16} />
+//                                         </Button>
+//                                         <Tooltip>
+//                                           <TooltipTrigger asChild>
+//                                             <Button
+//                                               variant={
+//                                                 isAnimationLooping
+//                                                   ? "secondary"
+//                                                   : "outline"
+//                                               }
+//                                               onClick={() =>
+//                                                 handleAnimationLoopToggle(
+//                                                   !isAnimationLooping
+//                                                 )
+//                                               }
+//                                               disabled={
+//                                                 selectedAnimationClipIndex < 0
+//                                               }
+//                                               className={cn(
+//                                                 isAnimationLooping
+//                                                   ? "bg-purple-500 hover:bg-purple-600 text-white"
+//                                                   : "border-slate-600 text-slate-300 hover:bg-slate-700/50"
+//                                               )}
+//                                             >
+//                                               <Repeat size={16} />
+//                                             </Button>
+//                                           </TooltipTrigger>
+//                                           <TooltipContent side='bottom'>
+//                                             <p>
+//                                               {isAnimationLooping
+//                                                 ? "Disable Loop"
+//                                                 : "Enable Loop"}
+//                                             </p>
+//                                           </TooltipContent>
+//                                         </Tooltip>
+//                                       </div>
+//                                       <div className='space-y-1.5'>
+//                                         <Label
+//                                           htmlFor='animTimePanelSheet'
+//                                           className='text-sm text-slate-300'
+//                                         >
+//                                           Time:{" "}
+//                                           {(
+//                                             animationTime * animationDuration
+//                                           ).toFixed(2)}
+//                                           s / {animationDuration.toFixed(2)}s
+//                                         </Label>
+//                                         <Slider
+//                                           id='animTimePanelSheet'
+//                                           min={0}
+//                                           max={1}
+//                                           step={0.001}
+//                                           value={[animationTime]}
+//                                           onValueChange={(valArray) =>
+//                                             handleAnimationTimeChange(valArray)
+//                                           }
+//                                           disabled={
+//                                             selectedAnimationClipIndex < 0 ||
+//                                             animationDuration === 0
+//                                           }
+//                                           className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                         />
+//                                       </div>
+//                                       <div className='space-y-1.5'>
+//                                         <Label
+//                                           htmlFor='animSpeedPanelSliderSheet'
+//                                           className='text-sm text-slate-300'
+//                                         >
+//                                           Speed:{" "}
+//                                           {animationPlaybackSpeed.toFixed(1)}x
+//                                         </Label>
+//                                         <Slider
+//                                           id='animSpeedPanelSliderSheet'
+//                                           min={0.1}
+//                                           max={3}
+//                                           step={0.1}
+//                                           value={[animationPlaybackSpeed]}
+//                                           onValueChange={(valArray) =>
+//                                             handleAnimationSpeedChange(valArray)
+//                                           }
+//                                           disabled={
+//                                             selectedAnimationClipIndex < 0
+//                                           }
+//                                           className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+//                                         />
+//                                       </div>
+//                                     </div>
+//                                   </section>
+//                                 </>
+//                               )}
+//                           </div>
+//                         </ScrollArea>
+//                         <SheetFooter className='p-4 border-t border-slate-700 bg-slate-800/95'>
+//                           <SheetClose asChild>
+//                             <Button
+//                               type='button'
+//                               variant='outline'
+//                               className='w-full border-slate-600 text-slate-300 hover:bg-slate-700/50 hover:text-slate-100'
+//                             >
+//                               Close Panel
+//                             </Button>
+//                           </SheetClose>
+//                         </SheetFooter>
+//                       </SheetContent>
+//                     </Sheet>
+//                   </div>
+//                   <CardContent className='p-0 w-full h-full relative'>
+//                     <div
+//                       className='relative w-full h-full'
+//                       onDragOver={(e) => {
+//                         e.preventDefault();
+//                         e.stopPropagation();
+//                       }}
+//                       onDrop={handleFileDropOnViewer}
+//                     >
+//                       <Canvas
+//                         shadows
+//                         camera={{
+//                           position: [0, 0.5, 6],
+//                           fov: 50,
+//                           near: 0.1,
+//                           far: 1000,
+//                         }}
+//                         gl={{
+//                           antialias: true,
+//                           alpha: canvasBgColor === "transparent",
+//                           preserveDrawingBuffer: true,
+//                           outputColorSpace: THREE.SRGBColorSpace,
+//                           toneMapping: THREE.ACESFilmicToneMapping,
+//                         }}
+//                         style={{ background: canvasBgColor }}
+//                         onCreated={({ gl }) => {
+//                           gl.toneMappingExposure = 1.0;
+//                         }}
+//                         key={
+//                           isFullscreen.toString() +
+//                           settings.background +
+//                           customBgImageUrl
+//                         }
+//                       >
+//                         <Suspense
+//                           fallback={
+//                             <DreiLoader
+//                               containerStyles={{
+//                                 background: "rgba(20,20,30,0.8)",
+//                                 borderRadius: "8px",
+//                               }}
+//                               dataStyles={{ color: "#f0f0f0" }}
+//                             />
+//                           }
+//                         >
+//                           <SceneContentInternal
+//                             settings={settings}
+//                             currentShape={currentShape}
+//                             animationPresetKey={animationPreset}
+//                             isAnimating={isAnimating}
+//                             importedModelUrl={importedModel?.url}
+//                             importedFileType={importedModel?.type}
+//                             importedMtlUrl={importedModel?.mtlUrl}
+//                             onModelLoad={handleModelLoadedForScene}
+//                             isImportedModelDisplayed={isImportedModelDisplayed}
+//                             current3DText={current3DText}
+//                             isTextVisible={isTextVisible}
+//                             customBgImageUrl={customBgImageUrl}
+//                             onMeshReady={handleMeshReadyForParent}
+//                             onSceneRefForExport={
+//                               handleSceneRefForExportCallback
+//                             }
+//                             animationClipsRef={animationClipsRef}
+//                             activeActionRef={activeActionRef}
+//                             mixerRef={mixerRef}
+//                             selectedAnimationClipIndex={
+//                               selectedAnimationClipIndex
+//                             }
+//                             animationPlaybackState={animationPlaybackState}
+//                             isAnimationLooping={isAnimationLooping}
+//                             animationPlaybackSpeed={animationPlaybackSpeed}
+//                             animationTime={animationTime}
+//                           />
+//                         </Suspense>
+//                       </Canvas>
+//                       {isLoadingModel && !isExporting && (
+//                         <div className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800/80 p-4 rounded-lg text-center shadow-xl backdrop-blur-sm z-10'>
+//                           <Loader2 className='h-8 w-8 animate-spin text-purple-400 mx-auto mb-2' />
+//                           <p className='text-sm'>
+//                             Loading... {Math.round(modelLoadProgress)}%
+//                           </p>
+//                         </div>
+//                       )}
+//                       {isExporting && (
+//                         <div className='absolute inset-0 bg-black/80 flex flex-col items-center justify-center rounded-lg z-10 backdrop-blur-sm'>
+//                           <Card className='bg-slate-100 text-slate-800 p-6 sm:p-8 shadow-2xl text-center w-72'>
+//                             <CardHeader className='p-0 mb-4'>
+//                               <CardTitle className='text-xl sm:text-2xl'>
+//                                 Exporting Model
+//                               </CardTitle>
+//                             </CardHeader>
+//                             <CardContent className='p-0 space-y-3'>
+//                               <div className='text-lg font-semibold'>
+//                                 {Math.round(exportProgress)}%
+//                               </div>
+//                               <Progress
+//                                 value={exportProgress}
+//                                 className='w-full h-2.5'
+//                               />
+//                               <p className='text-xs text-slate-500'>
+//                                 Please wait...
+//                               </p>
+//                             </CardContent>
+//                           </Card>
+//                         </div>
+//                       )}
+//                     </div>
+//                   </CardContent>
+//                 </Card>
+//               </div>
+//             </div>
+//             <footer className='text-center mt-10 sm:mt-16 py-6 border-t border-slate-700/50'>
+//               <p className='text-slate-400 text-sm'>
+//                 © {new Date().getFullYear()} 3D Shape Studio Pro.
+//               </p>
+//               <p className='text-xs text-slate-500 mt-1'>
+//                 Interactive 3D modeling and visualization.
+//               </p>
+//             </footer>
+//           </div>
+//         </div>
+//       </>
+//     </TooltipProvider>
+//   );
+// };
+// export default ModelViewer3D;
+
+//above test version working
+
 import React, {
   useRef,
   useEffect,
@@ -29235,7 +33756,7 @@ import {
   Loader as DreiLoader,
   useProgress,
 } from "@react-three/drei";
-import { EffectComposer, N8AO, Bloom } from "@react-three/postprocessing"; // Using N8AO
+import { EffectComposer, N8AO, Bloom } from "@react-three/postprocessing";
 import { KernelSize } from "postprocessing";
 
 import {
@@ -29311,7 +33832,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
-// --- UTILITY FUNCTIONS ---
 export function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
@@ -29320,7 +33840,6 @@ const saneNumber = (value, defaultValue = 0) => {
   return isNaN(num) || !isFinite(num) ? defaultValue : num;
 };
 
-// --- SHAPE CREATION FUNCTIONS ---
 const createCatShape = (size = 1) => {
   const s = saneNumber(size, 1);
   const shape = new THREE.Shape();
@@ -29678,7 +34197,6 @@ const createMusicNoteShape = (size = 1) => {
   return shape;
 };
 
-// --- DATA CONSTANTS ---
 const animationPresets = {
   gentle: {
     rotationSpeed: [0.002, 0.004, 0.001],
@@ -29815,8 +34333,8 @@ const initialSettings = {
     screenSpaceRadius: true,
     quality: "medium",
     halfRes: false,
-    color: "black",
-  }, // N8AO settings
+    color: "#000000",
+  },
   bloom: {
     enabled: false,
     intensity: 1,
@@ -29841,25 +34359,13 @@ globalFontLoaderForExport.load(
   }
 );
 
-let localGltfLoaderInstance;
-const getGltfLoader = () => {
-  if (!localGltfLoaderInstance) {
-    localGltfLoaderInstance = new GLTFLoader();
-    const dracoLoader = new DRACOLoader();
-    dracoLoader.setDecoderPath("/draco/gltf/");
-    localGltfLoaderInstance.setDRACOLoader(dracoLoader);
-  }
-  return localGltfLoaderInstance;
-};
-
-// --- R3F HELPER/SUB-COMPONENTS ---
 function createR3FMaterialProps(
   baseColor,
   materialType = "standard",
   customProps = {},
   envMap
 ) {
-  const color = new THREE.Color(baseColor);
+  const colorInput = new THREE.Color(baseColor);
   let preset = baseMaterialPresets[materialType] || baseMaterialPresets.ceramic;
   const finalProps = { ...preset };
   if (customProps.roughness !== null && customProps.roughness !== undefined)
@@ -29880,15 +34386,43 @@ function createR3FMaterialProps(
     customProps.emissiveIntensity !== undefined
   )
     finalProps.emissiveIntensity = customProps.emissiveIntensity;
-  if (finalProps.useEmissive) {
-    finalProps.emissive = new THREE.Color(color).multiplyScalar(0.8);
+
+  let materialEffectiveBaseColor = colorInput;
+  if (
+    customProps.mapUrl &&
+    typeof customProps.mapUrl === "string" &&
+    customProps.mapUrl.trim() !== ""
+  ) {
+    materialEffectiveBaseColor = new THREE.Color(0xffffff);
+    console.log(
+      "[createR3FMaterialProps] mapUrl found, setting materialEffectiveBaseColor to white. mapUrl:",
+      customProps.mapUrl
+    );
+  } else {
+    console.log(
+      "[createR3FMaterialProps] No mapUrl, using baseColor for materialEffectiveBaseColor:",
+      baseColor
+    );
   }
+
+  if (finalProps.useEmissive) {
+    finalProps.emissive = new THREE.Color(
+      customProps.emissiveMapUrl && customProps.emissiveMapUrl.trim() !== ""
+        ? 0xffffff
+        : colorInput
+    ).multiplyScalar(
+      customProps.emissiveMapUrl && customProps.emissiveMapUrl.trim() !== ""
+        ? 1
+        : 0.8 // Don't multiply if map exists
+    );
+  }
+
   const materialConstructor =
     materialType === "glass" || materialType === "crystal"
       ? THREE.MeshPhysicalMaterial
       : THREE.MeshStandardMaterial;
   const sharedArgs = {
-    color,
+    color: materialEffectiveBaseColor,
     metalness: finalProps.metalness,
     roughness: finalProps.roughness,
     envMap: envMap,
@@ -29917,7 +34451,11 @@ function createR3FMaterialProps(
   ];
   textureMapTypes.forEach((mapType) => {
     const urlKey = `${mapType}Url`;
-    if (customProps[urlKey] && customProps[urlKey] !== "") {
+    if (
+      customProps[urlKey] &&
+      typeof customProps[urlKey] === "string" &&
+      customProps[urlKey].trim() !== ""
+    ) {
       textureUrls[urlKey] = customProps[urlKey];
     }
   });
@@ -29928,6 +34466,22 @@ function createR3FMaterialProps(
   };
 }
 
+// TextureLoaderInternal helper component
+const TextureLoaderInternal = ({ urls, onLoaded }) => {
+  console.log("[TextureLoaderInternal] Initializing with urls:", urls);
+  const loadedTextures = useTexture(urls); // This hook will suspend
+  useEffect(() => {
+    console.log(
+      "[TextureLoaderInternal] Loaded textures (resolved):",
+      loadedTextures
+    );
+    onLoaded(loadedTextures);
+  }, [loadedTextures, onLoaded]);
+  return null; // Does not render anything itself
+};
+TextureLoaderInternal.displayName = "TextureLoaderInternal";
+
+// RESTORED AppliedMaterial (from original, but using TextureLoaderInternal)
 const AppliedMaterial = React.memo(
   ({
     materialProps = {
@@ -29935,49 +34489,144 @@ const AppliedMaterial = React.memo(
       args: { color: "gray" },
       textureUrls: {},
     },
-    textureUrls = {},
+    textureUrls = {}, // Prop from ProceduralShape, e.g., { mapUrl: "data:..." }
   }) => {
-    const validUrls = Object.fromEntries(
-      Object.entries(textureUrls).filter(
-        ([_, value]) =>
-          value && typeof value === "string" && value.trim() !== ""
-      )
+    console.log(
+      "[AppliedMaterial FULL] Rendering. Props:",
+      {
+        constructorName: materialProps?.constructor?.name,
+        args: JSON.stringify(materialProps?.args),
+      },
+      "textureUrls:",
+      textureUrls
     );
-    const loadedTexturesFromDrei =
-      Object.keys(validUrls).length > 0 ? useTexture(validUrls) : {};
-    const textures = {};
-    Object.keys(validUrls).forEach((urlKey) => {
-      if (loadedTexturesFromDrei[urlKey]) {
-        textures[urlKey.replace("Url", "")] = loadedTexturesFromDrei[urlKey];
-      }
-    });
+
+    const validUrls = useMemo(() => {
+      const filtered = Object.fromEntries(
+        Object.entries(textureUrls).filter(
+          ([_key, value]) =>
+            value && typeof value === "string" && value.trim() !== ""
+        )
+      );
+      console.log("[AppliedMaterial FULL] Calculated validUrls:", filtered);
+      return filtered;
+    }, [textureUrls]);
+
+    const hasValidUrls = Object.keys(validUrls).length > 0;
+    const [internallyLoadedTextures, setInternallyLoadedTextures] =
+      useState(null);
+
+    const handleTexturesLoaded = useCallback((loaded) => {
+      console.log(
+        "[AppliedMaterial FULL handleTexturesLoaded] Received from internal loader:",
+        loaded
+      );
+      setInternallyLoadedTextures(loaded);
+    }, []);
+
     useEffect(() => {
-      if (textures.map) textures.map.colorSpace = THREE.SRGBColorSpace;
-      if (textures.emissiveMap)
-        textures.emissiveMap.colorSpace = THREE.SRGBColorSpace;
-      Object.values(textures).forEach((tex) => {
-        if (tex) {
+      console.log(
+        "[AppliedMaterial FULL] State 'internallyLoadedTextures' updated:",
+        internallyLoadedTextures
+      );
+    }, [internallyLoadedTextures]);
+
+    const texturesToApply = useMemo(() => {
+      const newTextures = {};
+      if (hasValidUrls && internallyLoadedTextures) {
+        Object.keys(validUrls).forEach((originalUrlKey) => {
+          const textureObject = internallyLoadedTextures[originalUrlKey];
+          if (textureObject && textureObject.isTexture) {
+            newTextures[originalUrlKey.replace("Url", "")] = textureObject; // e.g., mapUrl -> map
+          } else {
+            console.warn(
+              `[AppliedMaterial FULL textures.useMemo] Texture for ${originalUrlKey} not a THREE.Texture. Received:`,
+              textureObject
+            );
+          }
+        });
+      }
+      console.log(
+        "[AppliedMaterial FULL textures.useMemo] Derived 'texturesToApply':",
+        newTextures
+      );
+      return newTextures;
+    }, [validUrls, internallyLoadedTextures, hasValidUrls]);
+
+    useEffect(() => {
+      console.log(
+        "[AppliedMaterial FULL configureEffect] Configuring texturesToApply:",
+        texturesToApply
+      );
+      if (texturesToApply.map && texturesToApply.map.isTexture) {
+        texturesToApply.map.colorSpace = THREE.SRGBColorSpace;
+        console.log(
+          "[AppliedMaterial FULL configureEffect] textures.map found. Image:",
+          texturesToApply.map.image
+        );
+        if (texturesToApply.map.image) {
+          console.log(
+            `[AppliedMaterial FULL configureEffect] Map image dimensions: ${texturesToApply.map.image.width}x${texturesToApply.map.image.height}`
+          );
+        }
+      }
+      if (
+        texturesToApply.emissiveMap &&
+        texturesToApply.emissiveMap.isTexture
+      ) {
+        texturesToApply.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+        console.log(
+          "[AppliedMaterial FULL configureEffect] textures.emissiveMap found."
+        );
+      }
+      Object.values(texturesToApply).forEach((tex) => {
+        if (tex && tex.isTexture) {
           tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-          tex.needsUpdate = true;
+          // tex.needsUpdate = true; // R3F usually handles this
         }
       });
-    }, [textures]);
-    const safeMaterialArgs =
-      materialProps && materialProps.args
-        ? materialProps.args
-        : { color: "magenta" };
+    }, [texturesToApply]);
+
+    const safeMaterialArgs = materialProps?.args || {
+      color: new THREE.Color("magenta"),
+    };
     const MaterialConstructor =
-      materialProps && materialProps.constructor
-        ? materialProps.constructor
-        : THREE.MeshStandardMaterial;
-    const allArgs = { ...safeMaterialArgs, ...textures };
-    if (MaterialConstructor === THREE.MeshPhysicalMaterial) {
-      return <meshPhysicalMaterial {...allArgs} />;
-    }
-    return <meshStandardMaterial {...allArgs} />;
+      materialProps?.constructor || THREE.MeshStandardMaterial;
+    const allArgs = { ...safeMaterialArgs, ...texturesToApply };
+
+    console.log(
+      "[AppliedMaterial FULL] Final 'allArgs' for material component:",
+      JSON.stringify({
+        ...allArgs,
+        color: allArgs.color?.getHexString
+          ? allArgs.color.getHexString()
+          : allArgs.color,
+        map: allArgs.map ? "Texture Present" : "No Map",
+        envMap: allArgs.envMap ? "EnvMap Present" : "No EnvMap",
+      })
+    );
+
+    return (
+      <>
+        {hasValidUrls && (
+          <Suspense fallback={null}>
+            <TextureLoaderInternal
+              key={JSON.stringify(validUrls)}
+              urls={validUrls}
+              onLoaded={handleTexturesLoaded}
+            />
+          </Suspense>
+        )}
+        {MaterialConstructor === THREE.MeshPhysicalMaterial ? (
+          <meshPhysicalMaterial {...allArgs} />
+        ) : (
+          <meshStandardMaterial {...allArgs} />
+        )}
+      </>
+    );
   }
 );
-AppliedMaterial.displayName = "AppliedMaterial";
+AppliedMaterial.displayName = "AppliedMaterial (Full)";
 
 const ProceduralShape = React.memo(
   React.forwardRef(
@@ -29985,6 +34634,7 @@ const ProceduralShape = React.memo(
       const { scene } = useThree();
       const internalMeshRef = useRef();
       React.useImperativeHandle(ref, () => internalMeshRef.current);
+
       const geometry = useMemo(() => {
         const shapeConfigs = {
           cat: { creator: createCatShape },
@@ -29999,7 +34649,13 @@ const ProceduralShape = React.memo(
           lightning: { creator: createLightningBoltShape },
           music: { creator: createMusicNoteShape },
         };
-        const config = shapeConfigs[shapeId] || shapeConfigs.cat;
+        let config = shapeConfigs[shapeId];
+        if (!config || typeof config.creator !== "function") {
+          console.warn(
+            `[ProceduralShape] Invalid or missing shapeId: "${shapeId}". Defaulting to "cat".`
+          );
+          config = shapeConfigs.cat;
+        }
         const shapeSizeVal = saneNumber(size, 1.5);
         const proceduralShape = config.creator(shapeSizeVal);
         const extrudeSettings = {
@@ -30032,8 +34688,13 @@ const ProceduralShape = React.memo(
         );
         geom.computeVertexNormals();
         geom.center();
+        console.log(
+          `[ProceduralShape ${shapeId || "defaulting"}] Geometry UVs:`,
+          geom.attributes.uv
+        );
         return geom;
       }, [shapeId, settings.extrudeDepth, settings.quality, size]);
+
       const { materialDef, textureUrlsToLoad } = useMemo(() => {
         let autoMaterialType = "ceramic";
         for (const catId in SHAPES_BY_CATEGORY_DATA) {
@@ -30049,12 +34710,19 @@ const ProceduralShape = React.memo(
           settings.materialType === "auto"
             ? autoMaterialType
             : settings.materialType;
-        return createR3FMaterialProps(
+        const propsFromCreator = createR3FMaterialProps(
           settings.shapeColor,
           materialTypeForPreset,
           settings.customMaterialProperties,
           scene.environment
         );
+        return {
+          materialDef: {
+            constructor: propsFromCreator.constructor,
+            args: propsFromCreator.args,
+          },
+          textureUrlsToLoad: propsFromCreator.textureUrls,
+        };
       }, [
         settings.shapeColor,
         settings.materialType,
@@ -30062,6 +34730,7 @@ const ProceduralShape = React.memo(
         shapeId,
         scene.environment,
       ]);
+
       const animationState = useRef({
         rotation: new THREE.Euler(),
         targetRotation: new THREE.Euler(),
@@ -30106,21 +34775,38 @@ const ProceduralShape = React.memo(
           }
         }
       });
+
+      console.log(
+        `[ProceduralShape ${
+          shapeId || "defaulting"
+        }] Rendering. Received settings.customMaterialProperties.mapUrl:`,
+        settings.customMaterialProperties.mapUrl
+      );
+      console.log(
+        `[ProceduralShape ${
+          shapeId || "defaulting"
+        }] Derived textureUrlsToLoad (passed to AppliedMaterial):`,
+        textureUrlsToLoad
+      );
+      console.log(
+        `[ProceduralShape ${
+          shapeId || "defaulting"
+        }] Derived materialDef (passed to AppliedMaterial):`,
+        materialDef
+      );
+
       return (
         <Center ref={internalMeshRef} castShadow receiveShadow>
-          {" "}
           <mesh geometry={geometry} castShadow receiveShadow>
-            {" "}
             <Suspense
               fallback={<meshStandardMaterial color='gray' wireframe />}
             >
-              {" "}
               <AppliedMaterial
                 materialProps={materialDef}
                 textureUrls={textureUrlsToLoad}
-              />{" "}
-            </Suspense>{" "}
-          </mesh>{" "}
+              />
+            </Suspense>
+          </mesh>
         </Center>
       );
     }
@@ -30129,7 +34815,7 @@ const ProceduralShape = React.memo(
 ProceduralShape.displayName = "ProceduralShape";
 
 const ImportedModel = React.memo(
-  React.forwardRef(
+  /* ... Same as before ... */ React.forwardRef(
     (
       {
         modelUrl,
@@ -30206,7 +34892,6 @@ const ImportedModel = React.memo(
           settings.materialType,
         ]
       );
-
       let loadedObjectForPrimitive = null;
       if (fileType === "gltf" || fileType === "glb") {
         const { scene: loadedScene, animations: loadedAnims } = useGLTF(
@@ -30262,9 +34947,9 @@ const ImportedModel = React.memo(
             internalGroupRef.current.children.length > 0 &&
             internalGroupRef.current.children[0].isMesh
           ) {
-            onModelLoad(internalGroupRef.current.children[0], []);
+            processLoadedObject(internalGroupRef.current, []);
           }
-        }, [internalGroupRef, onModelLoad]);
+        }, [processLoadedObject]);
       } else if (fileType === "obj") {
         const materials = mtlUrl
           ? useLoader(MTLLoader, mtlUrl, (loader) => {
@@ -30287,7 +34972,6 @@ const ImportedModel = React.memo(
           }
         }, [obj, processLoadedObject]);
       }
-
       const animationState = useRef({ startTime: Date.now() });
       useFrame((state, delta) => {
         if (
@@ -30318,9 +35002,14 @@ const ImportedModel = React.memo(
           animationClipsRef.current &&
           animationClipsRef.current.length > 0
         ) {
-          externalMixerRef.current = new THREE.AnimationMixer(
-            internalGroupRef.current
-          );
+          const objectForMixer =
+            internalGroupRef.current.isGroup &&
+            internalGroupRef.current.children.length > 0 &&
+            internalGroupRef.current.children[0].isMesh &&
+            fileType === "stl"
+              ? internalGroupRef.current
+              : loadedObjectForPrimitive;
+          externalMixerRef.current = new THREE.AnimationMixer(objectForMixer);
           if (
             selectedAnimationClipIndex >= 0 &&
             selectedAnimationClipIndex < animationClipsRef.current.length
@@ -30340,12 +35029,10 @@ const ImportedModel = React.memo(
         return () => {
           if (externalMixerRef.current) {
             externalMixerRef.current.stopAllAction();
-            externalMixerRef.current = null;
           }
-          activeActionRef.current = null;
         };
       }, [
-        internalGroupRef.current,
+        internalGroupRef,
         loadedObjectForPrimitive,
         animationClipsRef,
         selectedAnimationClipIndex,
@@ -30355,8 +35042,8 @@ const ImportedModel = React.memo(
         animationTime,
         externalMixerRef,
         activeActionRef,
+        fileType,
       ]);
-
       if (!loadedObjectForPrimitive) return <group ref={internalGroupRef} />;
       if (
         fileType === "stl" &&
@@ -30378,7 +35065,7 @@ const ImportedModel = React.memo(
 ImportedModel.displayName = "ImportedModel";
 
 const TextOverlay = React.memo(
-  ({
+  /* ... Same as before ... */ ({
     text,
     fontUrl,
     color,
@@ -30402,9 +35089,7 @@ const TextOverlay = React.memo(
     if (!isVisible || !text || !fontUrl) return null;
     return (
       <group position={[0, textYOffset, 0]}>
-        {" "}
         <Center>
-          {" "}
           <Text3D
             font={fontUrl}
             size={saneNumber(size, 0.5)}
@@ -30418,289 +35103,291 @@ const TextOverlay = React.memo(
             receiveShadow
           >
             {text}
-          </Text3D>{" "}
-        </Center>{" "}
+          </Text3D>
+        </Center>
       </group>
     );
   }
 );
 TextOverlay.displayName = "TextOverlay";
 
-const SceneContentInternal = ({
-  settings,
-  currentShape,
-  animationPresetKey,
-  isAnimating,
-  importedModelUrl,
-  importedFileType,
-  importedMtlUrl,
-  onModelLoad,
-  isImportedModelDisplayed,
-  current3DText,
-  isTextVisible,
-  customBgImageUrl,
-  onMeshReady,
-  onSceneRefForExport,
-  animationClipsRef,
-  activeActionRef,
-  mixerRef,
-  selectedAnimationClipIndex,
-  animationPlaybackState,
-  isAnimationLooping,
-  animationPlaybackSpeed,
-  animationTime,
-}) => {
-  const { scene, gl } = useThree();
-  useEffect(() => {
-    if (onSceneRefForExport) onSceneRefForExport(scene, gl);
-  }, [scene, gl, onSceneRefForExport]);
-  useEffect(() => {
-    if (settings.background === "customImage" && customBgImageUrl) {
-    } else {
-      let fogColor = new THREE.Color(0x101012);
-      let fogNear = 12;
-      let fogFar = 40;
-      switch (settings.background) {
-        case "modernGradient":
-          fogColor = new THREE.Color(0x2c5d72);
-          break;
-        case "darkSpace":
-          fogColor = new THREE.Color(0x050508);
-          fogNear = 10;
-          fogFar = 35;
-          break;
-        case "softLight":
-          fogColor = new THREE.Color(0xd0d8e0);
-          fogNear = 7;
-          fogFar = 28;
-          break;
-        case "studioLight":
-          fogColor = new THREE.Color(0xe4e4e7);
-          fogNear = 10;
-          fogFar = 35;
-          break;
-        default:
-          fogColor = new THREE.Color(0x18181b);
-      }
-      if (scene.fog) {
-        scene.fog.color.set(fogColor);
-        scene.fog.near = fogNear;
-        scene.fog.far = fogFar;
-      } else {
-        scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
-      }
-    }
-  }, [settings.background, customBgImageUrl, scene]);
-
-  const internalMeshRef = useRef();
-  useEffect(() => {
-    onMeshReady(internalMeshRef.current || null);
-  }, [
-    internalMeshRef.current,
-    onMeshReady,
-    isImportedModelDisplayed,
+const SceneContentInternal = React.memo(
+  /* ... Same as before ... */ ({
+    settings,
     currentShape,
+    animationPresetKey,
+    isAnimating,
     importedModelUrl,
-  ]);
-
-  const [textYOffset, setTextYOffset] = useState(1.0);
-  useEffect(() => {
-    const meshToMeasure = internalMeshRef.current;
-    if (meshToMeasure) {
-      requestAnimationFrame(() => {
-        if (meshToMeasure.parent) {
-          const box = new THREE.Box3().setFromObject(meshToMeasure);
-          if (!box.isEmpty()) {
-            const modelHeight = box.max.y - box.min.y;
-            const modelCenterY = box.getCenter(new THREE.Vector3()).y;
-            setTextYOffset(
-              modelCenterY +
-                modelHeight / 2 +
-                saneNumber(settings.textSize, 0.5) * 0.5 +
-                0.3
-            );
+    importedFileType,
+    importedMtlUrl,
+    onModelLoad,
+    isImportedModelDisplayed,
+    current3DText,
+    isTextVisible,
+    customBgImageUrl,
+    onMeshReady,
+    onSceneRefForExport,
+    animationClipsRef,
+    activeActionRef,
+    mixerRef,
+    selectedAnimationClipIndex,
+    animationPlaybackState,
+    isAnimationLooping,
+    animationPlaybackSpeed,
+    animationTime,
+  }) => {
+    const { scene, gl } = useThree();
+    useEffect(() => {
+      if (onSceneRefForExport) onSceneRefForExport(scene, gl);
+    }, [scene, gl, onSceneRefForExport]);
+    useEffect(() => {
+      if (settings.background === "customImage" && customBgImageUrl) {
+        if (scene.fog) scene.fog = null;
+      } else {
+        let fogColor = new THREE.Color(0x101012);
+        let fogNear = 12;
+        let fogFar = 40;
+        switch (settings.background) {
+          case "modernGradient":
+            fogColor = new THREE.Color(0x2c5d72);
+            break;
+          case "darkSpace":
+            fogColor = new THREE.Color(0x050508);
+            fogNear = 10;
+            fogFar = 35;
+            break;
+          case "softLight":
+            fogColor = new THREE.Color(0xd0d8e0);
+            fogNear = 7;
+            fogFar = 28;
+            break;
+          case "studioLight":
+            fogColor = new THREE.Color(0xe4e4e7);
+            fogNear = 10;
+            fogFar = 35;
+            break;
+          default:
+            fogColor = new THREE.Color(0x18181b);
+        }
+        if (scene.fog) {
+          scene.fog.color.set(fogColor);
+          scene.fog.near = fogNear;
+          scene.fog.far = fogFar;
+        } else {
+          scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
+        }
+      }
+    }, [settings.background, customBgImageUrl, scene]);
+    const internalMeshRef = useRef();
+    useEffect(() => {
+      onMeshReady(internalMeshRef.current || null);
+    }, [
+      internalMeshRef.current,
+      onMeshReady,
+      isImportedModelDisplayed,
+      currentShape,
+      importedModelUrl,
+    ]);
+    const [textYOffset, setTextYOffset] = useState(1.0);
+    useEffect(() => {
+      const meshToMeasure = internalMeshRef.current;
+      if (meshToMeasure) {
+        requestAnimationFrame(() => {
+          if (meshToMeasure.parent) {
+            const box = new THREE.Box3().setFromObject(meshToMeasure);
+            if (!box.isEmpty()) {
+              const modelHeight = box.max.y - box.min.y;
+              const modelCenterY = box.getCenter(new THREE.Vector3()).y;
+              setTextYOffset(
+                modelCenterY +
+                  modelHeight / 2 +
+                  saneNumber(settings.textSize, 0.5) * 0.5 +
+                  0.3
+              );
+            } else {
+              setTextYOffset(
+                1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3
+              );
+            }
           } else {
             setTextYOffset(
               1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3
             );
           }
-        } else {
-          setTextYOffset(1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3);
-        }
-      });
-    } else {
-      setTextYOffset(1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3);
-    }
-  }, [
-    internalMeshRef.current,
-    settings.textSize,
-    isImportedModelDisplayed,
-    currentShape,
-    importedModelUrl,
-  ]);
-
-  return (
-    <>
-      <ambientLight
-        intensity={
-          settings.ambientLight.enabled
-            ? saneNumber(settings.ambientLight.intensity, 0.25)
-            : 0
-        }
-        color={settings.ambientLight.color}
-      />
-      <directionalLight
-        position={[5, 8, 5]}
-        intensity={
-          settings.keyLight.enabled
-            ? saneNumber(settings.keyLight.intensity, 0.7)
-            : 0
-        }
-        color={settings.keyLight.color}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-near={0.5}
-        shadow-camera-far={50}
-        shadow-bias={-0.0005}
-      />
-      <directionalLight
-        position={[-5, 3, -3]}
-        intensity={
-          settings.fillLight.enabled
-            ? saneNumber(settings.fillLight.intensity, 0.4)
-            : 0
-        }
-        color={settings.fillLight.color}
-      />
-      <Suspense fallback={null}>
-        {" "}
-        {settings.background === "customImage" && customBgImageUrl ? (
-          <Environment background files={customBgImageUrl} />
-        ) : settings.background !== "modernGradient" &&
-          settings.background !== "darkSpace" ? (
-          <Environment
-            files='/brown_photostudio_02_4k.hdr'
-            background={
-              settings.background === "studioLight" ||
-              settings.background === "softLight"
-            }
-          />
+        });
+      } else {
+        setTextYOffset(1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3);
+      }
+    }, [
+      internalMeshRef.current,
+      settings.textSize,
+      isImportedModelDisplayed,
+      currentShape,
+      importedModelUrl,
+      current3DText,
+      isTextVisible,
+    ]);
+    return (
+      <>
+        <ambientLight
+          intensity={
+            settings.ambientLight.enabled
+              ? saneNumber(settings.ambientLight.intensity, 0.25)
+              : 0
+          }
+          color={settings.ambientLight.color}
+        />
+        <directionalLight
+          position={[5, 8, 5]}
+          intensity={
+            settings.keyLight.enabled
+              ? saneNumber(settings.keyLight.intensity, 0.7)
+              : 0
+          }
+          color={settings.keyLight.color}
+          castShadow
+          shadow-mapSize-width={2048}
+          shadow-mapSize-height={2048}
+          shadow-camera-near={0.5}
+          shadow-camera-far={50}
+          shadow-bias={-0.0005}
+        />
+        <directionalLight
+          position={[-5, 3, -3]}
+          intensity={
+            settings.fillLight.enabled
+              ? saneNumber(settings.fillLight.intensity, 0.4)
+              : 0
+          }
+          color={settings.fillLight.color}
+        />{" "}
+        <Suspense fallback={null}>
+          {" "}
+          {settings.background === "customImage" && customBgImageUrl ? (
+            <Environment background files={customBgImageUrl} />
+          ) : settings.background !== "modernGradient" &&
+            settings.background !== "darkSpace" ? (
+            <Environment
+              files='/brown_photostudio_02_4k.hdr'
+              background={
+                settings.background === "studioLight" ||
+                settings.background === "softLight"
+              }
+              environmentIntensity={
+                settings.background === "studioLight" ||
+                settings.background === "softLight"
+                  ? 1
+                  : 0.7
+              }
+            />
+          ) : null}{" "}
+          {(settings.background === "modernGradient" ||
+            settings.background === "darkSpace") && (
+            <Environment
+              files='/brown_photostudio_02_4k.hdr'
+              background={false}
+              environmentIntensity={0.5}
+            />
+          )}{" "}
+        </Suspense>{" "}
+        <Grid
+          infiniteGrid
+          cellSize={0.5}
+          cellThickness={0.5}
+          sectionSize={2.5}
+          sectionThickness={1}
+          sectionColor={new THREE.Color(0x6f6f6f)}
+          cellColor={new THREE.Color(0x444444)}
+          fadeDistance={50}
+        />{" "}
+        {!isImportedModelDisplayed ? (
+          <Suspense fallback={null}>
+            <ProceduralShape
+              ref={internalMeshRef}
+              shapeId={currentShape}
+              settings={settings}
+              size={1.5}
+              animationPresetKey={animationPresetKey}
+              isAnimating={isAnimating}
+            />
+          </Suspense>
+        ) : importedModelUrl ? (
+          <Suspense fallback={null}>
+            <ImportedModel
+              ref={internalMeshRef}
+              modelUrl={importedModelUrl}
+              fileType={importedFileType}
+              mtlUrl={importedMtlUrl}
+              settings={settings}
+              onModelLoad={onModelLoad}
+              isAnimating={isAnimating}
+              animationPresetKey={animationPresetKey}
+              animationClipsRef={animationClipsRef}
+              activeActionRef={activeActionRef}
+              mixerRef={mixerRef}
+              selectedAnimationClipIndex={selectedAnimationClipIndex}
+              animationPlaybackState={animationPlaybackState}
+              isAnimationLooping={isAnimationLooping}
+              animationPlaybackSpeed={animationPlaybackSpeed}
+              animationTime={animationTime}
+            />
+          </Suspense>
         ) : null}{" "}
-        {(settings.background === "modernGradient" ||
-          settings.background === "darkSpace") && (
-          <Environment
-            files='/brown_photostudio_02_4k.hdr'
-            background={false}
-          />
-        )}{" "}
-      </Suspense>
-      <Grid
-        infiniteGrid
-        cellSize={0.5}
-        cellThickness={0.5}
-        sectionSize={2.5}
-        sectionThickness={1}
-        sectionColor={new THREE.Color(0x6f6f6f)}
-        cellColor={new THREE.Color(0x444444)}
-        fadeDistance={50}
-      />
-
-      {!isImportedModelDisplayed ? (
-        <Suspense fallback={null}>
-          {" "}
-          <ProceduralShape
-            ref={internalMeshRef}
-            shapeId={currentShape}
-            settings={settings}
-            size={1.5}
-            animationPresetKey={animationPresetKey}
-            isAnimating={isAnimating}
-          />{" "}
-        </Suspense>
-      ) : importedModelUrl ? (
-        <Suspense fallback={null}>
-          {" "}
-          <ImportedModel
-            ref={internalMeshRef}
-            modelUrl={importedModelUrl}
-            fileType={importedFileType}
-            mtlUrl={importedMtlUrl}
-            settings={settings}
-            onModelLoad={onModelLoad}
-            isAnimating={isAnimating}
-            animationPresetKey={animationPresetKey}
-            animationClipsRef={animationClipsRef}
-            activeActionRef={activeActionRef}
-            mixerRef={mixerRef}
-            selectedAnimationClipIndex={selectedAnimationClipIndex}
-            animationPlaybackState={animationPlaybackState}
-            isAnimationLooping={isAnimationLooping}
-            animationPlaybackSpeed={animationPlaybackSpeed}
-            animationTime={animationTime}
-          />{" "}
-        </Suspense>
-      ) : null}
-
-      <TextOverlay
-        text={current3DText}
-        fontUrl={settings.textFontUrl}
-        color={settings.textColor}
-        size={settings.textSize}
-        depth={settings.textDepth}
-        isVisible={isTextVisible}
-        textYOffset={textYOffset}
-        materialProps={{ metalness: 0.4, roughness: 0.6 }}
-      />
-      <DreiOrbitControls
-        makeDefault
-        enableDamping
-        dampingFactor={0.05}
-        screenSpacePanning={false}
-        minDistance={1}
-        maxDistance={30}
-        maxPolarAngle={Math.PI / 1.6}
-        target={[0, 0.2, 0]}
-      />
-
-      {(settings.n8ao?.enabled || settings.bloom?.enabled) && ( // Changed from ssao to n8ao
-        <EffectComposer enableNormalPass>
-          {" "}
-          {/* Enable normal pass on composer */}
-          {settings.n8ao?.enabled && (
-            <N8AO // Using N8AO
-              aoRadius={saneNumber(settings.n8ao.aoRadius, 0.5)}
-              intensity={saneNumber(settings.n8ao.intensity, 1.5)}
-              distanceFalloff={saneNumber(settings.n8ao.distanceFalloff, 1.0)}
-              screenSpaceRadius={settings.n8ao.screenSpaceRadius ?? true}
-              quality={settings.n8ao.quality} // 'low', 'medium', 'high', 'ultra'
-              halfRes={settings.n8ao.halfRes}
-              color={new THREE.Color(settings.n8ao.color)}
-            />
-          )}
-          {settings.bloom?.enabled && (
-            <Bloom
-              intensity={saneNumber(settings.bloom.intensity, 1.0)}
-              luminanceThreshold={saneNumber(
-                settings.bloom.luminanceThreshold,
-                0.8
-              )}
-              luminanceSmoothing={saneNumber(
-                settings.bloom.luminanceSmoothing,
-                0.025
-              )}
-              kernelSize={settings.bloom.kernelSize}
-            />
-          )}
-        </EffectComposer>
-      )}
-      {/* <Stats /> */}
-    </>
-  );
-};
+        <TextOverlay
+          text={current3DText}
+          fontUrl={settings.textFontUrl}
+          color={settings.textColor}
+          size={settings.textSize}
+          depth={settings.textDepth}
+          isVisible={isTextVisible}
+          textYOffset={textYOffset}
+          materialProps={{ metalness: 0.4, roughness: 0.6 }}
+        />{" "}
+        <DreiOrbitControls
+          makeDefault
+          enableDamping
+          dampingFactor={0.05}
+          screenSpacePanning={false}
+          minDistance={1}
+          maxDistance={30}
+          maxPolarAngle={Math.PI / 1.6}
+          target={[0, 0.2, 0]}
+        />{" "}
+        {(settings.n8ao?.enabled || settings.bloom?.enabled) && (
+          <EffectComposer enableNormalPass>
+            {settings.n8ao?.enabled && (
+              <N8AO
+                aoRadius={saneNumber(settings.n8ao.aoRadius, 0.5)}
+                intensity={saneNumber(settings.n8ao.intensity, 1.5)}
+                distanceFalloff={saneNumber(settings.n8ao.distanceFalloff, 1.0)}
+                screenSpaceRadius={settings.n8ao.screenSpaceRadius ?? true}
+                quality={settings.n8ao.quality}
+                halfRes={settings.n8ao.halfRes}
+                color={new THREE.Color(settings.n8ao.color)}
+              />
+            )}{" "}
+            {settings.bloom?.enabled && (
+              <Bloom
+                intensity={saneNumber(settings.bloom.intensity, 1.0)}
+                luminanceThreshold={saneNumber(
+                  settings.bloom.luminanceThreshold,
+                  0.8
+                )}
+                luminanceSmoothing={saneNumber(
+                  settings.bloom.luminanceSmoothing,
+                  0.025
+                )}
+                kernelSize={settings.bloom.kernelSize}
+              />
+            )}
+          </EffectComposer>
+        )}
+      </>
+    );
+  }
+);
 SceneContentInternal.displayName = "SceneContentInternal";
 
-// --- MAIN COMPONENT ---
 const ModelViewer3D = () => {
   const [isMounted, setIsMounted] = useState(false);
   const fileInputRef = useRef(null);
@@ -30727,11 +35414,9 @@ const ModelViewer3D = () => {
   const [textInput, setTextInput] = useState("Hello 3D");
   const [current3DText, setCurrent3DText] = useState("");
   const [isTextVisible, setIsTextVisible] = useState(false);
-
   const meshToExportOrScreenshotRef = useRef(null);
   const r3fSceneForExportRef = useRef(null);
   const r3fGLContextRef = useRef(null);
-
   const mixerRef = useRef(null);
   const animationClipsRef = useRef([]);
   const activeActionRef = useRef(null);
@@ -30743,7 +35428,6 @@ const ModelViewer3D = () => {
   const [animationDuration, setAnimationDuration] = useState(0);
   const [isAnimationLooping, setIsAnimationLooping] = useState(true);
   const [animationPlaybackSpeed, setAnimationPlaybackSpeed] = useState(1.0);
-
   const historyStackRef = useRef([]);
   const historyPointerRef = useRef(-1);
   const isUndoingRedoingRef = useRef(false);
@@ -30758,7 +35442,9 @@ const ModelViewer3D = () => {
         isAnimating,
         importedModelName,
         isImportedModelDisplayed,
-        importedModel,
+        importedModelUrl: importedModel?.url,
+        importedModelType: importedModel?.type,
+        importedModelMtlUrl: importedModel?.mtlUrl,
         selectedAnimationClipIndex,
         animationPlaybackState,
         animationTime,
@@ -30787,29 +35473,43 @@ const ModelViewer3D = () => {
     current3DText,
     isTextVisible,
   ]);
-  const applyState = useCallback((stateToApply) => {
-    isUndoingRedoingRef.current = true;
-    setSettings(stateToApply.settings);
-    setCurrentCategory(stateToApply.currentCategory);
-    setCurrentShape(stateToApply.currentShape);
-    setAnimationPreset(stateToApply.animationPreset);
-    setIsAnimating(stateToApply.isAnimating);
-    setImportedModelName(stateToApply.importedModelName);
-    setImportedModel(stateToApply.importedModel);
-    setIsImportedModelDisplayed(stateToApply.isImportedModelDisplayed);
-    setSelectedAnimationClipIndex(stateToApply.selectedAnimationClipIndex);
-    setAnimationPlaybackState(stateToApply.animationPlaybackState);
-    setAnimationTime(stateToApply.animationTime);
-    setIsAnimationLooping(stateToApply.isAnimationLooping);
-    setAnimationPlaybackSpeed(stateToApply.animationPlaybackSpeed);
-    setCustomBgImageUrl(stateToApply.customBgImageUrl);
-    setCurrent3DText(stateToApply.current3DText);
-    setIsTextVisible(stateToApply.isTextVisible);
-    setTextInput(stateToApply.current3DText);
-    requestAnimationFrame(() => {
-      isUndoingRedoingRef.current = false;
-    });
-  }, []);
+  const applyState = useCallback(
+    (stateToApply) => {
+      isUndoingRedoingRef.current = true;
+      setSettings(stateToApply.settings);
+      setCurrentCategory(stateToApply.currentCategory);
+      setCurrentShape(stateToApply.currentShape);
+      setAnimationPreset(stateToApply.animationPreset);
+      setIsAnimating(stateToApply.isAnimating);
+      setImportedModelName(stateToApply.importedModelName);
+      if (
+        stateToApply.importedModelUrl &&
+        stateToApply.importedModelUrl !== importedModel?.url
+      ) {
+        setImportedModel({
+          url: stateToApply.importedModelUrl,
+          type: stateToApply.importedModelType,
+          mtlUrl: stateToApply.importedModelMtlUrl,
+        });
+      } else if (!stateToApply.importedModelUrl && importedModel) {
+        setImportedModel(null);
+      }
+      setIsImportedModelDisplayed(stateToApply.isImportedModelDisplayed);
+      setSelectedAnimationClipIndex(stateToApply.selectedAnimationClipIndex);
+      setAnimationPlaybackState(stateToApply.animationPlaybackState);
+      setAnimationTime(stateToApply.animationTime);
+      setIsAnimationLooping(stateToApply.isAnimationLooping);
+      setAnimationPlaybackSpeed(stateToApply.animationPlaybackSpeed);
+      setCustomBgImageUrl(stateToApply.customBgImageUrl);
+      setCurrent3DText(stateToApply.current3DText);
+      setIsTextVisible(stateToApply.isTextVisible);
+      setTextInput(stateToApply.current3DText);
+      requestAnimationFrame(() => {
+        isUndoingRedoingRef.current = false;
+      });
+    },
+    [importedModel]
+  );
   const pushHistory = useCallback(
     (actionName = "action") => {
       if (isUndoingRedoingRef.current) return;
@@ -30828,6 +35528,7 @@ const ModelViewer3D = () => {
       if (stack.length > MAX_HISTORY) stack.shift();
       historyStackRef.current = stack;
       historyPointerRef.current = stack.length - 1;
+      console.log("History pushed:", actionName, historyPointerRef.current);
     },
     [captureAppState]
   );
@@ -30853,22 +35554,40 @@ const ModelViewer3D = () => {
     setIsMounted(true);
   }, []);
   useEffect(() => {
-    if (isMounted) pushHistory("initial load");
+    if (isMounted) {
+      const timeoutId = setTimeout(() => {
+        pushHistory("initial load");
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
   }, [isMounted, pushHistory]);
   const debouncedPushHistoryRef = useRef(null);
   useEffect(() => {
+    if (!isMounted) return;
     if (debouncedPushHistoryRef.current)
       clearTimeout(debouncedPushHistoryRef.current);
     debouncedPushHistoryRef.current = setTimeout(() => {
       if (isMounted && !isUndoingRedoingRef.current)
-        pushHistory("settings changed");
-    }, 500);
+        pushHistory("settings/state changed");
+    }, 750);
     return () => {
       if (debouncedPushHistoryRef.current)
         clearTimeout(debouncedPushHistoryRef.current);
     };
   }, [
     settings,
+    currentCategory,
+    currentShape,
+    animationPreset,
+    isAnimating,
+    importedModelName,
+    isImportedModelDisplayed,
+    importedModel,
+    selectedAnimationClipIndex,
+    animationPlaybackState,
+    animationTime,
+    isAnimationLooping,
+    animationPlaybackSpeed,
     customBgImageUrl,
     current3DText,
     isTextVisible,
@@ -30881,14 +35600,16 @@ const ModelViewer3D = () => {
       try {
         await viewerCardRef.current.requestFullscreen();
       } catch (err) {
-        sonnerToast.error("Fullscreen Failed");
+        sonnerToast.error("Fullscreen Failed", { description: err.message });
       }
     } else {
       if (document.exitFullscreen) {
         try {
           await document.exitFullscreen();
         } catch (err) {
-          sonnerToast.error("Exit Fullscreen Failed");
+          sonnerToast.error("Exit Fullscreen Failed", {
+            description: err.message,
+          });
         }
       }
     }
@@ -30937,27 +35658,32 @@ const ModelViewer3D = () => {
   }, []);
   const handleResetAnimation = useCallback(() => {
     if (activeActionRef.current) {
-      activeActionRef.current.reset().stop();
+      activeActionRef.current.reset();
+      if (animationPlaybackState !== "playing") activeActionRef.current.stop();
+      else activeActionRef.current.play();
       setAnimationTime(0);
-      if (animationPlaybackState === "playing" && activeActionRef.current)
-        activeActionRef.current.play();
     }
-    sonnerToast.info("View Reset");
-    pushHistory("reset view");
+    sonnerToast.info("View Reset (OrbitControls)");
+    if (activeActionRef.current) pushHistory("reset imported animation");
   }, [pushHistory, animationPlaybackState]);
   const handleToggleGlobalAnimation = useCallback(() => {
     setIsAnimating((prev) => {
-      sonnerToast.info(`Floating Animation ${!prev ? "Resumed" : "Paused"}`);
-      pushHistory(!prev ? "resume global float" : "pause global float");
-      return !prev;
+      const nextState = !prev;
+      sonnerToast.info(
+        `Floating Animation ${nextState ? "Resumed" : "Paused"}`
+      );
+      return nextState;
     });
-  }, [pushHistory]);
+  }, []);
   const handleSettingsChange = (key, value, subKey = null) => {
     setSettings((s) => {
+      const newSettings = { ...s };
       if (subKey) {
-        return { ...s, [key]: { ...s[key], [subKey]: value } };
+        newSettings[key] = { ...s[key], [subKey]: value };
+      } else {
+        newSettings[key] = value;
       }
-      return { ...s, [key]: value };
+      return newSettings;
     });
   };
   const resetCustomMaterialProperties = () => {
@@ -30981,49 +35707,43 @@ const ModelViewer3D = () => {
       setSettings((s) => ({
         ...s,
         customMaterialProperties: {
-          roughness: presetDefaults.roughness ?? null,
-          metalness: presetDefaults.metalness ?? null,
-          ior: presetDefaults.ior ?? null,
-          transmission: presetDefaults.transmission ?? null,
-          thickness: presetDefaults.thickness ?? null,
-          emissiveIntensity: presetDefaults.emissiveIntensity ?? null,
+          roughness:
+            presetDefaults.roughness ??
+            initialSettings.customMaterialProperties.roughness,
+          metalness:
+            presetDefaults.metalness ??
+            initialSettings.customMaterialProperties.metalness,
+          ior:
+            presetDefaults.ior ?? initialSettings.customMaterialProperties.ior,
+          transmission:
+            presetDefaults.transmission ??
+            initialSettings.customMaterialProperties.transmission,
+          thickness:
+            presetDefaults.thickness ??
+            initialSettings.customMaterialProperties.thickness,
+          emissiveIntensity:
+            presetDefaults.emissiveIntensity ??
+            initialSettings.customMaterialProperties.emissiveIntensity,
           ...resetTextureUrls,
         },
       }));
-      sonnerToast.info("Material Properties Reset");
-      pushHistory("reset custom material props");
+      sonnerToast.info("Material Properties Reset to Preset Defaults");
     }
   };
-  const handleCategorySelect = useCallback(
-    (categoryId) => {
-      setIsImportedModelDisplayed(false);
-      setImportedModel(null);
-      setCurrentCategory(categoryId);
-      setCurrentShape(SHAPES_BY_CATEGORY_DATA[categoryId][0].id);
-      pushHistory("category select");
-    },
-    [pushHistory]
-  );
-  const handleShapeSelect = useCallback(
-    (shapeId) => {
-      setIsImportedModelDisplayed(false);
-      setImportedModel(null);
-      setCurrentShape(shapeId);
-      pushHistory("shape select");
-    },
-    [pushHistory]
-  );
-  useEffect(() => {
-    if (
-      isMounted &&
-      !isUndoingRedoingRef.current &&
-      !isImportedModelDisplayed
-    ) {
-      pushHistory("animation preset change");
-    }
-  }, [animationPreset, isMounted, pushHistory, isImportedModelDisplayed]);
+  const handleCategorySelect = useCallback((categoryId) => {
+    setIsImportedModelDisplayed(false);
+    setImportedModel(null);
+    setCurrentCategory(categoryId);
+    setCurrentShape(SHAPES_BY_CATEGORY_DATA[categoryId][0].id);
+  }, []);
+  const handleShapeSelect = useCallback((shapeId) => {
+    setIsImportedModelDisplayed(false);
+    setImportedModel(null);
+    setCurrentShape(shapeId);
+  }, []);
   const handleRandomize = useCallback(() => {
     setIsImportedModelDisplayed(false);
+    setImportedModel(null);
     setCustomBgImageUrl(null);
     const randCat =
       CATEGORIES_DATA[Math.floor(Math.random() * CATEGORIES_DATA.length)];
@@ -31104,8 +35824,7 @@ const ModelViewer3D = () => {
       },
     }));
     sonnerToast.success("Scene Randomized!");
-    pushHistory("randomize");
-  }, [pushHistory]);
+  }, []);
   const currentShapeRef = useRef(currentShape);
   useEffect(() => {
     currentShapeRef.current = currentShape;
@@ -31115,13 +35834,77 @@ const ModelViewer3D = () => {
     currentImportedModelNameRef.current = importedModelName;
   }, [importedModelName]);
   const handleExportGLB = useCallback(async () => {
-    if (
-      (!meshToExportOrScreenshotRef.current &&
-        (!isTextVisible || !current3DText)) ||
-      isExporting
-    ) {
+    if (isExporting) return;
+    const sceneToExport = new THREE.Scene();
+    let hasContentToExport = false;
+    if (meshToExportOrScreenshotRef.current) {
+      const modelClone = meshToExportOrScreenshotRef.current.clone(true);
+      sceneToExport.add(modelClone);
+      hasContentToExport = true;
+    }
+    if (isTextVisible && current3DText && settings.textFontUrl) {
+      if (!helvetikerFontForExport) {
+        try {
+          helvetikerFontForExport = await new Promise((resolve, reject) =>
+            globalFontLoaderForExport.load(
+              FONT_PATH_FOR_EXPORT,
+              resolve,
+              undefined,
+              reject
+            )
+          );
+        } catch (e) {
+          sonnerToast.error("Text Export Failed", {
+            description: "Font for text geometry failed to load.",
+          });
+        }
+      }
+      if (helvetikerFontForExport) {
+        const textGeom = new TextGeometry(current3DText, {
+          font: helvetikerFontForExport,
+          size: saneNumber(settings.textSize, 0.5),
+          height: saneNumber(settings.textDepth, 0.05),
+          curveSegments: 12,
+          bevelEnabled: true,
+          bevelThickness: saneNumber(0.02 * (settings.textSize / 0.5), 0.01),
+          bevelSize: saneNumber(0.01 * (settings.textSize / 0.5), 0.005),
+        });
+        textGeom.center();
+        const { constructor: MatConstructor, args } = createR3FMaterialProps(
+          settings.textColor,
+          "ceramic",
+          {},
+          r3fSceneForExportRef.current?.environment
+        );
+        const textMeshMaterial = new MatConstructor(args);
+        const textMesh = new THREE.Mesh(textGeom, textMeshMaterial);
+        let textExportYOffset = 0;
+        if (meshToExportOrScreenshotRef.current) {
+          const mainModelBox = new THREE.Box3().setFromObject(
+            meshToExportOrScreenshotRef.current
+          );
+          if (!mainModelBox.isEmpty()) {
+            const modelHeight = mainModelBox.max.y - mainModelBox.min.y;
+            const modelCenterY = mainModelBox.getCenter(new THREE.Vector3()).y;
+            textExportYOffset =
+              modelCenterY +
+              modelHeight / 2 +
+              saneNumber(settings.textSize, 0.5) / 2 +
+              0.3;
+          } else {
+            textExportYOffset = saneNumber(settings.textSize, 0.5) / 2 + 0.3;
+          }
+        } else {
+          textExportYOffset = saneNumber(settings.textSize, 0.5) / 2;
+        }
+        textMesh.position.y = textExportYOffset;
+        sceneToExport.add(textMesh);
+        hasContentToExport = true;
+      }
+    }
+    if (!hasContentToExport) {
       sonnerToast.warning("Export Failed", {
-        description: "Nothing to export or already exporting.",
+        description: "Nothing visible to export.",
       });
       return;
     }
@@ -31131,96 +35914,36 @@ const ModelViewer3D = () => {
       description: "Preparing model...",
     });
     try {
-      const sceneToExport = new THREE.Scene();
-      if (meshToExportOrScreenshotRef.current) {
-        const modelClone = meshToExportOrScreenshotRef.current.clone(true);
-        sceneToExport.add(modelClone);
-      }
-      if (isTextVisible && current3DText && settings.textFontUrl) {
-        if (!helvetikerFontForExport) {
-          try {
-            helvetikerFontForExport = await new Promise((resolve, reject) =>
-              globalFontLoaderForExport.load(
-                FONT_PATH_FOR_EXPORT,
-                resolve,
-                undefined,
-                reject
-              )
-            );
-          } catch (e) {
-            sonnerToast.error("Text Export Failed", {
-              id: exportToastId,
-              description: "Font for text geometry failed to load.",
-            });
-            helvetikerFontForExport = null;
-          }
-        }
-        if (helvetikerFontForExport) {
-          const textGeom = new TextGeometry(current3DText, {
-            font: helvetikerFontForExport,
-            size: saneNumber(settings.textSize, 0.5),
-            height: saneNumber(settings.textDepth, 0.05),
-            curveSegments: 12,
-            bevelEnabled: true,
-            bevelThickness: saneNumber(0.02 * (settings.textSize / 0.5), 0.01),
-            bevelSize: saneNumber(0.01 * (settings.textSize / 0.5), 0.005),
-          });
-          textGeom.center();
-          const { constructor: MatConstructor, args } = createR3FMaterialProps(
-            settings.textColor,
-            "standard",
-            {},
-            r3fSceneForExportRef.current?.environment
-          );
-          const textMeshMaterial = new MatConstructor(args);
-          const textMesh = new THREE.Mesh(textGeom, textMeshMaterial);
-          let textExportYOffset = 1.0;
-          if (meshToExportOrScreenshotRef.current) {
-            const mainModelBox = new THREE.Box3().setFromObject(
-              meshToExportOrScreenshotRef.current
-            );
-            const modelHeight = mainModelBox.max.y - mainModelBox.min.y;
-            const modelCenterY = mainModelBox.getCenter(new THREE.Vector3()).y;
-            textExportYOffset =
-              modelCenterY +
-              modelHeight / 2 +
-              saneNumber(settings.textSize, 0.5) / 2 +
-              0.3;
-          } else {
-            textExportYOffset = saneNumber(settings.textSize, 0.5) / 2;
-          }
-          textMesh.position.y = textExportYOffset;
-          sceneToExport.add(textMesh);
-        }
-      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      setExportProgress(50);
       sonnerToast.info("Finalizing export...", {
         id: exportToastId,
         description: "Almost there...",
       });
-      setExportProgress(95);
       const exporter = new GLTFExporter();
       const exportOptions = {
         binary: true,
         embedImages: true,
         animations:
-          isImportedModelDisplayed && importedModel && animationClipsRef.current
+          isImportedModelDisplayed &&
+          importedModel &&
+          animationClipsRef.current.length > 0
             ? animationClipsRef.current
             : [],
       };
       exporter.parse(
         sceneToExport,
         (gltf) => {
-          sonnerToast.success("GLB Export Ready", {
-            id: exportToastId,
-            description: "Download starting.",
-          });
-          if (!(gltf instanceof ArrayBuffer))
-            throw new Error("Exported GLTF not ArrayBuffer.");
+          if (!(gltf instanceof ArrayBuffer)) {
+            throw new Error("Exported GLTF is not an ArrayBuffer.");
+          }
           const blob = new Blob([gltf], { type: "application/octet-stream" });
           const link = document.createElement("a");
           link.href = URL.createObjectURL(blob);
           const baseName = isImportedModelDisplayed
-            ? currentImportedModelNameRef.current || "imported-model"
+            ? (currentImportedModelNameRef.current || "imported-model")
+                .replace(/[^a-z0-9]/gi, "_")
+                .toLowerCase()
             : currentShapeRef.current || "model";
           const textSuffix = isTextVisible && current3DText ? "-with-text" : "";
           link.download = `shape-${baseName}${textSuffix}.glb`;
@@ -31228,15 +35951,21 @@ const ModelViewer3D = () => {
           link.click();
           document.body.removeChild(link);
           URL.revokeObjectURL(link.href);
+          setExportProgress(100);
+          sonnerToast.success("GLB Export Ready", {
+            id: exportToastId,
+            description: "Download started.",
+          });
           setTimeout(() => {
             setIsExporting(false);
             setExportProgress(0);
           }, 500);
         },
         (error) => {
+          console.error("GLTFExporter error:", error);
           sonnerToast.error("GLB Export Failed", {
             id: exportToastId,
-            description: error.message || "GLTF parsing error.",
+            description: error?.message || "GLTF parsing error.",
           });
           setIsExporting(false);
           setExportProgress(0);
@@ -31244,23 +35973,24 @@ const ModelViewer3D = () => {
         exportOptions
       );
     } catch (e) {
+      console.error("Export GLB general error:", e);
       setIsExporting(false);
       setExportProgress(0);
       sonnerToast.error("GLB Export Failed", {
         id: exportToastId,
-        description: e.message || "Unexpected error.",
+        description: e.message || "Unexpected error during export preparation.",
       });
     }
   }, [
     isExporting,
-    meshToExportOrScreenshotRef,
     isTextVisible,
     current3DText,
-    settings,
-    animationClipsRef,
+    settings.textFontUrl,
+    settings.textSize,
+    settings.textDepth,
+    settings.textColor,
     isImportedModelDisplayed,
     importedModel,
-    r3fSceneForExportRef,
   ]);
   const handleSimulatedExportOBJ = useCallback(() => {
     if (isExporting) return;
@@ -31282,7 +36012,9 @@ const ModelViewer3D = () => {
         clearInterval(i);
         const l = document.createElement("a");
         const baseName = isImportedModelDisplayed
-          ? currentImportedModelNameRef.current || "imported"
+          ? (currentImportedModelNameRef.current || "imported")
+              .replace(/[^a-z0-9]/gi, "_")
+              .toLowerCase()
           : currentShapeRef.current || "model";
         const textSuffix = isTextVisible && current3DText ? "-with-text" : "";
         l.download = `shape-${baseName}${textSuffix}.obj`;
@@ -31321,7 +36053,9 @@ const ModelViewer3D = () => {
         const canvas = gl.domElement;
         const link = document.createElement("a");
         const baseName = isImportedModelDisplayed
-          ? currentImportedModelNameRef.current || "view"
+          ? (currentImportedModelNameRef.current || "view")
+              .replace(/[^a-z0-9]/gi, "_")
+              .toLowerCase()
           : currentShapeRef.current || "view";
         const textSuffix = isTextVisible && current3DText ? "-with-text" : "";
         link.download = `screenshot-${baseName}${textSuffix}.png`;
@@ -31340,7 +36074,7 @@ const ModelViewer3D = () => {
         });
       }
     });
-  }, [r3fGLContextRef, isImportedModelDisplayed, current3DText, isTextVisible]);
+  }, [isImportedModelDisplayed, current3DText, isTextVisible]);
   const processAndSetImportedModel = useCallback(
     (fileUrl, fileType, mtlFileUrl = null, originalFileName) => {
       const nameOnly =
@@ -31351,6 +36085,13 @@ const ModelViewer3D = () => {
       animationClipsRef.current = [];
       setSelectedAnimationClipIndex(-1);
       setAnimationPlaybackState("stopped");
+      setAnimationTime(0);
+      setAnimationDuration(0);
+      if (mixerRef.current) {
+        mixerRef.current.stopAllAction();
+        mixerRef.current = null;
+      }
+      activeActionRef.current = null;
     },
     []
   );
@@ -31363,34 +36104,36 @@ const ModelViewer3D = () => {
       let modelFile = null;
       let mtlFile = null;
       let modelFileType = "";
-      for (const file of files) {
-        const lowerName = file.name.toLowerCase();
-        if (lowerName.endsWith(".glb") || lowerName.endsWith(".gltf")) {
-          modelFile = file;
-          modelFileType = lowerName.endsWith(".glb") ? "glb" : "gltf";
+      const modelFileExtensions = [".glb", ".gltf", ".fbx", ".stl", ".obj"];
+      for (const ext of modelFileExtensions) {
+        modelFile = Array.from(files).find((f) =>
+          f.name.toLowerCase().endsWith(ext)
+        );
+        if (modelFile) {
+          modelFileType = ext.substring(1);
           break;
         }
-        if (lowerName.endsWith(".fbx")) {
-          modelFile = file;
-          modelFileType = "fbx";
-          break;
-        }
-        if (lowerName.endsWith(".stl")) {
-          modelFile = file;
-          modelFileType = "stl";
-          break;
-        }
-        if (lowerName.endsWith(".obj")) {
-          modelFile = file;
-          modelFileType = "obj";
-        }
-        if (lowerName.endsWith(".mtl") && modelFileType === "obj") {
-          mtlFile = file;
-        }
+      }
+      if (!modelFile) {
+        modelFile = Array.from(files).find((f) =>
+          f.name.toLowerCase().endsWith(".3ds")
+        );
+        if (modelFile) modelFileType = "3ds";
+      }
+      if (modelFileType === "obj") {
+        mtlFile = Array.from(files).find((f) =>
+          f.name.toLowerCase().endsWith(".mtl")
+        );
       }
       if (modelFile) {
         const modelUrl = URL.createObjectURL(modelFile);
         const mtlUrl = mtlFile ? URL.createObjectURL(mtlFile) : null;
+        if (importedModel?.url && importedModel.url.startsWith("blob:")) {
+          URL.revokeObjectURL(importedModel.url);
+        }
+        if (importedModel?.mtlUrl && importedModel.mtlUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(importedModel.mtlUrl);
+        }
         processAndSetImportedModel(
           modelUrl,
           modelFileType,
@@ -31401,16 +36144,16 @@ const ModelViewer3D = () => {
           id: importToastId,
           description: `${modelFile.name} prepared for display.`,
         });
-        pushHistory(`import ${modelFileType}`);
       } else {
         sonnerToast.error("No Compatible Model", {
           id: importToastId,
-          description: "Please select a supported file type.",
+          description:
+            "Please select a supported file type (GLB, GLTF, FBX, STL, OBJ, 3DS).",
         });
       }
       if (fileInputRef.current) fileInputRef.current.value = null;
     },
-    [processAndSetImportedModel, pushHistory]
+    [processAndSetImportedModel, importedModel]
   );
   const triggerImport = useCallback(() => {
     if (fileInputRef.current) fileInputRef.current.click();
@@ -31435,14 +36178,12 @@ const ModelViewer3D = () => {
       if (!activeActionRef.current.isRunning()) activeActionRef.current.play();
       setAnimationPlaybackState("playing");
     }
-    pushHistory("play/pause imported anim");
   };
   const handleStopAnimation = () => {
     if (!activeActionRef.current) return;
-    activeActionRef.current.stop();
+    activeActionRef.current.reset().stop();
     setAnimationPlaybackState("stopped");
     setAnimationTime(0);
-    pushHistory("stop imported anim");
   };
   const handleAnimationClipChange = (indexStr) => {
     const index = parseInt(indexStr, 10);
@@ -31451,7 +36192,9 @@ const ModelViewer3D = () => {
       index >= 0 &&
       index < animationClipsRef.current.length
     ) {
-      if (activeActionRef.current) activeActionRef.current.stop();
+      if (activeActionRef.current) {
+        activeActionRef.current.stop();
+      }
       const clip = animationClipsRef.current[index];
       activeActionRef.current = mixerRef.current.clipAction(clip);
       activeActionRef.current.setLoop(
@@ -31464,15 +36207,20 @@ const ModelViewer3D = () => {
       setAnimationPlaybackState("playing");
       setAnimationDuration(clip.duration);
       setAnimationTime(0);
-      pushHistory("change animation clip");
     }
   };
   const handleAnimationTimeChange = (value) => {
+    const normalizedTime = value[0];
     if (activeActionRef.current && animationDuration > 0) {
-      const newTime = value[0] * animationDuration;
-      activeActionRef.current.time = newTime;
-      if (mixerRef.current) mixerRef.current.update(0);
-      setAnimationTime(value[0]);
+      const newTimeInSeconds = normalizedTime * animationDuration;
+      activeActionRef.current.time = newTimeInSeconds;
+      if (
+        animationPlaybackState === "paused" ||
+        animationPlaybackState === "stopped"
+      ) {
+        if (mixerRef.current) mixerRef.current.update(0);
+      }
+      setAnimationTime(normalizedTime);
     }
   };
   const handleAnimationLoopToggle = (checked) => {
@@ -31482,11 +36230,11 @@ const ModelViewer3D = () => {
         checked ? THREE.LoopRepeat : THREE.LoopOnce,
         Infinity
       );
-    pushHistory("toggle animation loop");
   };
   const handleAnimationSpeedChange = (value) => {
-    setAnimationPlaybackSpeed(value[0]);
-    if (activeActionRef.current) activeActionRef.current.timeScale = value[0];
+    const speed = value[0];
+    setAnimationPlaybackSpeed(speed);
+    if (activeActionRef.current) activeActionRef.current.timeScale = speed;
   };
   const handleCustomBgImageUpload = (event) => {
     const file = event.target.files[0];
@@ -31503,17 +36251,24 @@ const ModelViewer3D = () => {
     setCustomBgImageUrl(null);
     sonnerToast.info("Custom background image cleared.");
   };
+
+  // REVERTED handleTextureUpload to use actual files
   const handleTextureUpload = (mapType, event) => {
     const file = event.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
         const urlKey = `${mapType}Url`;
+        const newTextureUrl = e.target.result; // Data URL
+        console.log(
+          `[handleTextureUpload FULL] Setting ${urlKey} to Data URL (length: ${newTextureUrl.length})`
+        );
+
         setSettings((s) => ({
           ...s,
           customMaterialProperties: {
             ...s.customMaterialProperties,
-            [urlKey]: e.target.result,
+            [urlKey]: newTextureUrl,
           },
         }));
         sonnerToast.success(`${mapType.replace("Map", "")} texture set.`);
@@ -31521,8 +36276,12 @@ const ModelViewer3D = () => {
           textureFileInputRefs.current[mapType].value = null;
       };
       reader.readAsDataURL(file);
+    } else {
+      if (textureFileInputRefs.current[mapType])
+        textureFileInputRefs.current[mapType].value = null;
     }
   };
+
   const handleClearTexture = (mapType) => {
     const urlKey = `${mapType}Url`;
     setSettings((s) => ({
@@ -31535,25 +36294,30 @@ const ModelViewer3D = () => {
     sonnerToast.info(`${mapType.replace("Map", "")} texture cleared.`);
   };
   const handleSet3DText = () => {
-    setCurrent3DText(textInput);
-    if (textInput.trim() !== "") {
+    const trimmedText = textInput.trim();
+    setCurrent3DText(trimmedText);
+    if (trimmedText !== "") {
       setIsTextVisible(true);
       sonnerToast.info("3D Text Updated", {
-        description: `Displaying: "${textInput}"`,
+        description: `Displaying: "${trimmedText}"`,
       });
     } else {
       setIsTextVisible(false);
       sonnerToast.info("3D Text Cleared");
     }
-    pushHistory("set 3d text");
   };
 
   const { active: isLoadingModel, progress: modelLoadProgress } = useProgress();
+
+  console.log(
+    "[ModelViewer3D] Rendering. Current settings.customMaterialProperties.mapUrl:",
+    settings.customMaterialProperties.mapUrl
+  );
+
   if (!isMounted) {
     return (
       <div className='min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-100 p-4'>
-        {" "}
-        <Loader2 className='h-12 w-12 animate-spin text-purple-400 mb-4' />{" "}
+        <Loader2 className='h-12 w-12 animate-spin text-purple-400 mb-4' />
         <p className='text-lg font-medium'>Initializing 3D Studio...</p>
       </div>
     );
@@ -31562,12 +36326,13 @@ const ModelViewer3D = () => {
   if (settings.background !== "customImage") {
     if (settings.background === "darkSpace") canvasBgColor = "#0a0a10";
     else if (settings.background === "studioDark") canvasBgColor = "#18181b";
-    else if (settings.background === "softLight") canvasBgColor = "#e0e8f0";
-    else if (settings.background === "studioLight") canvasBgColor = "#f4f4f5";
+    else if (settings.background === "softLight" && !customBgImageUrl)
+      canvasBgColor = "#e0e8f0";
+    else if (settings.background === "studioLight" && !customBgImageUrl)
+      canvasBgColor = "#f4f4f5";
     else if (settings.background === "modernGradient")
       canvasBgColor = "#1e3b49";
   }
-
   const canUndo = historyPointerRef.current > 0;
   const canRedo =
     historyPointerRef.current < historyStackRef.current.length - 1;
@@ -31601,27 +36366,24 @@ const ModelViewer3D = () => {
           />
           <div className='max-w-screen-2xl mx-auto'>
             <header className='text-center mb-8 sm:mb-10'>
-              {" "}
               <h1 className='text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-3 sm:mb-4 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent'>
                 3D Shape Studio Pro
-              </h1>{" "}
+              </h1>
               <p className='text-slate-400 text-base sm:text-lg max-w-3xl mx-auto'>
-                Craft, view, and animate 3D masterpieces. Import GLB, GLTF,
-                STL,OBJ, FBX or 3DS models. Drag & drop supported.
-              </p>{" "}
+                Craft, view, and animate 3D masterpieces. Import GLB,
+                GLTF,STL,OBJ, FBX or 3DS models. Drag & drop supported.
+              </p>
             </header>
             <div className='grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6'>
-              {/* Left Panel Start */}
               <div className='lg:col-span-3 space-y-4 sm:space-y-5 order-last lg:order-first'>
                 {!isImportedModelDisplayed && (
                   <>
                     <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
-                      {" "}
                       <CardHeader>
                         <CardTitle className='text-slate-100'>
                           Categories
                         </CardTitle>
-                      </CardHeader>{" "}
+                      </CardHeader>
                       <CardContent>
                         <div className='grid grid-cols-2 gap-3'>
                           {CATEGORIES_DATA.map((category) => (
@@ -31640,21 +36402,19 @@ const ModelViewer3D = () => {
                               )}
                               onClick={() => handleCategorySelect(category.id)}
                             >
-                              {" "}
                               <span className='text-2xl sm:text-3xl'>
                                 {category.icon}
-                              </span>{" "}
-                              <span>{category.name}</span>{" "}
+                              </span>
+                              <span>{category.name}</span>
                             </Button>
                           ))}
                         </div>
-                      </CardContent>{" "}
+                      </CardContent>
                     </Card>
                     <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
-                      {" "}
                       <CardHeader>
                         <CardTitle className='text-slate-100'>Shapes</CardTitle>
-                      </CardHeader>{" "}
+                      </CardHeader>
                       <CardContent>
                         <ScrollArea className='h-48'>
                           <div className='grid grid-cols-2 gap-2 pr-1'>
@@ -31675,28 +36435,24 @@ const ModelViewer3D = () => {
                                   )}
                                   onClick={() => handleShapeSelect(shape.id)}
                                 >
-                                  {" "}
-                                  <span className='text-xl'>
-                                    {shape.icon}
-                                  </span>{" "}
-                                  {shape.name}{" "}
+                                  <span className='text-xl'>{shape.icon}</span>
+                                  {shape.name}
                                 </Button>
                               )
                             )}
                           </div>
                         </ScrollArea>
-                      </CardContent>{" "}
+                      </CardContent>
                     </Card>
                   </>
                 )}
                 {isImportedModelDisplayed && importedModel && (
                   <Card className='bg-slate-800/70 border-slate-700 shadow-xl text-center'>
-                    {" "}
                     <CardHeader>
                       <CardTitle className='text-slate-100'>
                         Current Model
                       </CardTitle>
-                    </CardHeader>{" "}
+                    </CardHeader>
                     <CardContent>
                       <p
                         className='text-sm text-slate-300 truncate font-medium'
@@ -31704,13 +36460,25 @@ const ModelViewer3D = () => {
                       >
                         {importedModelName}
                       </p>
-                    </CardContent>{" "}
+                    </CardContent>
                     <CardFooter>
                       <Button
                         variant='destructive'
                         size='sm'
                         className='w-full'
                         onClick={() => {
+                          if (
+                            importedModel?.url &&
+                            importedModel.url.startsWith("blob:")
+                          ) {
+                            URL.revokeObjectURL(importedModel.url);
+                          }
+                          if (
+                            importedModel?.mtlUrl &&
+                            importedModel.mtlUrl.startsWith("blob:")
+                          ) {
+                            URL.revokeObjectURL(importedModel.mtlUrl);
+                          }
                           setImportedModel(null);
                           setIsImportedModelDisplayed(false);
                           setImportedModelName("Imported Model");
@@ -31719,68 +36487,65 @@ const ModelViewer3D = () => {
                           setCurrentShape(
                             SHAPES_BY_CATEGORY_DATA[defaultCategoryId][0].id
                           );
-                          handleResetAnimation();
+                          animationClipsRef.current = [];
+                          setSelectedAnimationClipIndex(-1);
+                          setAnimationPlaybackState("stopped");
+                          setAnimationTime(0);
+                          setAnimationDuration(0);
                           sonnerToast.info("Imported Model Cleared");
-                          pushHistory("clear imported model");
                         }}
                       >
-                        {" "}
-                        <XCircle size={16} className='mr-2' /> Clear Imported{" "}
+                        <XCircle size={16} className='mr-2' />
+                        Clear Imported
                       </Button>
-                    </CardFooter>{" "}
+                    </CardFooter>
                   </Card>
                 )}
                 <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
-                  {" "}
                   <CardHeader>
                     <CardTitle className='text-slate-100'>
                       3D Text Overlay
                     </CardTitle>
-                  </CardHeader>{" "}
+                  </CardHeader>
                   <CardContent className='space-y-3'>
-                    {" "}
                     <Input
                       type='text'
                       placeholder='Enter text for 3D display'
                       value={textInput}
                       onChange={(e) => setTextInput(e.target.value)}
                       className='bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
-                    />{" "}
+                    />
                     <Button
                       onClick={handleSet3DText}
                       className='w-full bg-teal-600 hover:bg-teal-700'
                     >
-                      <Type size={16} className='mr-2' /> Set 3D Text
-                    </Button>{" "}
+                      <Type size={16} className='mr-2' />
+                      Set 3D Text
+                    </Button>
                     <div className='flex items-center space-x-2 pt-1'>
                       <Switch
                         id='text-visibility-switch'
                         checked={isTextVisible}
                         onCheckedChange={(checked) => {
                           setIsTextVisible(checked);
-                          pushHistory(
-                            checked ? "show 3d text" : "hide 3d text"
-                          );
                         }}
-                      />{" "}
+                      />
                       <Label
                         htmlFor='text-visibility-switch'
                         className='text-sm text-slate-300'
                       >
                         Show 3D Text
                       </Label>
-                    </div>{" "}
-                  </CardContent>{" "}
+                    </div>
+                  </CardContent>
                 </Card>
                 <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
-                  {" "}
                   <CardHeader>
                     <CardTitle className='text-slate-100'>
                       Global Animation & View
                     </CardTitle>
-                  </CardHeader>{" "}
+                  </CardHeader>
                   <CardContent className='space-y-4'>
-                    {" "}
                     <Button
                       onClick={handleToggleGlobalAnimation}
                       variant={isAnimating ? "destructive" : "default"}
@@ -31793,17 +36558,16 @@ const ModelViewer3D = () => {
                         <Play size={16} className='mr-2' />
                       )}
                       {isAnimating ? "Pause Float" : "Play Float"}
-                    </Button>{" "}
+                    </Button>
                     <Select
                       value={animationPreset}
                       onValueChange={(val) => {
                         setAnimationPreset(val);
                       }}
                     >
-                      {" "}
                       <SelectTrigger className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'>
                         <SelectValue placeholder='Select float style' />
-                      </SelectTrigger>{" "}
+                      </SelectTrigger>
                       <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
                         {Object.keys(animationPresets).map((presetKey) => (
                           <SelectItem
@@ -31815,24 +36579,26 @@ const ModelViewer3D = () => {
                               presetKey.slice(1)}
                           </SelectItem>
                         ))}
-                      </SelectContent>{" "}
-                    </Select>{" "}
+                      </SelectContent>
+                    </Select>
                     <div className='grid grid-cols-2 gap-3'>
                       <Button
                         variant='outline'
                         onClick={handleResetAnimation}
                         className='border-slate-600 text-slate-300 hover:bg-slate-700/50 hover:text-slate-100'
                       >
-                        <RotateCcw size={14} className='mr-2' /> Reset View
+                        <RotateCcw size={14} className='mr-2' />
+                        Reset View
                       </Button>
                       <Button
                         variant='default'
                         onClick={handleRandomize}
                         className='bg-indigo-600 hover:bg-indigo-700'
                       >
-                        <Shuffle size={14} className='mr-2' /> Randomize
+                        <Shuffle size={14} className='mr-2' />
+                        Randomize
                       </Button>
-                    </div>{" "}
+                    </div>
                     <div className='grid grid-cols-2 gap-3 pt-2'>
                       <Button
                         variant='outline'
@@ -31840,7 +36606,8 @@ const ModelViewer3D = () => {
                         disabled={!canUndo}
                         className='border-slate-600 text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-50'
                       >
-                        <Undo size={14} className='mr-2' /> Undo
+                        <Undo size={14} className='mr-2' />
+                        Undo
                       </Button>
                       <Button
                         variant='outline'
@@ -31848,27 +36615,27 @@ const ModelViewer3D = () => {
                         disabled={!canRedo}
                         className='border-slate-600 text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-50'
                       >
-                        <Redo size={14} className='mr-2' /> Redo
+                        <Redo size={14} className='mr-2' />
+                        Redo
                       </Button>
-                    </div>{" "}
-                  </CardContent>{" "}
+                    </div>
+                  </CardContent>
                 </Card>
                 <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
-                  {" "}
                   <CardHeader>
                     <CardTitle className='text-slate-100'>
                       File & Export
                     </CardTitle>
-                  </CardHeader>{" "}
+                  </CardHeader>
                   <CardContent className='space-y-3'>
-                    {" "}
                     <Button
                       onClick={triggerImport}
                       disabled={isExporting}
                       className='w-full bg-green-600 hover:bg-green-700'
                     >
-                      <UploadCloud size={16} className='mr-2' /> Import Model
-                    </Button>{" "}
+                      <UploadCloud size={16} className='mr-2' />
+                      Import Model
+                    </Button>
                     <Button
                       onClick={handleExportGLB}
                       disabled={isExporting}
@@ -31880,7 +36647,7 @@ const ModelViewer3D = () => {
                       exportProgress <= 100
                         ? `GLB... ${Math.round(exportProgress)}%`
                         : "Export GLB"}
-                    </Button>{" "}
+                    </Button>
                     <Button
                       onClick={handleSimulatedExportOBJ}
                       disabled={isExporting}
@@ -31892,26 +36659,24 @@ const ModelViewer3D = () => {
                       exportProgress <= 100
                         ? `OBJ... ${Math.round(exportProgress)}%`
                         : "Export OBJ (Sim.)"}
-                    </Button>{" "}
+                    </Button>
                     <Button
                       onClick={handleTakeScreenshot}
                       disabled={isExporting}
                       className='w-full bg-purple-600 hover:bg-purple-700'
                     >
-                      <Camera size={16} className='mr-2' /> Screenshot
-                    </Button>{" "}
-                  </CardContent>{" "}
+                      <Camera size={16} className='mr-2' />
+                      Screenshot
+                    </Button>
+                  </CardContent>
                 </Card>
               </div>
-              {/* Left Panel End */}
-
               <div className='lg:col-span-9 order-first lg:order-last'>
                 <Card
                   ref={viewerCardRef}
                   className='bg-slate-800/50 border-slate-700/80 shadow-2xl aspect-[4/3] sm:aspect-video lg:aspect-[16/10] overflow-hidden relative'
                 >
                   <div className='absolute top-2 right-2 sm:top-3 sm:right-3 z-20 flex items-center space-x-2'>
-                    {" "}
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -31934,7 +36699,7 @@ const ModelViewer3D = () => {
                             : "Enter Fullscreen"}
                         </p>
                       </TooltipContent>
-                    </Tooltip>{" "}
+                    </Tooltip>
                     <Sheet
                       open={isSettingsPanelOpen}
                       onOpenChange={setIsSettingsPanelOpen}
@@ -31968,7 +36733,6 @@ const ModelViewer3D = () => {
                             playback.
                           </SheetDescription>
                         </SheetHeader>
-                        {/* Detailed Settings Sheet Content Start */}
                         <ScrollArea className='h-[calc(100vh-128px)]'>
                           <div className='space-y-6 p-4'>
                             {!isImportedModelDisplayed && (
@@ -31994,7 +36758,9 @@ const ModelViewer3D = () => {
                                         "materialType",
                                         value
                                       );
-                                      resetCustomMaterialProperties();
+                                      if (value !== settings.materialType) {
+                                        resetCustomMaterialProperties();
+                                      }
                                     }}
                                   >
                                     <SelectTrigger
@@ -32030,7 +36796,7 @@ const ModelViewer3D = () => {
                                     htmlFor='shapeColorPanelSheet'
                                     className='text-sm text-slate-300'
                                   >
-                                    Base Color
+                                    Base Color (Used if no Color Texture)
                                   </Label>
                                   <Input
                                     id='shapeColorPanelSheet'
@@ -32047,7 +36813,6 @@ const ModelViewer3D = () => {
                                 </div>
                                 {settings.materialType !== "auto" && (
                                   <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30'>
-                                    {" "}
                                     <div className='flex justify-between items-center'>
                                       <h4 className='text-xs font-semibold text-purple-300'>
                                         Fine-tune '{settings.materialType}'
@@ -32058,7 +36823,7 @@ const ModelViewer3D = () => {
                                         onClick={resetCustomMaterialProperties}
                                         className='text-slate-400 hover:text-purple-300 h-7 px-2'
                                       >
-                                        Reset
+                                        Reset to Preset
                                       </Button>
                                     </div>
                                     {(proceduralMaterialTypeForPanel ===
@@ -32172,7 +36937,6 @@ const ModelViewer3D = () => {
                                       proceduralMaterialTypeForPanel ===
                                         "crystal") && (
                                       <>
-                                        {" "}
                                         <div className='space-y-1.5'>
                                           <div className='flex justify-between items-center'>
                                             <Label
@@ -32215,7 +36979,7 @@ const ModelViewer3D = () => {
                                             }
                                             className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                           />
-                                        </div>{" "}
+                                        </div>
                                         <div className='space-y-1.5'>
                                           <div className='flex justify-between items-center'>
                                             <Label
@@ -32258,7 +37022,7 @@ const ModelViewer3D = () => {
                                             }
                                             className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                           />
-                                        </div>{" "}
+                                        </div>
                                         <div className='space-y-1.5'>
                                           <div className='flex justify-between items-center'>
                                             <Label
@@ -32301,7 +37065,7 @@ const ModelViewer3D = () => {
                                             }
                                             className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                           />
-                                        </div>{" "}
+                                        </div>
                                       </>
                                     )}
                                     {proceduralMaterialTypeForPanel ===
@@ -32347,9 +37111,9 @@ const ModelViewer3D = () => {
                                         />
                                       </div>
                                     )}
-                                    <Separator className='my-2 bg-slate-500/50' />{" "}
+                                    <Separator className='my-2 bg-slate-500/50' />
                                     <h5 className='text-xs font-medium text-purple-300 pt-1 flex items-center'>
-                                      <ImageUp size={14} className='mr-1.5' />{" "}
+                                      <ImageUp size={14} className='mr-1.5' />
                                       Textures (For Procedural Shape)
                                     </h5>
                                     <div className='grid grid-cols-2 gap-x-3 gap-y-4'>
@@ -32386,13 +37150,12 @@ const ModelViewer3D = () => {
                                             key={slot.id}
                                             className='space-y-1'
                                           >
-                                            {" "}
                                             <Label
                                               htmlFor={`texture-${slot.id}-sheet`}
                                               className='text-xs text-slate-300'
                                             >
                                               {slot.name}
-                                            </Label>{" "}
+                                            </Label>
                                             {currentTextureUrl && (
                                               <div className='relative group w-full aspect-square bg-slate-600/50 rounded overflow-hidden mb-1'>
                                                 <img
@@ -32412,11 +37175,11 @@ const ModelViewer3D = () => {
                                                   <Trash2 size={12} />
                                                 </Button>
                                               </div>
-                                            )}{" "}
+                                            )}
                                             <Input
                                               id={`texture-${slot.id}-sheet`}
                                               type='file'
-                                              accept='image/png, image/jpeg, image/webp'
+                                              accept='image/png, image/jpeg, image/webp, .hdr'
                                               ref={(el) =>
                                                 (textureFileInputRefs.current[
                                                   slot.id
@@ -32427,9 +37190,10 @@ const ModelViewer3D = () => {
                                               }
                                               className={cn(
                                                 "w-full text-xs file:mr-1.5 file:py-1 file:px-1.5 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700 cursor-pointer",
+                                                "bg-slate-700 border-slate-600 text-slate-100",
                                                 currentTextureUrl ? "mt-1" : ""
                                               )}
-                                            />{" "}
+                                            />
                                           </div>
                                         );
                                       })}
@@ -32651,7 +37415,7 @@ const ModelViewer3D = () => {
                                   htmlFor='backgroundPanelSheet'
                                   className='text-sm text-slate-300'
                                 >
-                                  Background
+                                  Background / Environment
                                 </Label>
                                 <Select
                                   value={settings.background}
@@ -32685,22 +37449,23 @@ const ModelViewer3D = () => {
                                       htmlFor='customBgImagePanelSheet'
                                       className='text-sm text-slate-300'
                                     >
-                                      Upload Background Image
+                                      Upload Background Image (HDR, PNG, JPG)
                                     </Label>
                                     <Input
                                       id='customBgImagePanelSheet'
                                       type='file'
-                                      accept='image/png, image/jpeg, image/webp'
+                                      accept='image/png, image/jpeg, image/webp, .hdr'
                                       onChange={handleCustomBgImageUpload}
-                                      className='w-full text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700 cursor-pointer'
+                                      className='w-full text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700 cursor-pointer bg-slate-700 border-slate-600 text-slate-100'
                                     />
                                     {customBgImageUrl && (
                                       <Button
                                         variant='ghost'
                                         size='xs'
                                         onClick={handleClearCustomBgImage}
-                                        className='text-red-400 hover:text-red-300 hover:bg-transparent mt-1 w-full'
+                                        className='text-red-400 hover:text-red-300 hover:bg-transparent mt-1 w-full justify-start px-1'
                                       >
+                                        <Trash2 size={12} className='mr-1' />
                                         Clear Custom Image
                                       </Button>
                                     )}
@@ -32730,7 +37495,6 @@ const ModelViewer3D = () => {
                                       key={lightKey}
                                       className='p-3 border border-slate-600 rounded-md space-y-2 text-xs bg-slate-700/30'
                                     >
-                                      {" "}
                                       <div className='flex items-center justify-between'>
                                         <Label
                                           htmlFor={`${lightKey}EnablePanelSheet`}
@@ -32749,10 +37513,9 @@ const ModelViewer3D = () => {
                                             )
                                           }
                                         />
-                                      </div>{" "}
+                                      </div>
                                       {settings[lightKey].enabled && (
                                         <>
-                                          {" "}
                                           <div className='flex justify-between items-center'>
                                             <Label
                                               htmlFor={`${lightKey}IntensityPanelSheet`}
@@ -32782,7 +37545,7 @@ const ModelViewer3D = () => {
                                               )
                                             }
                                             className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
-                                          />{" "}
+                                          />
                                           <Label
                                             htmlFor={`${lightKey}ColorPanelSheet`}
                                             className='text-slate-300'
@@ -32801,15 +37564,14 @@ const ModelViewer3D = () => {
                                               )
                                             }
                                             className='w-full h-7 p-0.5 bg-slate-600 border-slate-500 cursor-pointer'
-                                          />{" "}
+                                          />
                                         </>
-                                      )}{" "}
+                                      )}
                                     </div>
                                   );
                                 }
                               )}
                             </section>
-
                             <Separator className='my-3 bg-slate-600' />
                             <section className='space-y-4'>
                               <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
@@ -32821,13 +37583,12 @@ const ModelViewer3D = () => {
                               </h3>
                               <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30'>
                                 <div className='flex items-center justify-between'>
-                                  {" "}
                                   <Label
                                     htmlFor='n8aoEnableSheet'
                                     className='text-sm text-slate-200'
                                   >
                                     N8AO (Ambient Occlusion)
-                                  </Label>{" "}
+                                  </Label>
                                   <Switch
                                     id='n8aoEnableSheet'
                                     checked={settings.n8ao.enabled}
@@ -32838,7 +37599,7 @@ const ModelViewer3D = () => {
                                         "enabled"
                                       )
                                     }
-                                  />{" "}
+                                  />
                                 </div>
                                 {settings.n8ao.enabled && (
                                   <>
@@ -32867,6 +37628,7 @@ const ModelViewer3D = () => {
                                             "intensity"
                                           )
                                         }
+                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                       />
                                     </div>
                                     <div className='space-y-1.5'>
@@ -32894,16 +37656,16 @@ const ModelViewer3D = () => {
                                             "aoRadius"
                                           )
                                         }
+                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                       />
                                     </div>
                                     <div className='flex items-center justify-between'>
-                                      {" "}
                                       <Label
                                         htmlFor='n8aoSsrSheet'
                                         className='text-sm text-slate-300'
                                       >
                                         Screen Space Radius
-                                      </Label>{" "}
+                                      </Label>
                                       <Switch
                                         id='n8aoSsrSheet'
                                         checked={
@@ -32916,20 +37678,100 @@ const ModelViewer3D = () => {
                                             "screenSpaceRadius"
                                           )
                                         }
-                                      />{" "}
+                                      />
+                                    </div>
+                                    <div className='space-y-1.5'>
+                                      <Label
+                                        htmlFor='n8aoQualitySheet'
+                                        className='text-xs text-slate-300'
+                                      >
+                                        Quality
+                                      </Label>
+                                      <Select
+                                        value={settings.n8ao.quality}
+                                        onValueChange={(val) =>
+                                          handleSettingsChange(
+                                            "n8ao",
+                                            val,
+                                            "quality"
+                                          )
+                                        }
+                                      >
+                                        <SelectTrigger
+                                          id='n8aoQualitySheet'
+                                          className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
+                                        >
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
+                                          {[
+                                            "low",
+                                            "medium",
+                                            "high",
+                                            "ultra",
+                                          ].map((q) => (
+                                            <SelectItem
+                                              key={q}
+                                              value={q}
+                                              className='capitalize focus:bg-purple-600 focus:text-white'
+                                            >
+                                              {q}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className='flex items-center justify-between'>
+                                      <Label
+                                        htmlFor='n8aoHalfResSheet'
+                                        className='text-sm text-slate-300'
+                                      >
+                                        Half Resolution
+                                      </Label>
+                                      <Switch
+                                        id='n8aoHalfResSheet'
+                                        checked={settings.n8ao.halfRes}
+                                        onCheckedChange={(checked) =>
+                                          handleSettingsChange(
+                                            "n8ao",
+                                            checked,
+                                            "halfRes"
+                                          )
+                                        }
+                                      />
+                                    </div>
+                                    <div className='space-y-1.5'>
+                                      <Label
+                                        htmlFor='n8aoColorSheet'
+                                        className='text-xs text-slate-300'
+                                      >
+                                        Occlusion Color
+                                      </Label>
+                                      <Input
+                                        id='n8aoColorSheet'
+                                        type='color'
+                                        value={settings.n8ao.color}
+                                        onChange={(e) =>
+                                          handleSettingsChange(
+                                            "n8ao",
+                                            e.target.value,
+                                            "color"
+                                          )
+                                        }
+                                        className='w-full h-7 p-0.5 bg-slate-600 border-slate-500 cursor-pointer'
+                                      />
                                     </div>
                                   </>
                                 )}
                               </div>
                               <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30 mt-4'>
                                 <div className='flex items-center justify-between'>
-                                  {" "}
                                   <Label
                                     htmlFor='bloomEnableSheet'
                                     className='text-sm text-slate-200'
                                   >
                                     Bloom
-                                  </Label>{" "}
+                                  </Label>
                                   <Switch
                                     id='bloomEnableSheet'
                                     checked={settings.bloom.enabled}
@@ -32940,7 +37782,7 @@ const ModelViewer3D = () => {
                                         "enabled"
                                       )
                                     }
-                                  />{" "}
+                                  />
                                 </div>
                                 {settings.bloom.enabled && (
                                   <>
@@ -32969,6 +37811,7 @@ const ModelViewer3D = () => {
                                             "intensity"
                                           )
                                         }
+                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                       />
                                     </div>
                                     <div className='space-y-1.5'>
@@ -33000,6 +37843,39 @@ const ModelViewer3D = () => {
                                             "luminanceThreshold"
                                           )
                                         }
+                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                      />
+                                    </div>
+                                    <div className='space-y-1.5'>
+                                      <div className='flex justify-between items-center'>
+                                        <Label
+                                          htmlFor='bloomLuminanceSmoothingSheet'
+                                          className='text-xs text-slate-300'
+                                        >
+                                          Luminance Smoothing
+                                        </Label>
+                                        <span className='text-xs text-slate-400'>
+                                          {settings.bloom.luminanceSmoothing.toFixed(
+                                            3
+                                          )}
+                                        </span>
+                                      </div>
+                                      <Slider
+                                        id='bloomLuminanceSmoothingSheet'
+                                        min={0}
+                                        max={0.5}
+                                        step={0.001}
+                                        value={[
+                                          settings.bloom.luminanceSmoothing,
+                                        ]}
+                                        onValueChange={([v]) =>
+                                          handleSettingsChange(
+                                            "bloom",
+                                            v,
+                                            "luminanceSmoothing"
+                                          )
+                                        }
+                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                       />
                                     </div>
                                     <div className='space-y-1.5'>
@@ -33019,7 +37895,10 @@ const ModelViewer3D = () => {
                                           )
                                         }
                                       >
-                                        <SelectTrigger className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'>
+                                        <SelectTrigger
+                                          id='bloomKernelSheet'
+                                          className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
+                                        >
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
@@ -33060,11 +37939,9 @@ const ModelViewer3D = () => {
                                 )}
                               </div>
                             </section>
-
                             {isImportedModelDisplayed &&
                               animationClipsRef.current.length > 0 && (
                                 <>
-                                  {" "}
                                   <Separator className='my-3 bg-slate-600' />
                                   <section className='space-y-4'>
                                     <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
@@ -33075,7 +37952,6 @@ const ModelViewer3D = () => {
                                       Animation Playback
                                     </h3>
                                     <div className='space-y-4 p-3 border border-slate-600 rounded-md bg-slate-700/30'>
-                                      {" "}
                                       <Select
                                         value={selectedAnimationClipIndex.toString()}
                                         onValueChange={
@@ -33085,10 +37961,9 @@ const ModelViewer3D = () => {
                                           animationClipsRef.current.length === 0
                                         }
                                       >
-                                        {" "}
                                         <SelectTrigger className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'>
                                           <SelectValue placeholder='Select animation clip' />
-                                        </SelectTrigger>{" "}
+                                        </SelectTrigger>
                                         <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
                                           {animationClipsRef.current.map(
                                             (clip, index) => (
@@ -33102,8 +37977,8 @@ const ModelViewer3D = () => {
                                               </SelectItem>
                                             )
                                           )}
-                                        </SelectContent>{" "}
-                                      </Select>{" "}
+                                        </SelectContent>
+                                      </Select>
                                       <div className='grid grid-cols-3 gap-2'>
                                         <Button
                                           onClick={handlePlayPauseAnimation}
@@ -33134,29 +38009,40 @@ const ModelViewer3D = () => {
                                         >
                                           <StopCircle size={16} />
                                         </Button>
-                                        <Button
-                                          variant={
-                                            isAnimationLooping
-                                              ? "secondary"
-                                              : "outline"
-                                          }
-                                          onClick={() =>
-                                            handleAnimationLoopToggle(
-                                              !isAnimationLooping
-                                            )
-                                          }
-                                          disabled={
-                                            selectedAnimationClipIndex < 0
-                                          }
-                                          className={cn(
-                                            isAnimationLooping
-                                              ? "bg-purple-500 hover:bg-purple-600 text-white"
-                                              : "border-slate-600 text-slate-300 hover:bg-slate-700/50"
-                                          )}
-                                        >
-                                          <Repeat size={16} />
-                                        </Button>
-                                      </div>{" "}
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant={
+                                                isAnimationLooping
+                                                  ? "secondary"
+                                                  : "outline"
+                                              }
+                                              onClick={() =>
+                                                handleAnimationLoopToggle(
+                                                  !isAnimationLooping
+                                                )
+                                              }
+                                              disabled={
+                                                selectedAnimationClipIndex < 0
+                                              }
+                                              className={cn(
+                                                isAnimationLooping
+                                                  ? "bg-purple-500 hover:bg-purple-600 text-white"
+                                                  : "border-slate-600 text-slate-300 hover:bg-slate-700/50"
+                                              )}
+                                            >
+                                              <Repeat size={16} />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side='bottom'>
+                                            <p>
+                                              {isAnimationLooping
+                                                ? "Disable Loop"
+                                                : "Enable Loop"}
+                                            </p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </div>
                                       <div className='space-y-1.5'>
                                         <Label
                                           htmlFor='animTimePanelSheet'
@@ -33174,8 +38060,8 @@ const ModelViewer3D = () => {
                                           max={1}
                                           step={0.001}
                                           value={[animationTime]}
-                                          onValueChange={(val) =>
-                                            handleAnimationTimeChange(val)
+                                          onValueChange={(valArray) =>
+                                            handleAnimationTimeChange(valArray)
                                           }
                                           disabled={
                                             selectedAnimationClipIndex < 0 ||
@@ -33183,7 +38069,7 @@ const ModelViewer3D = () => {
                                           }
                                           className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                         />
-                                      </div>{" "}
+                                      </div>
                                       <div className='space-y-1.5'>
                                         <Label
                                           htmlFor='animSpeedPanelSliderSheet'
@@ -33198,22 +38084,21 @@ const ModelViewer3D = () => {
                                           max={3}
                                           step={0.1}
                                           value={[animationPlaybackSpeed]}
-                                          onValueChange={(val) =>
-                                            handleAnimationSpeedChange(val)
+                                          onValueChange={(valArray) =>
+                                            handleAnimationSpeedChange(valArray)
                                           }
                                           disabled={
                                             selectedAnimationClipIndex < 0
                                           }
                                           className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                         />
-                                      </div>{" "}
+                                      </div>
                                     </div>
                                   </section>
                                 </>
                               )}
                           </div>
                         </ScrollArea>
-                        {/* Detailed Settings Sheet Content End */}
                         <SheetFooter className='p-4 border-t border-slate-700 bg-slate-800/95'>
                           <SheetClose asChild>
                             <Button
@@ -33226,7 +38111,7 @@ const ModelViewer3D = () => {
                           </SheetClose>
                         </SheetFooter>
                       </SheetContent>
-                    </Sheet>{" "}
+                    </Sheet>
                   </div>
                   <CardContent className='p-0 w-full h-full relative'>
                     <div
@@ -33252,15 +38137,15 @@ const ModelViewer3D = () => {
                           outputColorSpace: THREE.SRGBColorSpace,
                           toneMapping: THREE.ACESFilmicToneMapping,
                         }}
-                        style={{
-                          background:
-                            canvasBgColor !== "transparent"
-                              ? canvasBgColor
-                              : "transparent",
-                        }}
+                        style={{ background: canvasBgColor }}
                         onCreated={({ gl }) => {
                           gl.toneMappingExposure = 1.0;
                         }}
+                        key={
+                          isFullscreen.toString() +
+                          settings.background +
+                          customBgImageUrl
+                        }
                       >
                         <Suspense
                           fallback={
@@ -33304,7 +38189,7 @@ const ModelViewer3D = () => {
                         </Suspense>
                       </Canvas>
                       {isLoadingModel && !isExporting && (
-                        <div className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800/80 p-4 rounded-lg text-center shadow-xl backdrop-blur-sm'>
+                        <div className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800/80 p-4 rounded-lg text-center shadow-xl backdrop-blur-sm z-10'>
                           <Loader2 className='h-8 w-8 animate-spin text-purple-400 mx-auto mb-2' />
                           <p className='text-sm'>
                             Loading... {Math.round(modelLoadProgress)}%
@@ -33313,28 +38198,25 @@ const ModelViewer3D = () => {
                       )}
                       {isExporting && (
                         <div className='absolute inset-0 bg-black/80 flex flex-col items-center justify-center rounded-lg z-10 backdrop-blur-sm'>
-                          {" "}
                           <Card className='bg-slate-100 text-slate-800 p-6 sm:p-8 shadow-2xl text-center w-72'>
-                            {" "}
                             <CardHeader className='p-0 mb-4'>
                               <CardTitle className='text-xl sm:text-2xl'>
                                 Exporting Model
                               </CardTitle>
-                            </CardHeader>{" "}
+                            </CardHeader>
                             <CardContent className='p-0 space-y-3'>
-                              {" "}
                               <div className='text-lg font-semibold'>
                                 {Math.round(exportProgress)}%
-                              </div>{" "}
+                              </div>
                               <Progress
                                 value={exportProgress}
                                 className='w-full h-2.5'
-                              />{" "}
+                              />
                               <p className='text-xs text-slate-500'>
                                 Please wait...
-                              </p>{" "}
-                            </CardContent>{" "}
-                          </Card>{" "}
+                              </p>
+                            </CardContent>
+                          </Card>
                         </div>
                       )}
                     </div>
@@ -33343,13 +38225,12 @@ const ModelViewer3D = () => {
               </div>
             </div>
             <footer className='text-center mt-10 sm:mt-16 py-6 border-t border-slate-700/50'>
-              {" "}
               <p className='text-slate-400 text-sm'>
                 © {new Date().getFullYear()} 3D Shape Studio Pro.
-              </p>{" "}
+              </p>
               <p className='text-xs text-slate-500 mt-1'>
                 Interactive 3D modeling and visualization.
-              </p>{" "}
+              </p>
             </footer>
           </div>
         </div>
