@@ -470,7 +470,6 @@ const createMusicNoteShape = (size = 1) => {
   return shape;
 };
 
-// --- Constants ---
 const animationPresets = {
   gentle: {
     rotationSpeed: [0.002, 0.004, 0.001],
@@ -1008,6 +1007,7 @@ const ImportedModel = React.memo(
         isAnimationLooping,
         animationPlaybackSpeed,
         animationTime,
+        forceMaterialResetKey,
       },
       ref
     ) => {
@@ -1044,7 +1044,6 @@ const ImportedModel = React.memo(
             return;
           }
 
-          // --- Centering and Scaling ---
           let box = new THREE.Box3().setFromObject(targetObject);
           if (box.isEmpty()) {
             targetObject.traverse((child) => {
@@ -1052,13 +1051,13 @@ const ImportedModel = React.memo(
                 const childBox = new THREE.Box3().setFromObject(child);
                 if (!childBox.isEmpty()) {
                   if (box.isEmpty()) box.copy(childBox);
-                  else box.expandByObject(child); // expand box if multiple meshes
+                  else box.expandByObject(child);
                 }
               }
             });
             if (box.isEmpty()) {
               console.warn(
-                "[ImportedModel processLoadedObject] Bounding box completely empty even after traverse. Defaulting scale/pos."
+                "[ImportedModel processLoadedObject] Bounding box empty. Defaulting scale/pos."
               );
               targetObject.scale.setScalar(1);
               targetObject.position.set(0, 0, 0);
@@ -1072,10 +1071,9 @@ const ImportedModel = React.memo(
               saneNumber(sizeVec.y, 1),
               saneNumber(sizeVec.z, 1)
             );
-            const scaleFactor = maxDim > 0 ? 3 / maxDim : 1; // Target size 3 units
+            const scaleFactor = maxDim > 0 ? 3 / maxDim : 1;
             targetObject.scale.setScalar(saneNumber(scaleFactor, 1));
-
-            const scaledBox = new THREE.Box3().setFromObject(targetObject); // Recompute box after scaling
+            const scaledBox = new THREE.Box3().setFromObject(targetObject);
             const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
             if (
               !isNaN(scaledCenter.x) &&
@@ -1090,7 +1088,6 @@ const ImportedModel = React.memo(
               targetObject.position.set(0, 0, 0);
             }
           }
-          // --- End Centering and Scaling ---
 
           const customMaterialProps = settings.customMaterialProperties || {};
           const anyCustomTexMap = [
@@ -1105,7 +1102,6 @@ const ImportedModel = React.memo(
               typeof customMaterialProps[key] === "string" &&
               customMaterialProps[key].trim() !== ""
           );
-
           const userSelectedSpecificMaterialType =
             settings.materialType !== "auto";
 
@@ -1124,16 +1120,9 @@ const ImportedModel = React.memo(
           );
 
           if (applyOurMaterial) {
-            console.log(
-              `[ImportedModel] Applying/Overriding materials for ${fileType} with settings:`,
-              settings.materialType,
-              settings.shapeColor
-            );
-
             let materialTypeForLogic = settings.materialType;
-            if (settings.materialType === "auto") {
+            if (settings.materialType === "auto")
               materialTypeForLogic = "ceramic";
-            }
 
             const {
               constructor: MatCtor,
@@ -1142,34 +1131,28 @@ const ImportedModel = React.memo(
             } = createR3FMaterialProps(
               settings.shapeColor,
               materialTypeForLogic,
-              customMaterialProps, // Pass the whole customMaterialProperties
+              customMaterialProps,
               r3fScene.environment
             );
             const textureLoader = new THREE.TextureLoader();
             const loadedTexturesCache = {};
             const meshesToProcess = [];
-
-            if (targetObject.isMesh) {
-              meshesToProcess.push(targetObject);
-            } else {
+            if (targetObject.isMesh) meshesToProcess.push(targetObject);
+            else
               targetObject.traverse((child) => {
                 if (child.isMesh) meshesToProcess.push(child);
               });
-            }
 
-            if (meshesToProcess.length === 0) {
+            if (meshesToProcess.length === 0)
               console.warn(
-                "[ImportedModel processLoadedObject] No meshes found in target object to apply material:",
+                "[ImportedModel processLoadedObject] No meshes found to apply material:",
                 targetObject
               );
-            }
 
             meshesToProcess.forEach(async (mesh) => {
               mesh.castShadow = true;
               mesh.receiveShadow = true;
-
               const newMaterial = new MatCtor(baseMatArgs);
-
               for (const mapName of [
                 "map",
                 "normalMap",
@@ -1178,14 +1161,14 @@ const ImportedModel = React.memo(
                 "aoMap",
                 "emissiveMap",
               ]) {
-                const url = texUrlsFromSettings[`${mapName}Url`]; // Corrected: use texUrlsFromSettings
+                const url = texUrlsFromSettings[`${mapName}Url`];
                 if (url) {
                   try {
-                    let tex = loadedTexturesCache[url];
-                    if (!tex) {
-                      tex = loadedTexturesCache[url] =
-                        await textureLoader.loadAsync(url);
-                    }
+                    let tex =
+                      loadedTexturesCache[url] ||
+                      (loadedTexturesCache[url] = await textureLoader.loadAsync(
+                        url
+                      ));
                     if (mapName === "map" || mapName === "emissiveMap")
                       tex.colorSpace = THREE.SRGBColorSpace;
                     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -1196,23 +1179,12 @@ const ImportedModel = React.memo(
                   }
                 }
               }
-
-              if (
-                mesh.material &&
-                typeof mesh.material.dispose === "function"
-              ) {
-                if (mesh.material !== newMaterial) {
-                  // Avoid disposing the same material if somehow re-assigned
-                  mesh.material.dispose();
-                }
-              }
+              if (mesh.material?.dispose && mesh.material !== newMaterial)
+                mesh.material.dispose();
               mesh.material = newMaterial;
               newMaterial.needsUpdate = true;
             });
-          } else {
-            console.log(
-              `[ImportedModel] Using original materials for ${fileType}, applying envMap and side.`
-            );
+          } else if (fileType !== "stl") {
             targetObject.traverse((child) => {
               if (child.isMesh && child.material) {
                 const materials = Array.isArray(child.material)
@@ -1222,7 +1194,7 @@ const ImportedModel = React.memo(
                   mat.side = THREE.DoubleSide;
                   if (!mat.envMap && r3fScene.environment)
                     mat.envMap = r3fScene.environment;
-                  const envIS = customMaterialProps.envMapIntensity; // Use customMaterialProps here
+                  const envIS = customMaterialProps.envMapIntensity;
                   mat.envMapIntensity =
                     envIS !== null && envIS !== undefined
                       ? envIS
@@ -1238,14 +1210,13 @@ const ImportedModel = React.memo(
           r3fScene.environment,
           settings.shapeColor,
           settings.materialType,
-          settings.customMaterialProperties, // Now this is a direct dependency
+          settings.customMaterialProperties,
           onModelLoad,
           fileType,
           mtlUrl,
         ]
       );
 
-      // --- Manual Loader useEffects (GLTF, FBX, OBJ, STL - unchanged) ---
       useEffect(() => {
         setManualGltfScene(null);
         setManualGltfAnimations([]);
@@ -1355,7 +1326,6 @@ const ImportedModel = React.memo(
         }
       }, [fileType, modelUrl]);
 
-      // Effect to call processLoadedObject when model or relevant settings change
       useEffect(() => {
         let objectForProcessing = null;
         let animationsForProcessing = [];
@@ -1389,9 +1359,9 @@ const ImportedModel = React.memo(
         fileType,
         manualGltfAnimations,
         manualFbxAnimations,
-      ]); // processLoadedObject will change if settings it depends on change
+        forceMaterialResetKey,
+      ]);
 
-      // --- Animation useFrame and useEffect for mixer setup (unchanged) ---
       useFrame((_, delta) => {
         if (mixerRef.current && animationPlaybackState === "playing") {
           mixerRef.current.update(delta * animationPlaybackSpeed);
@@ -1412,14 +1382,21 @@ const ImportedModel = React.memo(
           }
         }
       });
+
       useEffect(() => {
         const modelRoot = internalGroupRef.current;
         let clips = [];
         if (fileType === "glb" || fileType === "gltf")
           clips = manualGltfAnimations || [];
         else if (fileType === "fbx") clips = manualFbxAnimations || [];
-        if (mixerRef.current) mixerRef.current.stopAllAction();
-        if (activeActionRef.current) activeActionRef.current.stop();
+
+        if (mixerRef.current) {
+          mixerRef.current.stopAllAction();
+        }
+        if (activeActionRef.current) {
+          activeActionRef.current.stop();
+        }
+
         if (modelRoot && clips.length > 0) {
           mixerRef.current = new THREE.AnimationMixer(modelRoot);
           if (
@@ -1435,6 +1412,7 @@ const ImportedModel = React.memo(
             activeActionRef.current.timeScale = animationPlaybackSpeed;
             activeActionRef.current.time =
               clip.duration > 0 ? animationTime * clip.duration : 0;
+
             if (animationPlaybackState === "playing")
               activeActionRef.current.play();
             else if (animationPlaybackState === "paused") {
@@ -1467,10 +1445,8 @@ const ImportedModel = React.memo(
         activeActionRef,
       ]);
 
-      // --- Render Logic ---
       if (fileType === "stl") {
         if (manualStlGeometry) {
-          // Placeholder material here; processLoadedObject will apply the correct one.
           return (
             <group ref={internalGroupRef}>
               <mesh geometry={manualStlGeometry} castShadow receiveShadow>
@@ -1521,7 +1497,6 @@ const ImportedModel = React.memo(
 );
 ImportedModel.displayName = "ImportedModel";
 
-// --- TextOverlay component (unchanged) ---
 const TextOverlay = React.memo(
   ({
     text,
@@ -1574,7 +1549,6 @@ const TextOverlay = React.memo(
 );
 TextOverlay.displayName = "TextOverlay";
 
-// --- SceneContentInternal component (unchanged) ---
 const SceneContentInternal = React.memo(
   ({
     settings,
@@ -1598,6 +1572,7 @@ const SceneContentInternal = React.memo(
     isAnimationLooping,
     animationPlaybackSpeed,
     animationTime,
+    forceMaterialResetKey,
   }) => {
     const { scene, gl, controls } = useThree();
     useEffect(() => {
@@ -1685,9 +1660,9 @@ const SceneContentInternal = React.memo(
       current3DText,
       isTextVisible,
     ]);
+
     return (
       <>
-        {" "}
         <ambientLight
           intensity={
             settings.ambientLight.enabled
@@ -1695,7 +1670,7 @@ const SceneContentInternal = React.memo(
               : 0
           }
           color={settings.ambientLight.color}
-        />{" "}
+        />
         <directionalLight
           position={[5, 8, 5]}
           intensity={
@@ -1710,7 +1685,7 @@ const SceneContentInternal = React.memo(
           shadow-camera-near={0.5}
           shadow-camera-far={50}
           shadow-bias={-0.0005}
-        />{" "}
+        />
         <directionalLight
           position={[-5, 3, -3]}
           intensity={
@@ -1719,7 +1694,7 @@ const SceneContentInternal = React.memo(
               : 0
           }
           color={settings.fillLight.color}
-        />{" "}
+        />
         <Suspense fallback={null}>
           {" "}
           {settings.background === "customImage" && customBgImageUrl ? (
@@ -1748,7 +1723,7 @@ const SceneContentInternal = React.memo(
               environmentIntensity={0.5}
             />
           )}{" "}
-        </Suspense>{" "}
+        </Suspense>
         <Grid
           infiniteGrid
           cellSize={0.5}
@@ -1758,7 +1733,7 @@ const SceneContentInternal = React.memo(
           sectionColor={new THREE.Color(0x6f6f6f)}
           cellColor={new THREE.Color(0x444444)}
           fadeDistance={50}
-        />{" "}
+        />
         {!isImportedModelDisplayed ? (
           <Suspense fallback={null}>
             <ProceduralShape
@@ -1788,9 +1763,10 @@ const SceneContentInternal = React.memo(
               isAnimationLooping={isAnimationLooping}
               animationPlaybackSpeed={animationPlaybackSpeed}
               animationTime={animationTime}
+              forceMaterialResetKey={forceMaterialResetKey}
             />
           </Suspense>
-        ) : null}{" "}
+        ) : null}
         <TextOverlay
           text={current3DText}
           fontUrl={settings.textFontUrl}
@@ -1800,7 +1776,7 @@ const SceneContentInternal = React.memo(
           isVisible={isTextVisible}
           textYOffset={textYOffset}
           materialProps={{ metalness: 0.4, roughness: 0.6 }}
-        />{" "}
+        />
         <DreiOrbitControls
           makeDefault
           enableDamping
@@ -1814,7 +1790,7 @@ const SceneContentInternal = React.memo(
           maxPolarAngle={Math.PI / 1.65}
           minPolarAngle={Math.PI / 4}
           target={[0, 0.3, 0]}
-        />{" "}
+        />
         {(settings.n8ao?.enabled || settings.bloom?.enabled) && (
           <EffectComposer enableNormalPass>
             {" "}
@@ -1844,14 +1820,13 @@ const SceneContentInternal = React.memo(
               />
             )}{" "}
           </EffectComposer>
-        )}{" "}
+        )}
       </>
     );
   }
 );
 SceneContentInternal.displayName = "SceneContentInternal";
 
-// --- ModelViewer3D (Main Component - largely unchanged from previous full code, JSX for settings panel sliders for N8AO/Bloom can be added if desired) ---
 const ModelViewer3D = () => {
   const [isMounted, setIsMounted] = useState(false);
   const fileInputRef = useRef(null);
@@ -1903,6 +1878,7 @@ const ModelViewer3D = () => {
   const [animationDuration, setAnimationDuration] = useState(0);
   const [isAnimationLooping, setIsAnimationLooping] = useState(true);
   const [animationPlaybackSpeed, setAnimationPlaybackSpeed] = useState(1.0);
+  const [forceMaterialResetKey, setForceMaterialResetKey] = useState(0); // New state for material reset
 
   const historyStackRef = useRef([]);
   const historyPointerRef = useRef(-1);
@@ -1930,6 +1906,7 @@ const ModelViewer3D = () => {
           customBgImageUrl,
           current3DText,
           isTextVisible,
+          forceMaterialResetKey /* Include new state if it needs to be in history */,
         })
       ),
     [
@@ -1949,6 +1926,7 @@ const ModelViewer3D = () => {
       customBgImageUrl,
       current3DText,
       isTextVisible,
+      forceMaterialResetKey,
     ]
   );
   const applyState = useCallback(
@@ -1982,6 +1960,8 @@ const ModelViewer3D = () => {
       setCurrent3DText(stateToApply.current3DText);
       setIsTextVisible(stateToApply.isTextVisible);
       setTextInput(stateToApply.current3DText);
+      if (stateToApply.forceMaterialResetKey !== undefined)
+        setForceMaterialResetKey(stateToApply.forceMaterialResetKey);
       requestAnimationFrame(() => {
         isUndoingRedoingRef.current = false;
       });
@@ -2095,7 +2075,7 @@ const ModelViewer3D = () => {
     if (loadedObject && animationClipsRef.current.length > 0) {
       setSelectedAnimationClipIndex(0);
       setAnimationDuration(animationClipsRef.current[0].duration);
-      setAnimationPlaybackState("stopped");
+      setAnimationPlaybackState("playing"); // AUTOPLAY
       setAnimationTime(0);
     } else {
       setSelectedAnimationClipIndex(-1);
@@ -2619,8 +2599,8 @@ const ModelViewer3D = () => {
       setSelectedAnimationClipIndex(index);
       setAnimationDuration(animationClipsRef.current[index].duration);
       setAnimationTime(0);
-      setAnimationPlaybackState("stopped");
-      sonnerToast.info(
+      setAnimationPlaybackState("playing");
+      /* AUTOPLAY new clip */ sonnerToast.info(
         `Animation: ${
           animationClipsRef.current[index].name || `Clip ${index + 1}`
         }`
@@ -2730,12 +2710,32 @@ const ModelViewer3D = () => {
   const canUndo = historyPointerRef.current > 0;
   const canRedo =
     historyPointerRef.current < historyStackRef.current.length - 1;
-  const proceduralMaterialTypeForPanel =
-    settings.materialType === "auto"
-      ? SHAPES_BY_CATEGORY_DATA[currentCategory]?.find(
-          (s) => s.id === currentShape
-        )?.autoMaterial || "ceramic"
-      : settings.materialType;
+
+  let currentActiveMaterialType = settings.materialType;
+  if (isImportedModelDisplayed && settings.materialType === "auto") {
+    // For imported models, 'auto' might mean we don't show fine-tune if no custom textures forcing an override
+    const anyCustomTexMap = [
+      "mapUrl",
+      "normalMapUrl",
+      "roughnessMapUrl",
+      "metalnessMapUrl",
+      "aoMapUrl",
+      "emissiveMapUrl",
+    ].some(
+      (key) =>
+        typeof settings.customMaterialProperties[key] === "string" &&
+        settings.customMaterialProperties[key].trim() !== ""
+    );
+    if (!anyCustomTexMap)
+      currentActiveMaterialType = "auto"; // Keep as auto to hide fine-tune
+    else currentActiveMaterialType = "ceramic"; // Default to ceramic if auto + textures
+  } else if (!isImportedModelDisplayed && settings.materialType === "auto") {
+    currentActiveMaterialType =
+      SHAPES_BY_CATEGORY_DATA[currentCategory]?.find(
+        (s) => s.id === currentShape
+      )?.autoMaterial || "ceramic";
+  }
+
   const textureSlots = [
     { id: "map", name: "Color/Albedo" },
     { id: "normalMap", name: "Normal" },
@@ -2860,7 +2860,7 @@ const ModelViewer3D = () => {
                         {importedModelName}
                       </p>
                     </CardContent>
-                    <CardFooter>
+                    <CardFooter className='flex flex-col space-y-2'>
                       <Button
                         variant='destructive'
                         size='sm'
@@ -2895,7 +2895,30 @@ const ModelViewer3D = () => {
                       >
                         {" "}
                         <XCircle size={16} className='mr-2' /> Clear Imported{" "}
-                      </Button>
+                      </Button>{" "}
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        className='w-full border-orange-500 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 mt-2'
+                        onClick={() => {
+                          setSettings((s) => ({
+                            ...s,
+                            materialType: "auto",
+                            customMaterialProperties: {
+                              ...initialSettings.customMaterialProperties,
+                              envMapIntensity:
+                                s.customMaterialProperties.envMapIntensity,
+                            },
+                          }));
+                          setForceMaterialResetKey((prev) => prev + 1);
+                          sonnerToast.info("Imported model appearance reset.");
+                          pushHistory("reset imported appearance");
+                        }}
+                      >
+                        {" "}
+                        <RotateCcw size={16} className='mr-2' /> Reset
+                        Appearance{" "}
+                      </Button>{" "}
                     </CardFooter>
                   </Card>
                 )}
@@ -3134,6 +3157,7 @@ const ModelViewer3D = () => {
                         </SheetHeader>
                         <ScrollArea className='h-[calc(100vh-128px)]'>
                           <div className='space-y-6 p-4'>
+                            {/* --- Material Settings Section --- */}
                             <section className='space-y-4'>
                               <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
                                 <Palette
@@ -3226,23 +3250,11 @@ const ModelViewer3D = () => {
                                   className='w-full p-1 h-9 bg-slate-700 border-slate-600 cursor-pointer focus-visible:ring-purple-500'
                                 />
                               </div>
-                              {(settings.materialType !== "auto" ||
-                                (isImportedModelDisplayed &&
-                                  Object.values(
-                                    settings.customMaterialProperties
-                                  ).some(
-                                    (v) =>
-                                      typeof v === "string" &&
-                                      v.trim() !== "" &&
-                                      v !==
-                                        initialSettings.customMaterialProperties
-                                          .envMapIntensity
-                                  ))) && ( // Show fine-tune if not auto OR if any custom prop is set (excluding envMapIntensity for this condition)
+                              {currentActiveMaterialType !== "auto" && (
                                 <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30'>
                                   <div className='flex justify-between items-center'>
                                     <h4 className='text-xs font-semibold text-purple-300'>
-                                      Fine-tune '
-                                      {proceduralMaterialTypeForPanel}'
+                                      Fine-tune '{currentActiveMaterialType}'
                                     </h4>
                                     <Button
                                       variant='ghost'
@@ -3253,9 +3265,8 @@ const ModelViewer3D = () => {
                                       Reset to Preset
                                     </Button>
                                   </div>
-                                  {proceduralMaterialTypeForPanel !== "glass" &&
-                                    proceduralMaterialTypeForPanel !==
-                                      "crystal" && (
+                                  {currentActiveMaterialType !== "glass" &&
+                                    currentActiveMaterialType !== "crystal" && (
                                       <div className='space-y-1.5'>
                                         <div className='flex justify-between items-center'>
                                           <Label
@@ -3269,7 +3280,7 @@ const ModelViewer3D = () => {
                                               settings.customMaterialProperties
                                                 .roughness ??
                                               baseMaterialPresets[
-                                                proceduralMaterialTypeForPanel
+                                                currentActiveMaterialType
                                               ]?.roughness ??
                                               0
                                             ).toFixed(2)}
@@ -3284,7 +3295,7 @@ const ModelViewer3D = () => {
                                             settings.customMaterialProperties
                                               .roughness ??
                                               baseMaterialPresets[
-                                                proceduralMaterialTypeForPanel
+                                                currentActiveMaterialType
                                               ]?.roughness ??
                                               0,
                                           ]}
@@ -3299,13 +3310,10 @@ const ModelViewer3D = () => {
                                         />
                                       </div>
                                     )}
-                                  {(proceduralMaterialTypeForPanel ===
-                                    "metallic" ||
-                                    proceduralMaterialTypeForPanel ===
-                                      "ceramic" ||
-                                    proceduralMaterialTypeForPanel ===
-                                      "plastic" ||
-                                    proceduralMaterialTypeForPanel ===
+                                  {(currentActiveMaterialType === "metallic" ||
+                                    currentActiveMaterialType === "ceramic" ||
+                                    currentActiveMaterialType === "plastic" ||
+                                    currentActiveMaterialType ===
                                       "organic") && (
                                     <div className='space-y-1.5'>
                                       <div className='flex justify-between items-center'>
@@ -3320,7 +3328,7 @@ const ModelViewer3D = () => {
                                             settings.customMaterialProperties
                                               .metalness ??
                                             baseMaterialPresets[
-                                              proceduralMaterialTypeForPanel
+                                              currentActiveMaterialType
                                             ]?.metalness ??
                                             0
                                           ).toFixed(2)}
@@ -3335,7 +3343,7 @@ const ModelViewer3D = () => {
                                           settings.customMaterialProperties
                                             .metalness ??
                                             baseMaterialPresets[
-                                              proceduralMaterialTypeForPanel
+                                              currentActiveMaterialType
                                             ]?.metalness ??
                                             0,
                                         ]}
@@ -3350,9 +3358,8 @@ const ModelViewer3D = () => {
                                       />
                                     </div>
                                   )}
-                                  {(proceduralMaterialTypeForPanel ===
-                                    "glass" ||
-                                    proceduralMaterialTypeForPanel ===
+                                  {(currentActiveMaterialType === "glass" ||
+                                    currentActiveMaterialType ===
                                       "crystal") && (
                                     <>
                                       <div className='space-y-1.5'>
@@ -3368,7 +3375,7 @@ const ModelViewer3D = () => {
                                               settings.customMaterialProperties
                                                 .ior ??
                                               baseMaterialPresets[
-                                                proceduralMaterialTypeForPanel
+                                                currentActiveMaterialType
                                               ]?.ior ??
                                               1.5
                                             ).toFixed(2)}
@@ -3383,7 +3390,7 @@ const ModelViewer3D = () => {
                                             settings.customMaterialProperties
                                               .ior ??
                                               baseMaterialPresets[
-                                                proceduralMaterialTypeForPanel
+                                                currentActiveMaterialType
                                               ]?.ior ??
                                               1.5,
                                           ]}
@@ -3410,7 +3417,7 @@ const ModelViewer3D = () => {
                                               settings.customMaterialProperties
                                                 .transmission ??
                                               baseMaterialPresets[
-                                                proceduralMaterialTypeForPanel
+                                                currentActiveMaterialType
                                               ]?.transmission ??
                                               0
                                             ).toFixed(2)}
@@ -3425,7 +3432,7 @@ const ModelViewer3D = () => {
                                             settings.customMaterialProperties
                                               .transmission ??
                                               baseMaterialPresets[
-                                                proceduralMaterialTypeForPanel
+                                                currentActiveMaterialType
                                               ]?.transmission ??
                                               0,
                                           ]}
@@ -3452,7 +3459,7 @@ const ModelViewer3D = () => {
                                               settings.customMaterialProperties
                                                 .thickness ??
                                               baseMaterialPresets[
-                                                proceduralMaterialTypeForPanel
+                                                currentActiveMaterialType
                                               ]?.thickness ??
                                               0
                                             ).toFixed(2)}
@@ -3467,7 +3474,7 @@ const ModelViewer3D = () => {
                                             settings.customMaterialProperties
                                               .thickness ??
                                               baseMaterialPresets[
-                                                proceduralMaterialTypeForPanel
+                                                currentActiveMaterialType
                                               ]?.thickness ??
                                               0,
                                           ]}
@@ -3484,7 +3491,7 @@ const ModelViewer3D = () => {
                                     </>
                                   )}
                                   {baseMaterialPresets[
-                                    proceduralMaterialTypeForPanel
+                                    currentActiveMaterialType
                                   ]?.useEmissive && (
                                     <div className='space-y-1.5'>
                                       <div className='flex justify-between items-center'>
@@ -3499,7 +3506,7 @@ const ModelViewer3D = () => {
                                             settings.customMaterialProperties
                                               .emissiveIntensity ??
                                             baseMaterialPresets[
-                                              proceduralMaterialTypeForPanel
+                                              currentActiveMaterialType
                                             ]?.emissiveIntensity ??
                                             1.0
                                           ).toFixed(2)}
@@ -3514,7 +3521,7 @@ const ModelViewer3D = () => {
                                           settings.customMaterialProperties
                                             .emissiveIntensity ??
                                             baseMaterialPresets[
-                                              proceduralMaterialTypeForPanel
+                                              currentActiveMaterialType
                                             ]?.emissiveIntensity ??
                                             1.0,
                                         ]}
@@ -3542,7 +3549,7 @@ const ModelViewer3D = () => {
                                           settings.customMaterialProperties
                                             .envMapIntensity ??
                                           baseMaterialPresets[
-                                            proceduralMaterialTypeForPanel
+                                            currentActiveMaterialType
                                           ]?.envMapIntensity ??
                                           1.0
                                         ).toFixed(2)}
@@ -3557,7 +3564,7 @@ const ModelViewer3D = () => {
                                         settings.customMaterialProperties
                                           .envMapIntensity ??
                                           baseMaterialPresets[
-                                            proceduralMaterialTypeForPanel
+                                            currentActiveMaterialType
                                           ]?.envMapIntensity ??
                                           1.0,
                                       ]}
@@ -4318,6 +4325,7 @@ const ModelViewer3D = () => {
                             isAnimationLooping={isAnimationLooping}
                             animationPlaybackSpeed={animationPlaybackSpeed}
                             animationTime={animationTime}
+                            forceMaterialResetKey={forceMaterialResetKey}
                           />
                         </Suspense>
                       </Canvas>
