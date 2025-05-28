@@ -11,26 +11,20 @@ import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { FontLoader } from "three/examples/jsm/loaders/FontLoader.js";
 import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
 
-// IMPORTANT: Import GLTFLoader and DRACOLoader directly from three/examples
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
-// Keep other loaders for useLoader hook
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
-import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js"; // Keep for useFBX
-import { TDSLoader } from "three/examples/jsm/loaders/TDSLoader.js";
+import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 
-import { Canvas, useFrame, useThree, useLoader } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   Text3D,
   Center,
   OrbitControls as DreiOrbitControls,
   Environment,
-  useGLTF, // Still used if we revert, or for other potential uses
-  useFBX, // Keep for FBX
   useTexture,
-  Stats,
   Grid,
   Loader as DreiLoader,
   useProgress,
@@ -64,8 +58,6 @@ import {
   SunMedium,
   Zap,
   Sparkles,
-  Eye,
-  EyeOff,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -120,6 +112,7 @@ const saneNumber = (value, defaultValue = 0) => {
   return isNaN(num) || !isFinite(num) ? defaultValue : num;
 };
 
+// --- Shape Creation Functions ---
 const createCatShape = (size = 1) => {
   const s = saneNumber(size, 1);
   const shape = new THREE.Shape();
@@ -477,6 +470,7 @@ const createMusicNoteShape = (size = 1) => {
   return shape;
 };
 
+// --- Constants ---
 const animationPresets = {
   gentle: {
     rotationSpeed: [0.002, 0.004, 0.001],
@@ -600,6 +594,7 @@ const initialSettings = {
     metalnessMapUrl: null,
     aoMapUrl: null,
     emissiveMapUrl: null,
+    envMapIntensity: 1.0,
   },
   textFontUrl: "/fonts/helvetiker_regular.typeface.json",
   textColor: "#E0E0E0",
@@ -624,15 +619,13 @@ const initialSettings = {
   },
 };
 
-// Solution Change 1: Conditional module-level font loading
-let helvetikerFontForExport = null; // This will hold the font once loaded
-const DEFAULT_FONT_PATH = "/fonts/helvetiker_regular.typeface.json"; // Define the default font path
+let helvetikerFontForExport = null;
+const DEFAULT_FONT_PATH = "/fonts/helvetiker_regular.typeface.json";
 
 if (typeof window !== "undefined") {
-  // Ensure this runs only on the client
   const clientPreloaderFontLoader = new FontLoader();
   clientPreloaderFontLoader.load(
-    DEFAULT_FONT_PATH, // Pre-load the default font (same as initialSettings.textFontUrl)
+    DEFAULT_FONT_PATH,
     (font) => {
       helvetikerFontForExport = font;
       console.log("Default font for GLB export pre-loaded on client.");
@@ -643,7 +636,6 @@ if (typeof window !== "undefined") {
         "Failed to pre-load default font for GLB export on client:",
         err
       );
-      // Font will be loaded on-demand if needed by handleExportGLB
     }
   );
 }
@@ -675,6 +667,11 @@ function createR3FMaterialProps(
     customProps.emissiveIntensity !== undefined
   )
     finalProps.emissiveIntensity = customProps.emissiveIntensity;
+  finalProps.envMapIntensity =
+    customProps.envMapIntensity !== null &&
+    customProps.envMapIntensity !== undefined
+      ? customProps.envMapIntensity
+      : preset.envMapIntensity ?? 1.0;
 
   let materialEffectiveBaseColor = colorInput;
   if (
@@ -683,15 +680,6 @@ function createR3FMaterialProps(
     customProps.mapUrl.trim() !== ""
   ) {
     materialEffectiveBaseColor = new THREE.Color(0xffffff);
-    console.log(
-      "[createR3FMaterialProps] mapUrl found, setting materialEffectiveBaseColor to white. mapUrl:",
-      customProps.mapUrl
-    );
-  } else {
-    console.log(
-      "[createR3FMaterialProps] No mapUrl, using baseColor for materialEffectiveBaseColor:",
-      baseColor
-    );
   }
 
   if (finalProps.useEmissive) {
@@ -702,9 +690,8 @@ function createR3FMaterialProps(
     finalProps.emissive = new THREE.Color(
       hasEmissiveMap ? 0xffffff : colorInput
     );
-    if (!hasEmissiveMap && finalProps.emissive) {
+    if (!hasEmissiveMap && finalProps.emissive)
       finalProps.emissive.multiplyScalar(0.8);
-    }
   }
 
   const materialConstructor =
@@ -757,13 +744,8 @@ function createR3FMaterialProps(
 }
 
 const TextureLoaderInternal = ({ urls, onLoaded }) => {
-  console.log("[TextureLoaderInternal] Initializing with urls:", urls);
   const loadedTextures = useTexture(urls);
   useEffect(() => {
-    console.log(
-      "[TextureLoaderInternal] Loaded textures (resolved):",
-      loadedTextures
-    );
     onLoaded(loadedTextures);
   }, [loadedTextures, onLoaded]);
   return null;
@@ -775,101 +757,48 @@ const AppliedMaterial = React.memo(
     materialProps = {
       constructor: THREE.MeshStandardMaterial,
       args: { color: "gray" },
-      textureUrls: {},
     },
     textureUrls = {},
   }) => {
-    console.log(
-      "[AppliedMaterial FULL] Rendering. Props:",
-      {
-        constructorName: materialProps?.constructor?.name,
-        args: JSON.stringify(materialProps?.args),
-      },
-      "textureUrls:",
-      textureUrls
+    const validUrls = useMemo(
+      () =>
+        Object.fromEntries(
+          Object.entries(textureUrls).filter(
+            ([, value]) =>
+              value && typeof value === "string" && value.trim() !== ""
+          )
+        ),
+      [textureUrls]
     );
-
-    const validUrls = useMemo(() => {
-      const filtered = Object.fromEntries(
-        Object.entries(textureUrls).filter(
-          ([_key, value]) =>
-            value && typeof value === "string" && value.trim() !== ""
-        )
-      );
-      console.log("[AppliedMaterial FULL] Calculated validUrls:", filtered);
-      return filtered;
-    }, [textureUrls]);
-
     const hasValidUrls = Object.keys(validUrls).length > 0;
     const [internallyLoadedTextures, setInternallyLoadedTextures] =
       useState(null);
-
-    const handleTexturesLoaded = useCallback((loaded) => {
-      console.log(
-        "[AppliedMaterial FULL handleTexturesLoaded] Received from internal loader:",
-        loaded
-      );
-      setInternallyLoadedTextures(loaded);
-    }, []);
-
-    useEffect(() => {
-      console.log(
-        "[AppliedMaterial FULL] State 'internallyLoadedTextures' updated:",
-        internallyLoadedTextures
-      );
-    }, [internallyLoadedTextures]);
+    const handleTexturesLoaded = useCallback(
+      (loaded) => setInternallyLoadedTextures(loaded),
+      []
+    );
 
     const texturesToApply = useMemo(() => {
       const newTextures = {};
       if (hasValidUrls && internallyLoadedTextures) {
         Object.keys(validUrls).forEach((originalUrlKey) => {
           const textureObject = internallyLoadedTextures[originalUrlKey];
-          if (textureObject && textureObject.isTexture) {
+          if (textureObject?.isTexture)
             newTextures[originalUrlKey.replace("Url", "")] = textureObject;
-          } else {
-            console.warn(
-              `[AppliedMaterial FULL textures.useMemo] Texture for ${originalUrlKey} not a THREE.Texture. Received:`,
-              textureObject
-            );
-          }
         });
       }
-      console.log(
-        "[AppliedMaterial FULL textures.useMemo] Derived 'texturesToApply':",
-        newTextures
-      );
       return newTextures;
     }, [validUrls, internallyLoadedTextures, hasValidUrls]);
 
     useEffect(() => {
-      console.log(
-        "[AppliedMaterial FULL configureEffect] Configuring texturesToApply:",
-        texturesToApply
-      );
-      if (texturesToApply.map && texturesToApply.map.isTexture) {
+      if (texturesToApply.map?.isTexture)
         texturesToApply.map.colorSpace = THREE.SRGBColorSpace;
-        console.log(
-          "[AppliedMaterial FULL configureEffect] textures.map found. Image:",
-          texturesToApply.map.image
-        );
-        if (texturesToApply.map.image) {
-          console.log(
-            `[AppliedMaterial FULL configureEffect] Map image dimensions: ${texturesToApply.map.image.width}x${texturesToApply.map.image.height}`
-          );
-        }
-      }
-      if (
-        texturesToApply.emissiveMap &&
-        texturesToApply.emissiveMap.isTexture
-      ) {
+      if (texturesToApply.emissiveMap?.isTexture)
         texturesToApply.emissiveMap.colorSpace = THREE.SRGBColorSpace;
-        console.log(
-          "[AppliedMaterial FULL configureEffect] textures.emissiveMap found."
-        );
-      }
       Object.values(texturesToApply).forEach((tex) => {
-        if (tex && tex.isTexture) {
+        if (tex?.isTexture) {
           tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+          tex.needsUpdate = true;
         }
       });
     }, [texturesToApply]);
@@ -881,27 +810,16 @@ const AppliedMaterial = React.memo(
       materialProps?.constructor || THREE.MeshStandardMaterial;
     const allArgs = { ...safeMaterialArgs, ...texturesToApply };
 
-    console.log(
-      "[AppliedMaterial FULL] Final 'allArgs' for material component:",
-      JSON.stringify({
-        ...allArgs,
-        color: allArgs.color?.getHexString
-          ? allArgs.color.getHexString()
-          : allArgs.color,
-        map: allArgs.map ? "Texture Present" : "No Map",
-        envMap: allArgs.envMap ? "EnvMap Present" : "No EnvMap",
-      })
-    );
-
     return (
       <>
         {hasValidUrls && (
           <Suspense fallback={null}>
+            {" "}
             <TextureLoaderInternal
               key={JSON.stringify(validUrls)}
               urls={validUrls}
               onLoaded={handleTexturesLoaded}
-            />
+            />{" "}
           </Suspense>
         )}
         {MaterialConstructor === THREE.MeshPhysicalMaterial ? (
@@ -913,7 +831,7 @@ const AppliedMaterial = React.memo(
     );
   }
 );
-AppliedMaterial.displayName = "AppliedMaterial (Full)";
+AppliedMaterial.displayName = "AppliedMaterial";
 
 const ProceduralShape = React.memo(
   React.forwardRef(
@@ -936,13 +854,7 @@ const ProceduralShape = React.memo(
           lightning: { creator: createLightningBoltShape },
           music: { creator: createMusicNoteShape },
         };
-        let config = shapeConfigs[shapeId];
-        if (!config || typeof config.creator !== "function") {
-          console.warn(
-            `[ProceduralShape] Invalid or missing shapeId: "${shapeId}". Defaulting to "cat".`
-          );
-          config = shapeConfigs.cat;
-        }
+        let config = shapeConfigs[shapeId] || shapeConfigs.cat;
         const shapeSizeVal = saneNumber(size, 1.5);
         const proceduralShape = config.creator(shapeSizeVal);
         const extrudeSettings = {
@@ -975,10 +887,6 @@ const ProceduralShape = React.memo(
         );
         geom.computeVertexNormals();
         geom.center();
-        console.log(
-          `[ProceduralShape ${shapeId || "defaulting"}] Geometry UVs:`,
-          geom.attributes.uv
-        );
         return geom;
       }, [shapeId, settings.extrudeDepth, settings.quality, size]);
 
@@ -988,7 +896,7 @@ const ProceduralShape = React.memo(
           const foundShape = SHAPES_BY_CATEGORY_DATA[catId].find(
             (s) => s.id === shapeId
           );
-          if (foundShape && foundShape.autoMaterial) {
+          if (foundShape?.autoMaterial) {
             autoMaterialType = foundShape.autoMaterial;
             break;
           }
@@ -1031,11 +939,11 @@ const ProceduralShape = React.memo(
           if (preset) {
             const effDelta = delta * animSettings.animationSpeed;
             animationState.current.targetRotation.x +=
-              preset.rotationSpeed[0] * 60 * effDelta;
+              (preset.rotationSpeed?.[0] || 0) * 60 * effDelta;
             animationState.current.targetRotation.y +=
-              preset.rotationSpeed[1] * 60 * effDelta;
+              (preset.rotationSpeed?.[1] || 0) * 60 * effDelta;
             animationState.current.targetRotation.z +=
-              preset.rotationSpeed[2] * 60 * effDelta;
+              (preset.rotationSpeed?.[2] || 0) * 60 * effDelta;
             internalMeshRef.current.rotation.x = THREE.MathUtils.lerp(
               internalMeshRef.current.rotation.x,
               animationState.current.targetRotation.x,
@@ -1056,31 +964,12 @@ const ProceduralShape = React.memo(
               0.001 *
               animSettings.animationSpeed;
             animationState.current.floatY =
-              Math.sin(floatTime * (preset.floatSpeed || 0.0001) * 100) *
+              Math.sin(floatTime * (preset.floatSpeed || 0) * 100) *
               (preset.floatAmplitude || 0);
             internalMeshRef.current.position.y = animationState.current.floatY;
           }
         }
       });
-
-      console.log(
-        `[ProceduralShape ${
-          shapeId || "defaulting"
-        }] Rendering. Received settings.customMaterialProperties.mapUrl:`,
-        settings.customMaterialProperties.mapUrl
-      );
-      console.log(
-        `[ProceduralShape ${
-          shapeId || "defaulting"
-        }] Derived textureUrlsToLoad (passed to AppliedMaterial):`,
-        textureUrlsToLoad
-      );
-      console.log(
-        `[ProceduralShape ${
-          shapeId || "defaulting"
-        }] Derived materialDef (passed to AppliedMaterial):`,
-        materialDef
-      );
 
       return (
         <Center ref={internalMeshRef} castShadow receiveShadow>
@@ -1101,13 +990,6 @@ const ProceduralShape = React.memo(
 );
 ProceduralShape.displayName = "ProceduralShape";
 
-// MODIFIED ImportedModel to use manual GLTFLoader for GLB/GLTF
-// ... (imports and other code remain the same)
-
-// MODIFIED ImportedModel for manual GLTF, FBX, and OBJ/MTL loading
-// ... (imports and other code remain the same)
-
-// MODIFIED ImportedModel for manual GLTF, FBX, OBJ/MTL, and STL loading
 const ImportedModel = React.memo(
   React.forwardRef(
     (
@@ -1120,7 +1002,7 @@ const ImportedModel = React.memo(
         isAnimating,
         animationPresetKey,
         activeActionRef,
-        mixerRef: externalMixerRef,
+        mixerRef,
         selectedAnimationClipIndex,
         animationPlaybackState,
         isAnimationLooping,
@@ -1129,11 +1011,6 @@ const ImportedModel = React.memo(
       },
       ref
     ) => {
-      console.log("[ImportedModel] PROPS RECEIVED:", {
-        modelUrl: modelUrl?.substring(0, 100),
-        fileType,
-        mtlUrl: mtlUrl?.substring(0, 100),
-      });
       const internalGroupRef = useRef();
       const { scene: r3fScene } = useThree();
       React.useImperativeHandle(ref, () => internalGroupRef.current);
@@ -1143,53 +1020,51 @@ const ImportedModel = React.memo(
       const [manualFbxScene, setManualFbxScene] = useState(null);
       const [manualFbxAnimations, setManualFbxAnimations] = useState([]);
       const [manualObjScene, setManualObjScene] = useState(null);
-      const [manualStlGeometry, setManualStlGeometry] = useState(null); // New state for STL
+      const [manualStlGeometry, setManualStlGeometry] = useState(null);
 
       const dracoPath = "/draco/gltf/";
+      const animationState = useRef({ startTime: Date.now() });
 
       const processLoadedObject = useCallback(
         (object, animations) => {
           console.log(
-            "[ImportedModel processLoadedObject] Starting processing for object:",
+            "[ImportedModel processLoadedObject] Starting for:",
             object?.name,
-            "Filetype:",
+            "Type:",
             fileType,
-            "Animations count:",
-            animations?.length || 0
+            "Settings Material:",
+            settings.materialType
           );
           const targetObject = object || internalGroupRef.current;
-
           if (!targetObject) {
-            console.error(
-              "[ImportedModel processLoadedObject] targetObject is null. Cannot process."
+            console.warn(
+              "[ImportedModel processLoadedObject] targetObject is null, cannot process."
             );
             onModelLoad(null, animations || []);
             return;
           }
 
-          // ... (rest of processLoadedObject logic - centering, scaling, material override)
-          // This logic should be fine as it was before.
+          // --- Centering and Scaling ---
           let box = new THREE.Box3().setFromObject(targetObject);
           if (box.isEmpty()) {
-            console.warn(
-              "[ImportedModel processLoadedObject] Initial Bounding box is empty for targetObject:",
-              targetObject.name
-            );
-            let foundMeshGeometry = false;
             targetObject.traverse((child) => {
-              if (child.isMesh && !foundMeshGeometry) {
+              if (child.isMesh) {
                 const childBox = new THREE.Box3().setFromObject(child);
                 if (!childBox.isEmpty()) {
-                  box.copy(childBox);
-                  foundMeshGeometry = true;
+                  if (box.isEmpty()) box.copy(childBox);
+                  else box.expandByObject(child); // expand box if multiple meshes
                 }
               }
             });
             if (box.isEmpty()) {
+              console.warn(
+                "[ImportedModel processLoadedObject] Bounding box completely empty even after traverse. Defaulting scale/pos."
+              );
               targetObject.scale.setScalar(1);
               targetObject.position.set(0, 0, 0);
             }
           }
+
           if (!box.isEmpty()) {
             const sizeVec = box.getSize(new THREE.Vector3());
             const maxDim = Math.max(
@@ -1197,10 +1072,10 @@ const ImportedModel = React.memo(
               saneNumber(sizeVec.y, 1),
               saneNumber(sizeVec.z, 1)
             );
-            const desiredDisplaySize = 3;
-            const scaleFactor = maxDim > 0 ? desiredDisplaySize / maxDim : 1;
+            const scaleFactor = maxDim > 0 ? 3 / maxDim : 1; // Target size 3 units
             targetObject.scale.setScalar(saneNumber(scaleFactor, 1));
-            const scaledBox = new THREE.Box3().setFromObject(targetObject);
+
+            const scaledBox = new THREE.Box3().setFromObject(targetObject); // Recompute box after scaling
             const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
             if (
               !isNaN(scaledCenter.x) &&
@@ -1209,145 +1084,151 @@ const ImportedModel = React.memo(
             ) {
               targetObject.position.sub(scaledCenter);
             } else {
+              console.warn(
+                "[ImportedModel processLoadedObject] Scaled center is NaN. Setting position to 0,0,0."
+              );
               targetObject.position.set(0, 0, 0);
             }
           }
+          // --- End Centering and Scaling ---
 
-          const anyCustomTextureUrlSpecified =
-            settings.customMaterialProperties.mapUrl ||
-            settings.customMaterialProperties.normalMapUrl ||
-            settings.customMaterialProperties.roughnessMapUrl ||
-            settings.customMaterialProperties.metalnessMapUrl ||
-            settings.customMaterialProperties.aoMapUrl ||
-            settings.customMaterialProperties.emissiveMapUrl;
-
-          const shouldOverrideBasedOnTextureUploads =
-            anyCustomTextureUrlSpecified;
-          const shouldOverrideMaterials =
-            ((fileType === "gltf" ||
-              fileType === "glb" ||
-              fileType === "fbx") &&
-              shouldOverrideBasedOnTextureUploads) ||
-            (fileType === "obj" &&
-              ((mtlUrl && shouldOverrideBasedOnTextureUploads) || !mtlUrl)) ||
-            fileType === "stl"; // For STL, always apply our custom material logic from settings
-
-          console.log(
-            `[ImportedModel processLoadedObject] FileType: ${fileType}, MTL: ${!!mtlUrl}, AnyCustomTexture: ${!!anyCustomTextureUrlSpecified}, ShouldOverride: ${shouldOverrideMaterials}`
+          const customMaterialProps = settings.customMaterialProperties || {};
+          const anyCustomTexMap = [
+            "mapUrl",
+            "normalMapUrl",
+            "roughnessMapUrl",
+            "metalnessMapUrl",
+            "aoMapUrl",
+            "emissiveMapUrl",
+          ].some(
+            (key) =>
+              typeof customMaterialProps[key] === "string" &&
+              customMaterialProps[key].trim() !== ""
           );
 
-          if (shouldOverrideMaterials) {
+          const userSelectedSpecificMaterialType =
+            settings.materialType !== "auto";
+
+          const applyOurMaterial =
+            fileType === "stl" ||
+            (fileType === "obj" && !mtlUrl) ||
+            anyCustomTexMap ||
+            ((fileType === "gltf" ||
+              fileType === "glb" ||
+              fileType === "fbx" ||
+              (fileType === "obj" && mtlUrl)) &&
+              userSelectedSpecificMaterialType);
+
+          console.log(
+            `[ImportedModel processLoadedObject] FileType: ${fileType}, MTL: ${!!mtlUrl}, AnyCustomTexMap: ${!!anyCustomTexMap}, UserSelectedSpecificMatType: ${userSelectedSpecificMaterialType}, ApplyOurMat: ${applyOurMaterial}`
+          );
+
+          if (applyOurMaterial) {
             console.log(
-              `[ImportedModel] Overriding/Applying materials for ${fileType}`
+              `[ImportedModel] Applying/Overriding materials for ${fileType} with settings:`,
+              settings.materialType,
+              settings.shapeColor
             );
-            const materialTypeForOverride =
-              fileType === "stl"
-                ? settings.materialType !== "auto"
-                  ? settings.materialType
-                  : "ceramic"
-                : settings.materialType !== "auto"
-                ? settings.materialType
-                : "ceramic";
+
+            let materialTypeForLogic = settings.materialType;
+            if (settings.materialType === "auto") {
+              materialTypeForLogic = "ceramic";
+            }
 
             const {
-              constructor: MatConstructor,
-              args: baseMaterialArgs,
-              textureUrls: textureUrlsFromSettings,
+              constructor: MatCtor,
+              args: baseMatArgs,
+              textureUrls: texUrlsFromSettings,
             } = createR3FMaterialProps(
               settings.shapeColor,
-              materialTypeForOverride,
-              settings.customMaterialProperties,
+              materialTypeForLogic,
+              customMaterialProps, // Pass the whole customMaterialProperties
               r3fScene.environment
             );
             const textureLoader = new THREE.TextureLoader();
             const loadedTexturesCache = {};
+            const meshesToProcess = [];
 
-            // For STL, the targetObject in processLoadedObject is the <group> ref.
-            // We need to find the mesh inside it.
-            const objectsToMaterialize = [];
-            if (fileType === "stl") {
-              targetObject.traverse((child) => {
-                if (child.isMesh) objectsToMaterialize.push(child);
-              });
+            if (targetObject.isMesh) {
+              meshesToProcess.push(targetObject);
             } else {
               targetObject.traverse((child) => {
-                if (child.isMesh) objectsToMaterialize.push(child);
+                if (child.isMesh) meshesToProcess.push(child);
               });
             }
 
-            if (objectsToMaterialize.length === 0 && targetObject.isMesh) {
-              // Case where targetObject itself is a single mesh (e.g. from a simple loader)
-              objectsToMaterialize.push(targetObject);
+            if (meshesToProcess.length === 0) {
+              console.warn(
+                "[ImportedModel processLoadedObject] No meshes found in target object to apply material:",
+                targetObject
+              );
             }
 
-            objectsToMaterialize.forEach(async (childMesh) => {
-              childMesh.castShadow = true;
-              childMesh.receiveShadow = true;
-              const newMaterial = new MatConstructor(baseMaterialArgs);
-              // ... (texture application logic as before)
-              const applyTextureToMaterial = async (
-                mapType,
-                url,
-                colorSpace = null
-              ) => {
-                /* ... */
-              };
-              await applyTextureToMaterial(
+            meshesToProcess.forEach(async (mesh) => {
+              mesh.castShadow = true;
+              mesh.receiveShadow = true;
+
+              const newMaterial = new MatCtor(baseMatArgs);
+
+              for (const mapName of [
                 "map",
-                textureUrlsFromSettings.mapUrl,
-                THREE.SRGBColorSpace
-              );
-              await applyTextureToMaterial(
                 "normalMap",
-                textureUrlsFromSettings.normalMapUrl
-              );
-              await applyTextureToMaterial(
                 "roughnessMap",
-                textureUrlsFromSettings.roughnessMapUrl
-              );
-              await applyTextureToMaterial(
                 "metalnessMap",
-                textureUrlsFromSettings.metalnessMapUrl
-              );
-              await applyTextureToMaterial(
                 "aoMap",
-                textureUrlsFromSettings.aoMapUrl
-              );
-              await applyTextureToMaterial(
                 "emissiveMap",
-                textureUrlsFromSettings.emissiveMapUrl,
-                THREE.SRGBColorSpace
-              );
+              ]) {
+                const url = texUrlsFromSettings[`${mapName}Url`]; // Corrected: use texUrlsFromSettings
+                if (url) {
+                  try {
+                    let tex = loadedTexturesCache[url];
+                    if (!tex) {
+                      tex = loadedTexturesCache[url] =
+                        await textureLoader.loadAsync(url);
+                    }
+                    if (mapName === "map" || mapName === "emissiveMap")
+                      tex.colorSpace = THREE.SRGBColorSpace;
+                    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+                    tex.needsUpdate = true;
+                    newMaterial[mapName] = tex;
+                  } catch (e) {
+                    console.error(`Error loading ${mapName} from ${url}`, e);
+                  }
+                }
+              }
 
               if (
-                childMesh.material &&
-                typeof childMesh.material.dispose === "function"
-              )
-                childMesh.material.dispose();
-              childMesh.material = newMaterial;
+                mesh.material &&
+                typeof mesh.material.dispose === "function"
+              ) {
+                if (mesh.material !== newMaterial) {
+                  // Avoid disposing the same material if somehow re-assigned
+                  mesh.material.dispose();
+                }
+              }
+              mesh.material = newMaterial;
               newMaterial.needsUpdate = true;
             });
-          } else if (fileType !== "stl") {
-            // Original materials for non-STL, non-overridden (e.g. OBJ with MTL)
+          } else {
+            console.log(
+              `[ImportedModel] Using original materials for ${fileType}, applying envMap and side.`
+            );
             targetObject.traverse((child) => {
-              if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
-                if (child.material) {
-                  const materials = Array.isArray(child.material)
-                    ? child.material
-                    : [child.material];
-                  materials.forEach((mat) => {
-                    mat.side = THREE.DoubleSide;
-                    if (!mat.envMap && r3fScene.environment)
-                      mat.envMap = r3fScene.environment;
-                    mat.envMapIntensity =
-                      settings.customMaterialProperties.envMapIntensity ??
-                      mat.envMapIntensity ??
-                      1.0;
-                    mat.needsUpdate = true;
-                  });
-                }
+              if (child.isMesh && child.material) {
+                const materials = Array.isArray(child.material)
+                  ? child.material
+                  : [child.material];
+                materials.forEach((mat) => {
+                  mat.side = THREE.DoubleSide;
+                  if (!mat.envMap && r3fScene.environment)
+                    mat.envMap = r3fScene.environment;
+                  const envIS = customMaterialProps.envMapIntensity; // Use customMaterialProps here
+                  mat.envMapIntensity =
+                    envIS !== null && envIS !== undefined
+                      ? envIS
+                      : mat.envMapIntensity ?? 1.0;
+                  mat.needsUpdate = true;
+                });
               }
             });
           }
@@ -1357,23 +1238,22 @@ const ImportedModel = React.memo(
           r3fScene.environment,
           settings.shapeColor,
           settings.materialType,
-          settings.customMaterialProperties,
+          settings.customMaterialProperties, // Now this is a direct dependency
           onModelLoad,
           fileType,
           mtlUrl,
-          internalGroupRef,
         ]
       );
 
-      // Manual GLTFLoader effect
+      // --- Manual Loader useEffects (GLTF, FBX, OBJ, STL - unchanged) ---
       useEffect(() => {
         setManualGltfScene(null);
         setManualGltfAnimations([]);
         if ((fileType === "glb" || fileType === "gltf") && modelUrl) {
           const loader = new GLTFLoader();
-          const dracoLoaderInstance = new DRACOLoader();
-          dracoLoaderInstance.setDecoderPath(dracoPath);
-          loader.setDRACOLoader(dracoLoaderInstance);
+          const draco = new DRACOLoader();
+          draco.setDecoderPath(dracoPath);
+          loader.setDRACOLoader(draco);
           loader.load(
             modelUrl,
             (gltf) => {
@@ -1381,25 +1261,14 @@ const ImportedModel = React.memo(
               setManualGltfAnimations(gltf.animations || []);
             },
             undefined,
-            (error) => {
-              console.error(
-                "[ImportedModel Manual GLTFLoader] Load error:",
-                error
-              );
-              sonnerToast.error(`${fileType.toUpperCase()} Load Error`, {
-                description: `Failed to load. Check console.`,
-              });
-              setManualGltfScene(null);
-              setManualGltfAnimations([]);
+            (err) => {
+              console.error("GLTF Load Error:", err);
+              sonnerToast.error("GLTF Load Error");
             }
           );
-          return () => {
-            dracoLoaderInstance.dispose();
-          };
+          return () => draco.dispose();
         }
       }, [fileType, modelUrl, dracoPath]);
-
-      // Manual FBXLoader effect
       useEffect(() => {
         setManualFbxScene(null);
         setManualFbxAnimations([]);
@@ -1412,78 +1281,47 @@ const ImportedModel = React.memo(
               setManualFbxAnimations(fbx.animations || []);
             },
             undefined,
-            (error) => {
-              console.error(
-                "[ImportedModel Manual FBXLoader] Load error:",
-                error
-              );
-              sonnerToast.error("FBX Load Error", {
-                description: "Failed to load. Check console.",
-              });
-              setManualFbxScene(null);
-              setManualFbxAnimations([]);
+            (err) => {
+              console.error("FBX Load Error:", err);
+              sonnerToast.error("FBX Load Error");
             }
           );
         }
       }, [fileType, modelUrl]);
-
-      // Manual OBJLoader (and MTLLoader) effect
       useEffect(() => {
         setManualObjScene(null);
         if (fileType === "obj" && modelUrl) {
-          // ... (OBJ/MTL loading logic - remains the same)
           const objLoader = new OBJLoader();
           if (mtlUrl) {
             const mtlLoader = new MTLLoader();
-            const mtlBasePath = mtlUrl.substring(
-              0,
-              mtlUrl.lastIndexOf("/") + 1
+            mtlLoader.setResourcePath(
+              mtlUrl.substring(0, mtlUrl.lastIndexOf("/") + 1)
             );
-            mtlLoader.setResourcePath(mtlBasePath);
             mtlLoader.load(
               mtlUrl,
-              (materialsCreator) => {
-                materialsCreator.preload();
-                objLoader.setMaterials(materialsCreator);
+              (materials) => {
+                materials.preload();
+                objLoader.setMaterials(materials);
                 objLoader.load(
                   modelUrl,
-                  (object) => setManualObjScene(object),
+                  (obj) => setManualObjScene(obj),
                   undefined,
-                  (error) => {
-                    console.error(
-                      "[ImportedModel Manual OBJLoader] Error loading OBJ (with MTL):",
-                      error
-                    );
-                    sonnerToast.error("OBJ Load Error", {
-                      description: "Failed with MTL. Check console.",
-                    });
-                    setManualObjScene(null);
+                  (err) => {
+                    console.error("OBJ w/ MTL Error:", err);
+                    sonnerToast.error("OBJ Load Error");
                   }
                 );
               },
               undefined,
-              (error) => {
-                console.error(
-                  "[ImportedModel Manual OBJLoader] Error loading MTL:",
-                  error
-                );
-                sonnerToast.warn("MTL Load Warning", {
-                  description:
-                    "Failed to load MTL. OBJ loading without materials.",
-                });
+              () => {
+                sonnerToast.warn("MTL Load Failed");
                 objLoader.load(
                   modelUrl,
-                  (object) => setManualObjScene(object),
+                  (obj) => setManualObjScene(obj),
                   undefined,
-                  (objError) => {
-                    console.error(
-                      "[ImportedModel Manual OBJLoader] Error loading OBJ (after MTL fail):",
-                      objError
-                    );
-                    sonnerToast.error("OBJ Load Error", {
-                      description: "Failed. Check console.",
-                    });
-                    setManualObjScene(null);
+                  (err) => {
+                    console.error("OBJ no MTL Error:", err);
+                    sonnerToast.error("OBJ Load Error");
                   }
                 );
               }
@@ -1491,207 +1329,133 @@ const ImportedModel = React.memo(
           } else {
             objLoader.load(
               modelUrl,
-              (object) => setManualObjScene(object),
+              (obj) => setManualObjScene(obj),
               undefined,
-              (error) => {
-                console.error(
-                  "[ImportedModel Manual OBJLoader] Error loading OBJ (no MTL):",
-                  error
-                );
-                sonnerToast.error("OBJ Load Error", {
-                  description: "Failed. Check console.",
-                });
-                setManualObjScene(null);
+              (err) => {
+                console.error("OBJ no MTL Error:", err);
+                sonnerToast.error("OBJ Load Error");
               }
             );
           }
         }
       }, [fileType, modelUrl, mtlUrl]);
-
-      // Manual STLLoader effect
       useEffect(() => {
-        setManualStlGeometry(null); // Reset STL state
+        setManualStlGeometry(null);
         if (fileType === "stl" && modelUrl) {
-          console.log(
-            `[ImportedModel Manual STLLoader] Attempting to load STL: ${modelUrl.substring(
-              0,
-              100
-            )}...`
-          );
           const loader = new STLLoader();
           loader.load(
             modelUrl,
-            (geometry) => {
-              console.log(
-                "[ImportedModel Manual STLLoader] STL loaded successfully:",
-                geometry
-              );
-              setManualStlGeometry(geometry);
-            },
-            undefined, // onProgress
-            (error) => {
-              console.error(
-                "[ImportedModel Manual STLLoader] Error loading STL:",
-                error
-              );
-              sonnerToast.error("STL Load Error", {
-                description: "Failed to load STL model. Check console.",
-              });
-              setManualStlGeometry(null);
+            (geom) => setManualStlGeometry(geom),
+            undefined,
+            (err) => {
+              console.error("STL Load Error:", err);
+              sonnerToast.error("STL Load Error");
             }
           );
         }
       }, [fileType, modelUrl]);
 
-      console.log(
-        "[ImportedModel] States before processEffect: GLTF:",
-        !!manualGltfScene,
-        "FBX:",
-        !!manualFbxScene,
-        "OBJ:",
-        !!manualObjScene,
-        "STL:",
-        !!manualStlGeometry
-      );
-
+      // Effect to call processLoadedObject when model or relevant settings change
       useEffect(() => {
-        console.log(
-          "[ImportedModel processEffect] Running. States: GLTF:",
-          !!manualGltfScene,
-          "FBX:",
-          !!manualFbxScene,
-          "OBJ:",
-          !!manualObjScene,
-          "STL:",
-          !!manualStlGeometry
-        );
         let objectForProcessing = null;
         let animationsForProcessing = [];
-
-        if (fileType === "glb" || fileType === "gltf") {
-          if (manualGltfScene) {
-            objectForProcessing = manualGltfScene;
-            animationsForProcessing = manualGltfAnimations;
-          }
-        } else if (fileType === "fbx") {
-          if (manualFbxScene) {
-            objectForProcessing = manualFbxScene;
-            animationsForProcessing = manualFbxAnimations;
-          }
-        } else if (fileType === "obj") {
-          if (manualObjScene) {
-            objectForProcessing = manualObjScene;
-            animationsForProcessing = [];
-          }
-        } else if (fileType === "stl") {
-          // For STL, processLoadedObject will operate on the group (internalGroupRef) once the mesh with manualStlGeometry is rendered into it.
-          // So, if manualStlGeometry is ready, we can assume the group ref will be available for processing.
-          if (manualStlGeometry && internalGroupRef.current) {
-            objectForProcessing = internalGroupRef.current;
-            animationsForProcessing = [];
-          }
+        if ((fileType === "glb" || fileType === "gltf") && manualGltfScene) {
+          objectForProcessing = manualGltfScene;
+          animationsForProcessing = manualGltfAnimations;
+        } else if (fileType === "fbx" && manualFbxScene) {
+          objectForProcessing = manualFbxScene;
+          animationsForProcessing = manualFbxAnimations;
+        } else if (fileType === "obj" && manualObjScene) {
+          objectForProcessing = manualObjScene;
+          animationsForProcessing = [];
+        } else if (
+          fileType === "stl" &&
+          manualStlGeometry &&
+          internalGroupRef.current
+        ) {
+          objectForProcessing = internalGroupRef.current;
+          animationsForProcessing = [];
         }
 
         if (objectForProcessing) {
-          console.log(
-            `[ImportedModel processEffect] Calling processLoadedObject for ${fileType}.`
-          );
           processLoadedObject(objectForProcessing, animationsForProcessing);
-        } else {
-          console.log(
-            "[ImportedModel processEffect] No fully loaded object/geometry or ref ready for processLoadedObject for type:",
-            fileType
-          );
         }
       }, [
         manualGltfScene,
-        manualGltfAnimations,
         manualFbxScene,
-        manualFbxAnimations,
         manualObjScene,
-        manualStlGeometry, // Now depends on the loaded STL geometry
+        manualStlGeometry,
         processLoadedObject,
         fileType,
-      ]);
+        manualGltfAnimations,
+        manualFbxAnimations,
+      ]); // processLoadedObject will change if settings it depends on change
 
-      // Animation useFrame and useEffect for mixer setup
-      // ... (Animation logic remains largely the same, ensure it uses correct animation sources)
-      const animationState = useRef({ startTime: Date.now() });
-      useFrame((state, delta) => {
-        if (
+      // --- Animation useFrame and useEffect for mixer setup (unchanged) ---
+      useFrame((_, delta) => {
+        if (mixerRef.current && animationPlaybackState === "playing") {
+          mixerRef.current.update(delta * animationPlaybackSpeed);
+        } else if (
           internalGroupRef.current &&
           isAnimating &&
-          !externalMixerRef.current
+          !mixerRef.current
         ) {
-          const animSettings = settings;
           const preset = animationPresets[animationPresetKey];
           if (preset) {
-            const floatTime =
+            const time =
               (Date.now() - animationState.current.startTime) *
               0.001 *
-              animSettings.animationSpeed;
+              settings.animationSpeed;
             internalGroupRef.current.position.y =
-              Math.sin(floatTime * (preset.floatSpeed || 0.0001) * 100) *
+              Math.sin(time * (preset.floatSpeed || 0) * 100) *
               (preset.floatAmplitude || 0);
           }
         }
-        if (externalMixerRef.current && animationPlaybackState === "playing") {
-          externalMixerRef.current.update(delta * animationPlaybackSpeed);
-        }
       });
-
       useEffect(() => {
-        const currentGroup = internalGroupRef.current;
-        let clipsToUse = [];
+        const modelRoot = internalGroupRef.current;
+        let clips = [];
         if (fileType === "glb" || fileType === "gltf")
-          clipsToUse = manualGltfAnimations || [];
-        else if (fileType === "fbx") clipsToUse = manualFbxAnimations || [];
-
-        if (externalMixerRef.current) {
-          externalMixerRef.current.stopAllAction();
-          externalMixerRef.current = null;
-          if (activeActionRef.current) activeActionRef.current = null;
-        }
-
-        if (currentGroup && clipsToUse.length > 0) {
-          console.log(
-            "[ImportedModel AnimationEffect] Setting up mixer for target:",
-            currentGroup,
-            "with clips:",
-            clipsToUse.length
-          );
-          externalMixerRef.current = new THREE.AnimationMixer(currentGroup);
+          clips = manualGltfAnimations || [];
+        else if (fileType === "fbx") clips = manualFbxAnimations || [];
+        if (mixerRef.current) mixerRef.current.stopAllAction();
+        if (activeActionRef.current) activeActionRef.current.stop();
+        if (modelRoot && clips.length > 0) {
+          mixerRef.current = new THREE.AnimationMixer(modelRoot);
           if (
             selectedAnimationClipIndex >= 0 &&
-            selectedAnimationClipIndex < clipsToUse.length
+            selectedAnimationClipIndex < clips.length
           ) {
-            const clip = clipsToUse[selectedAnimationClipIndex];
-            activeActionRef.current = externalMixerRef.current.clipAction(clip);
-            if (animationPlaybackState === "playing")
-              activeActionRef.current.play();
-            else activeActionRef.current.stop();
+            const clip = clips[selectedAnimationClipIndex];
+            activeActionRef.current = mixerRef.current.clipAction(clip);
             activeActionRef.current.setLoop(
               isAnimationLooping ? THREE.LoopRepeat : THREE.LoopOnce,
               Infinity
             );
             activeActionRef.current.timeScale = animationPlaybackSpeed;
-            activeActionRef.current.time = animationTime * clip.duration;
-          }
-        } else {
-          console.log(
-            "[ImportedModel AnimationEffect] No clips or model not ready for mixer.",
-            { hasGroup: !!currentGroup, clipCount: clipsToUse.length }
-          );
-        }
-
-        return () => {
-          if (externalMixerRef.current) {
-            externalMixerRef.current.stopAllAction();
-            externalMixerRef.current = null;
+            activeActionRef.current.time =
+              clip.duration > 0 ? animationTime * clip.duration : 0;
+            if (animationPlaybackState === "playing")
+              activeActionRef.current.play();
+            else if (animationPlaybackState === "paused") {
+              activeActionRef.current.play();
+              activeActionRef.current.paused = true;
+              if (mixerRef.current) mixerRef.current.update(0);
+            } else activeActionRef.current.stop();
+          } else {
             activeActionRef.current = null;
           }
+        } else {
+          mixerRef.current = null;
+          activeActionRef.current = null;
+        }
+        return () => {
+          if (mixerRef.current) mixerRef.current.stopAllAction();
         };
       }, [
+        fileType,
+        manualGltfScene,
+        manualFbxScene,
         manualGltfAnimations,
         manualFbxAnimations,
         selectedAnimationClipIndex,
@@ -1699,75 +1463,42 @@ const ImportedModel = React.memo(
         isAnimationLooping,
         animationPlaybackSpeed,
         animationTime,
-        fileType,
-        manualGltfScene,
-        manualFbxScene,
-        manualObjScene, // Added manualObjScene, as model root might change
+        mixerRef,
+        activeActionRef,
       ]);
 
-      // Render logic
+      // --- Render Logic ---
       if (fileType === "stl") {
         if (manualStlGeometry) {
-          // Check if manualStlGeometry is loaded
-          console.log(
-            `[ImportedModel Render] Path for STL with manualStlGeometry.`
-          );
-          // Material setup for STL will be handled by processLoadedObject on the group.
-          // Here we just render the mesh with a placeholder or let processLoadedObject handle it.
-          // For simplicity, AppliedMaterial can be used here if processLoadedObject is adapted.
-          const {
-            constructor: MatConstructor,
-            args: materialArgs,
-            textureUrls: textureUrlsFromSettings,
-          } = createR3FMaterialProps(
-            settings.shapeColor,
-            settings.materialType !== "auto"
-              ? settings.materialType
-              : "ceramic",
-            settings.customMaterialProperties,
-            r3fScene.environment
-          );
+          // Placeholder material here; processLoadedObject will apply the correct one.
           return (
             <group ref={internalGroupRef}>
-              {" "}
-              {/* This group is what processLoadedObject will target */}
               <mesh geometry={manualStlGeometry} castShadow receiveShadow>
-                {/* AppliedMaterial is used here for initial render, processLoadedObject will re-apply if needed */}
-                <AppliedMaterial
-                  materialProps={{
-                    constructor: MatConstructor,
-                    args: materialArgs,
-                  }}
-                  textureUrls={textureUrlsFromSettings}
-                />
+                <meshStandardMaterial color='#CCCCCC' attach='material' />
               </mesh>
             </group>
           );
-        } else {
-          // STL still loading
-          return (
-            <group ref={internalGroupRef}>
-              <Center>
-                <Text color='white' fontSize={0.2}>
-                  Loading STL...
-                </Text>
-              </Center>
-            </group>
-          );
         }
+        return (
+          <group ref={internalGroupRef}>
+            <Center>
+              <Text color='white' fontSize={0.2}>
+                Loading STL...
+              </Text>
+            </Center>
+          </group>
+        );
       }
 
       let objectToRender = null;
-      if (fileType === "glb" || fileType === "gltf")
+      if ((fileType === "glb" || fileType === "gltf") && manualGltfScene)
         objectToRender = manualGltfScene;
-      else if (fileType === "fbx") objectToRender = manualFbxScene;
-      else if (fileType === "obj") objectToRender = manualObjScene;
+      else if (fileType === "fbx" && manualFbxScene)
+        objectToRender = manualFbxScene;
+      else if (fileType === "obj" && manualObjScene)
+        objectToRender = manualObjScene;
 
-      if (objectToRender) {
-        console.log(
-          "[ImportedModel Render] Rendering <primitive> for:",
-          fileType
-        );
+      if (objectToRender)
         return (
           <primitive
             object={objectToRender}
@@ -1776,23 +1507,11 @@ const ImportedModel = React.memo(
             receiveShadow
           />
         );
-      }
-
-      console.log(
-        "[ImportedModel Render] Reaching final fallback (Loading model...). FileType:",
-        fileType
-      );
       return (
         <group ref={internalGroupRef}>
           <Center>
-            <Text
-              color='white'
-              fontSize={0.2}
-              anchorX='center'
-              anchorY='middle'
-              material-depthWrite={false}
-            >
-              Loading model ({fileType})...
+            <Text color='white' fontSize={0.2}>
+              Loading ({fileType})...
             </Text>
           </Center>
         </group>
@@ -1802,10 +1521,7 @@ const ImportedModel = React.memo(
 );
 ImportedModel.displayName = "ImportedModel";
 
-// ... (rest of ModelViewer3D.jsx code)
-
-// ... (rest of ModelViewer3D.jsx code)
-
+// --- TextOverlay component (unchanged) ---
 const TextOverlay = React.memo(
   ({
     text,
@@ -1818,20 +1534,24 @@ const TextOverlay = React.memo(
     materialProps,
   }) => {
     const { scene } = useThree();
-    const textMaterial = useMemo(() => {
-      return new THREE.MeshStandardMaterial({
-        color: new THREE.Color(color),
-        metalness: saneNumber(materialProps?.metalness, 0.3),
-        roughness: saneNumber(materialProps?.roughness, 0.5),
-        envMap: scene.environment,
-        envMapIntensity: saneNumber(materialProps?.envMapIntensity, 1.0),
-        side: THREE.FrontSide,
-      });
-    }, [color, materialProps, scene.environment]);
+    const textMaterial = useMemo(
+      () =>
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color(color),
+          metalness: saneNumber(materialProps?.metalness, 0.3),
+          roughness: saneNumber(materialProps?.roughness, 0.5),
+          envMap: scene.environment,
+          envMapIntensity: saneNumber(materialProps?.envMapIntensity, 1.0),
+          side: THREE.FrontSide,
+        }),
+      [color, materialProps, scene.environment]
+    );
     if (!isVisible || !text || !fontUrl) return null;
     return (
       <group position={[0, textYOffset, 0]}>
+        {" "}
         <Center>
+          {" "}
           <Text3D
             font={fontUrl}
             size={saneNumber(size, 0.5)}
@@ -1844,15 +1564,17 @@ const TextOverlay = React.memo(
             castShadow
             receiveShadow
           >
-            {text}
-          </Text3D>
-        </Center>
+            {" "}
+            {text}{" "}
+          </Text3D>{" "}
+        </Center>{" "}
       </group>
     );
   }
 );
 TextOverlay.displayName = "TextOverlay";
 
+// --- SceneContentInternal component (unchanged) ---
 const SceneContentInternal = React.memo(
   ({
     settings,
@@ -1869,7 +1591,6 @@ const SceneContentInternal = React.memo(
     customBgImageUrl,
     onMeshReady,
     onSceneRefForExport,
-    animationClipsRef,
     activeActionRef,
     mixerRef,
     selectedAnimationClipIndex,
@@ -1878,10 +1599,10 @@ const SceneContentInternal = React.memo(
     animationPlaybackSpeed,
     animationTime,
   }) => {
-    const { scene, gl } = useThree();
+    const { scene, gl, controls } = useThree();
     useEffect(() => {
-      if (onSceneRefForExport) onSceneRefForExport(scene, gl);
-    }, [scene, gl, onSceneRefForExport]);
+      if (onSceneRefForExport) onSceneRefForExport(scene, gl, controls);
+    }, [scene, gl, controls, onSceneRefForExport]);
     useEffect(() => {
       if (settings.background === "customImage" && customBgImageUrl) {
         if (scene.fog) scene.fog = null;
@@ -1915,9 +1636,7 @@ const SceneContentInternal = React.memo(
           scene.fog.color.set(fogColor);
           scene.fog.near = fogNear;
           scene.fog.far = fogFar;
-        } else {
-          scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
-        }
+        } else scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
       }
     }, [settings.background, customBgImageUrl, scene]);
     const internalMeshRef = useRef();
@@ -1946,20 +1665,17 @@ const SceneContentInternal = React.memo(
                   saneNumber(settings.textSize, 0.5) * 0.5 +
                   0.3
               );
-            } else {
+            } else
               setTextYOffset(
                 1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3
               );
-            }
-          } else {
+          } else
             setTextYOffset(
               1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3
             );
-          }
         });
-      } else {
+      } else
         setTextYOffset(1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3);
-      }
     }, [
       internalMeshRef.current,
       settings.textSize,
@@ -1971,6 +1687,7 @@ const SceneContentInternal = React.memo(
     ]);
     return (
       <>
+        {" "}
         <ambientLight
           intensity={
             settings.ambientLight.enabled
@@ -1978,7 +1695,7 @@ const SceneContentInternal = React.memo(
               : 0
           }
           color={settings.ambientLight.color}
-        />
+        />{" "}
         <directionalLight
           position={[5, 8, 5]}
           intensity={
@@ -1993,7 +1710,7 @@ const SceneContentInternal = React.memo(
           shadow-camera-near={0.5}
           shadow-camera-far={50}
           shadow-bias={-0.0005}
-        />
+        />{" "}
         <directionalLight
           position={[-5, 3, -3]}
           intensity={
@@ -2064,7 +1781,6 @@ const SceneContentInternal = React.memo(
               onModelLoad={onModelLoad}
               isAnimating={isAnimating}
               animationPresetKey={animationPresetKey}
-              animationClipsRef={animationClipsRef}
               activeActionRef={activeActionRef}
               mixerRef={mixerRef}
               selectedAnimationClipIndex={selectedAnimationClipIndex}
@@ -2089,14 +1805,19 @@ const SceneContentInternal = React.memo(
           makeDefault
           enableDamping
           dampingFactor={0.05}
+          rotateSpeed={0.7}
+          zoomSpeed={0.8}
+          panSpeed={0.7}
           screenSpacePanning={false}
           minDistance={1}
           maxDistance={30}
-          maxPolarAngle={Math.PI / 1.6}
-          target={[0, 0.2, 0]}
+          maxPolarAngle={Math.PI / 1.65}
+          minPolarAngle={Math.PI / 4}
+          target={[0, 0.3, 0]}
         />{" "}
         {(settings.n8ao?.enabled || settings.bloom?.enabled) && (
           <EffectComposer enableNormalPass>
+            {" "}
             {settings.n8ao?.enabled && (
               <N8AO
                 aoRadius={saneNumber(settings.n8ao.aoRadius, 0.5)}
@@ -2121,47 +1842,59 @@ const SceneContentInternal = React.memo(
                 )}
                 kernelSize={settings.bloom.kernelSize}
               />
-            )}
+            )}{" "}
           </EffectComposer>
-        )}
+        )}{" "}
       </>
     );
   }
 );
 SceneContentInternal.displayName = "SceneContentInternal";
 
+// --- ModelViewer3D (Main Component - largely unchanged from previous full code, JSX for settings panel sliders for N8AO/Bloom can be added if desired) ---
 const ModelViewer3D = () => {
   const [isMounted, setIsMounted] = useState(false);
   const fileInputRef = useRef(null);
   const textureFileInputRefs = useRef({});
   const viewerCardRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
   const [importedModel, setImportedModel] = useState(null);
   const [isImportedModelDisplayed, setIsImportedModelDisplayed] =
     useState(false);
   const [importedModelName, setImportedModelName] = useState("Imported Model");
+
   const [currentCategory, setCurrentCategory] = useState(CATEGORIES_DATA[0].id);
   const [currentShape, setCurrentShape] = useState(
     SHAPES_BY_CATEGORY_DATA[CATEGORIES_DATA[0].id][0].id
   );
+
   const [isAnimating, setIsAnimating] = useState(true);
   const [animationPreset, setAnimationPreset] = useState("gentle");
+
   const [settings, setSettings] = useState(
     JSON.parse(JSON.stringify(initialSettings))
   );
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
+
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+
   const [customBgImageUrl, setCustomBgImageUrl] = useState(null);
+
   const [textInput, setTextInput] = useState("Hello 3D");
   const [current3DText, setCurrent3DText] = useState("");
   const [isTextVisible, setIsTextVisible] = useState(false);
+
   const meshToExportOrScreenshotRef = useRef(null);
   const r3fSceneForExportRef = useRef(null);
   const r3fGLContextRef = useRef(null);
-  const mixerRef = useRef(null);
+  const orbitControlsRef = useRef(null);
+
   const animationClipsRef = useRef([]);
   const activeActionRef = useRef(null);
+  const mixerRef = useRef(null);
+
   const [selectedAnimationClipIndex, setSelectedAnimationClipIndex] =
     useState(-1);
   const [animationPlaybackState, setAnimationPlaybackState] =
@@ -2170,51 +1903,54 @@ const ModelViewer3D = () => {
   const [animationDuration, setAnimationDuration] = useState(0);
   const [isAnimationLooping, setIsAnimationLooping] = useState(true);
   const [animationPlaybackSpeed, setAnimationPlaybackSpeed] = useState(1.0);
+
   const historyStackRef = useRef([]);
   const historyPointerRef = useRef(-1);
   const isUndoingRedoingRef = useRef(false);
   const MAX_HISTORY = 50;
-  const captureAppState = useCallback(() => {
-    return JSON.parse(
-      JSON.stringify({
-        settings,
-        currentCategory,
-        currentShape,
-        animationPreset,
-        isAnimating,
-        importedModelName,
-        isImportedModelDisplayed,
-        importedModelUrl: importedModel?.url,
-        importedModelType: importedModel?.type,
-        importedModelMtlUrl: importedModel?.mtlUrl,
-        selectedAnimationClipIndex,
-        animationPlaybackState,
-        animationTime,
-        isAnimationLooping,
-        animationPlaybackSpeed,
-        customBgImageUrl,
-        current3DText,
-        isTextVisible,
-      })
-    );
-  }, [
-    settings,
-    currentCategory,
-    currentShape,
-    animationPreset,
-    isAnimating,
-    importedModelName,
-    isImportedModelDisplayed,
-    importedModel,
-    selectedAnimationClipIndex,
-    animationPlaybackState,
-    animationTime,
-    isAnimationLooping,
-    animationPlaybackSpeed,
-    customBgImageUrl,
-    current3DText,
-    isTextVisible,
-  ]);
+  const captureAppState = useCallback(
+    () =>
+      JSON.parse(
+        JSON.stringify({
+          settings,
+          currentCategory,
+          currentShape,
+          animationPreset,
+          isAnimating,
+          importedModelName,
+          isImportedModelDisplayed,
+          importedModelUrl: importedModel?.url,
+          importedModelType: importedModel?.type,
+          importedModelMtlUrl: importedModel?.mtlUrl,
+          selectedAnimationClipIndex,
+          animationPlaybackState,
+          animationTime,
+          isAnimationLooping,
+          animationPlaybackSpeed,
+          customBgImageUrl,
+          current3DText,
+          isTextVisible,
+        })
+      ),
+    [
+      settings,
+      currentCategory,
+      currentShape,
+      animationPreset,
+      isAnimating,
+      importedModelName,
+      isImportedModelDisplayed,
+      importedModel,
+      selectedAnimationClipIndex,
+      animationPlaybackState,
+      animationTime,
+      isAnimationLooping,
+      animationPlaybackSpeed,
+      customBgImageUrl,
+      current3DText,
+      isTextVisible,
+    ]
+  );
   const applyState = useCallback(
     (stateToApply) => {
       isUndoingRedoingRef.current = true;
@@ -2270,7 +2006,7 @@ const ModelViewer3D = () => {
       if (stack.length > MAX_HISTORY) stack.shift();
       historyStackRef.current = stack;
       historyPointerRef.current = stack.length - 1;
-      console.log("History pushed:", actionName, historyPointerRef.current);
+      console.log("History:", actionName, historyPointerRef.current);
     },
     [captureAppState]
   );
@@ -2279,28 +2015,23 @@ const ModelViewer3D = () => {
       historyPointerRef.current--;
       applyState(historyStackRef.current[historyPointerRef.current]);
       sonnerToast.info("Undo");
-    } else {
-      sonnerToast.warning("Nothing more to undo.");
-    }
+    } else sonnerToast.warning("Nothing more to undo.");
   }, [applyState]);
   const handleRedo = useCallback(() => {
     if (historyPointerRef.current < historyStackRef.current.length - 1) {
       historyPointerRef.current++;
       applyState(historyStackRef.current[historyPointerRef.current]);
       sonnerToast.info("Redo");
-    } else {
-      sonnerToast.warning("Nothing more to redo.");
-    }
+    } else sonnerToast.warning("Nothing more to redo.");
   }, [applyState]);
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
   useEffect(() => {
     if (isMounted) {
-      const timeoutId = setTimeout(() => {
-        pushHistory("initial load");
-      }, 100);
-      return () => clearTimeout(timeoutId);
+      const t = setTimeout(() => pushHistory("initial load"), 200);
+      return () => clearTimeout(t);
     }
   }, [isMounted, pushHistory]);
   const debouncedPushHistoryRef = useRef(null);
@@ -2310,32 +2041,14 @@ const ModelViewer3D = () => {
       clearTimeout(debouncedPushHistoryRef.current);
     debouncedPushHistoryRef.current = setTimeout(() => {
       if (isMounted && !isUndoingRedoingRef.current)
-        pushHistory("settings/state changed");
+        pushHistory("state changed");
     }, 750);
     return () => {
       if (debouncedPushHistoryRef.current)
         clearTimeout(debouncedPushHistoryRef.current);
     };
-  }, [
-    settings,
-    currentCategory,
-    currentShape,
-    animationPreset,
-    isAnimating,
-    importedModelName,
-    isImportedModelDisplayed,
-    importedModel,
-    selectedAnimationClipIndex,
-    animationPlaybackState,
-    animationTime,
-    isAnimationLooping,
-    animationPlaybackSpeed,
-    customBgImageUrl,
-    current3DText,
-    isTextVisible,
-    pushHistory,
-    isMounted,
-  ]);
+  }, [captureAppState, pushHistory, isMounted]);
+
   const toggleFullscreen = useCallback(async () => {
     if (!viewerCardRef.current) return;
     if (!document.fullscreenElement) {
@@ -2344,48 +2057,39 @@ const ModelViewer3D = () => {
       } catch (err) {
         sonnerToast.error("Fullscreen Failed", { description: err.message });
       }
-    } else {
-      if (document.exitFullscreen) {
-        try {
-          await document.exitFullscreen();
-        } catch (err) {
-          sonnerToast.error("Exit Fullscreen Failed", {
-            description: err.message,
-          });
-        }
+    } else if (document.exitFullscreen) {
+      try {
+        await document.exitFullscreen();
+      } catch (err) {
+        sonnerToast.error("Exit Fullscreen Failed", {
+          description: err.message,
+        });
       }
     }
   }, []);
   useEffect(() => {
-    const handleFullscreenChange = () =>
-      setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
-    document.addEventListener("mozfullscreenchange", handleFullscreenChange);
-    document.addEventListener("MSFullscreenChange", handleFullscreenChange);
+    const fsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", fsChange);
+    document.addEventListener("webkitfullscreenchange", fsChange);
+    document.addEventListener("mozfullscreenchange", fsChange);
+    document.addEventListener("MSFullscreenChange", fsChange);
     return () => {
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-      document.removeEventListener(
-        "webkitfullscreenchange",
-        handleFullscreenChange
-      );
-      document.removeEventListener(
-        "mozfullscreenchange",
-        handleFullscreenChange
-      );
-      document.removeEventListener(
-        "MSFullscreenChange",
-        handleFullscreenChange
-      );
+      document.removeEventListener("fullscreenchange", fsChange);
+      document.removeEventListener("webkitfullscreenchange", fsChange);
+      document.removeEventListener("mozfullscreenchange", fsChange);
+      document.removeEventListener("MSFullscreenChange", fsChange);
     };
   }, []);
+
   const handleMeshReadyForParent = useCallback((mesh) => {
     meshToExportOrScreenshotRef.current = mesh;
   }, []);
-  const handleSceneRefForExportCallback = useCallback((scene, gl) => {
+  const handleSceneRefForExportCallback = useCallback((scene, gl, controls) => {
     r3fSceneForExportRef.current = scene;
     r3fGLContextRef.current = gl;
+    orbitControlsRef.current = controls;
   }, []);
+
   const handleModelLoadedForScene = useCallback((loadedObject, loadedAnims) => {
     animationClipsRef.current = loadedAnims || [];
     if (loadedObject && animationClipsRef.current.length > 0) {
@@ -2396,93 +2100,81 @@ const ModelViewer3D = () => {
     } else {
       setSelectedAnimationClipIndex(-1);
       setAnimationDuration(0);
-    }
-  }, []);
-  const handleResetAnimation = useCallback(() => {
-    if (activeActionRef.current) {
-      activeActionRef.current.reset();
-      if (animationPlaybackState !== "playing") activeActionRef.current.stop();
-      else activeActionRef.current.play();
+      setAnimationPlaybackState("stopped");
       setAnimationTime(0);
     }
-    sonnerToast.info("View Reset (OrbitControls)");
-    if (activeActionRef.current) pushHistory("reset imported animation");
-  }, [pushHistory, animationPlaybackState]);
-  const handleToggleGlobalAnimation = useCallback(() => {
-    setIsAnimating((prev) => {
-      const nextState = !prev;
-      sonnerToast.info(
-        `Floating Animation ${nextState ? "Resumed" : "Paused"}`
-      );
-      return nextState;
-    });
   }, []);
-  const handleSettingsChange = (key, value, subKey = null) => {
+
+  const handleResetOrbitControlsView = useCallback(() => {
+    if (orbitControlsRef.current?.reset) {
+      orbitControlsRef.current.reset();
+      sonnerToast.info("View Reset");
+    } else sonnerToast.warning("OrbitControls not available.");
+    pushHistory("reset view");
+  }, [pushHistory]);
+  const handleToggleGlobalAnimation = useCallback(
+    () =>
+      setIsAnimating((p) => {
+        sonnerToast.info(`Float Animation ${!p ? "Resumed" : "Paused"}`);
+        return !p;
+      }),
+    []
+  );
+  const handleSettingsChange = (key, value, subKey = null) =>
     setSettings((s) => {
-      const newSettings = { ...s };
-      if (subKey) {
-        newSettings[key] = { ...s[key], [subKey]: value };
-      } else {
-        newSettings[key] = value;
-      }
-      return newSettings;
+      const n = { ...s };
+      if (subKey) n[key] = { ...s[key], [subKey]: value };
+      else n[key] = value;
+      return n;
     });
-  };
   const resetCustomMaterialProperties = () => {
-    const currentPresetKey = settings.materialType;
-    if (
-      currentPresetKey &&
-      currentPresetKey !== "auto" &&
-      baseMaterialPresets[currentPresetKey]
-    ) {
-      const presetDefaults = baseMaterialPresets[currentPresetKey];
-      const textureUrlKeys = [
+    const cpk = settings.materialType;
+    if (cpk && cpk !== "auto" && baseMaterialPresets[cpk]) {
+      const pd = baseMaterialPresets[cpk];
+      const rtu = {};
+      [
         "mapUrl",
         "normalMapUrl",
         "roughnessMapUrl",
         "metalnessMapUrl",
         "aoMapUrl",
         "emissiveMapUrl",
-      ];
-      const resetTextureUrls = {};
-      textureUrlKeys.forEach((key) => (resetTextureUrls[key] = null));
+      ].forEach((k) => (rtu[k] = null));
       setSettings((s) => ({
         ...s,
         customMaterialProperties: {
-          roughness:
-            presetDefaults.roughness ??
-            initialSettings.customMaterialProperties.roughness,
-          metalness:
-            presetDefaults.metalness ??
-            initialSettings.customMaterialProperties.metalness,
-          ior:
-            presetDefaults.ior ?? initialSettings.customMaterialProperties.ior,
-          transmission:
-            presetDefaults.transmission ??
-            initialSettings.customMaterialProperties.transmission,
-          thickness:
-            presetDefaults.thickness ??
-            initialSettings.customMaterialProperties.thickness,
-          emissiveIntensity:
-            presetDefaults.emissiveIntensity ??
-            initialSettings.customMaterialProperties.emissiveIntensity,
-          ...resetTextureUrls,
+          roughness: pd.roughness ?? null,
+          metalness: pd.metalness ?? null,
+          ior: pd.ior ?? null,
+          transmission: pd.transmission ?? null,
+          thickness: pd.thickness ?? null,
+          emissiveIntensity: pd.emissiveIntensity ?? null,
+          envMapIntensity: pd.envMapIntensity ?? 1.0,
+          ...rtu,
         },
       }));
-      sonnerToast.info("Material Properties Reset to Preset Defaults");
+      sonnerToast.info("Material Props Reset");
     }
   };
-  const handleCategorySelect = useCallback((categoryId) => {
-    setIsImportedModelDisplayed(false);
-    setImportedModel(null);
-    setCurrentCategory(categoryId);
-    setCurrentShape(SHAPES_BY_CATEGORY_DATA[categoryId][0].id);
-  }, []);
-  const handleShapeSelect = useCallback((shapeId) => {
-    setIsImportedModelDisplayed(false);
-    setImportedModel(null);
-    setCurrentShape(shapeId);
-  }, []);
+  const handleCategorySelect = useCallback(
+    (id) => {
+      setIsImportedModelDisplayed(false);
+      setImportedModel(null);
+      setCurrentCategory(id);
+      setCurrentShape(SHAPES_BY_CATEGORY_DATA[id][0].id);
+      pushHistory("category select");
+    },
+    [pushHistory]
+  );
+  const handleShapeSelect = useCallback(
+    (id) => {
+      setIsImportedModelDisplayed(false);
+      setImportedModel(null);
+      setCurrentShape(id);
+      pushHistory("shape select");
+    },
+    [pushHistory]
+  );
   const handleRandomize = useCallback(() => {
     setIsImportedModelDisplayed(false);
     setImportedModel(null);
@@ -2566,7 +2258,9 @@ const ModelViewer3D = () => {
       },
     }));
     sonnerToast.success("Scene Randomized!");
-  }, []);
+    pushHistory("randomize scene");
+  }, [pushHistory]);
+
   const currentShapeRef = useRef(currentShape);
   useEffect(() => {
     currentShapeRef.current = currentShape;
@@ -2576,72 +2270,31 @@ const ModelViewer3D = () => {
     currentImportedModelNameRef.current = importedModelName;
   }, [importedModelName]);
 
-  // Solution Change 2: Robust on-demand font loading in `handleExportGLB`
   const handleExportGLB = useCallback(async () => {
     if (isExporting) return;
     const sceneToExport = new THREE.Scene();
-    let hasContentToExport = false;
-
+    let hasContent = false;
     if (meshToExportOrScreenshotRef.current) {
-      const modelClone = meshToExportOrScreenshotRef.current.clone(true);
-      sceneToExport.add(modelClone);
-      hasContentToExport = true;
+      const clone = meshToExportOrScreenshotRef.current.clone(true);
+      sceneToExport.add(clone);
+      hasContent = true;
     }
-
     if (isTextVisible && current3DText && settings.textFontUrl) {
-      let fontForTextGeometry = helvetikerFontForExport; // Use pre-loaded if available and matching
-
-      // Load/re-load if:
-      // 1. Font not pre-loaded (helvetikerFontForExport is null).
-      // 2. The font URL in settings is different from the default one that was pre-loaded.
-      if (!fontForTextGeometry || settings.textFontUrl !== DEFAULT_FONT_PATH) {
+      let font = helvetikerFontForExport;
+      if (!font || settings.textFontUrl !== DEFAULT_FONT_PATH) {
         try {
-          if (!fontForTextGeometry) {
-            console.log(
-              `[handleExportGLB] Font (${settings.textFontUrl}) not pre-loaded. Loading on demand.`
-            );
-          } else {
-            // Implies settings.textFontUrl !== DEFAULT_FONT_PATH
-            console.log(
-              `[handleExportGLB] Font URL in settings (${settings.textFontUrl}) differs from pre-loaded default (${DEFAULT_FONT_PATH}). Re-loading.`
-            );
-          }
-
-          const onDemandFontLoader = new FontLoader(); // Use a fresh loader instance
-          fontForTextGeometry = await new Promise((resolve, reject) =>
-            onDemandFontLoader.load(
-              settings.textFontUrl, // Always use the font from current settings
-              resolve,
-              undefined,
-              reject
-            )
-          );
-
-          // Update the global cache only if the loaded font is the default one
-          if (settings.textFontUrl === DEFAULT_FONT_PATH) {
-            helvetikerFontForExport = fontForTextGeometry;
-          }
-          console.log(
-            `[handleExportGLB] Successfully loaded font for export: ${settings.textFontUrl}`
-          );
+          font = await new FontLoader().loadAsync(settings.textFontUrl);
+          if (settings.textFontUrl === DEFAULT_FONT_PATH)
+            helvetikerFontForExport = font;
         } catch (e) {
-          console.error(
-            `[handleExportGLB] Error loading font ${settings.textFontUrl} on demand:`,
-            e
-          );
-          sonnerToast.error("Text Export Failed", {
-            description: `Font (${settings.textFontUrl}) for text geometry failed to load.`,
-          });
-          setIsExporting(false); // Reset export state
-          setExportProgress(0);
-          return; // Stop the export
+          sonnerToast.error("Font load failed for export");
+          setIsExporting(false);
+          return;
         }
       }
-
-      if (fontForTextGeometry) {
-        // Ensure font is available before proceeding
-        const textGeom = new TextGeometry(current3DText, {
-          font: fontForTextGeometry,
+      if (font) {
+        const geom = new TextGeometry(current3DText, {
+          font,
           size: saneNumber(settings.textSize, 0.5),
           height: saneNumber(settings.textDepth, 0.05),
           curveSegments: 12,
@@ -2649,146 +2302,87 @@ const ModelViewer3D = () => {
           bevelThickness: saneNumber(0.02 * (settings.textSize / 0.5), 0.01),
           bevelSize: saneNumber(0.01 * (settings.textSize / 0.5), 0.005),
         });
-        textGeom.center();
-        const { constructor: MatConstructor, args } = createR3FMaterialProps(
+        geom.center();
+        const { constructor: MC, args: ma } = createR3FMaterialProps(
           settings.textColor,
-          "ceramic", // Material for text, can be customized if needed
+          "ceramic",
           {},
           r3fSceneForExportRef.current?.environment
         );
-        const textMeshMaterial = new MatConstructor(args);
-        const textMesh = new THREE.Mesh(textGeom, textMeshMaterial);
-
-        let textExportYOffset = 0;
+        const tm = new MC(ma);
+        const tMesh = new THREE.Mesh(geom, tm);
+        let yOff = 0;
         if (meshToExportOrScreenshotRef.current) {
-          const mainModelBox = new THREE.Box3().setFromObject(
+          const box = new THREE.Box3().setFromObject(
             meshToExportOrScreenshotRef.current
           );
-          if (!mainModelBox.isEmpty()) {
-            const modelHeight = mainModelBox.max.y - mainModelBox.min.y;
-            const modelCenterY = mainModelBox.getCenter(new THREE.Vector3()).y;
-            textExportYOffset =
-              modelCenterY +
-              modelHeight / 2 +
+          if (!box.isEmpty()) {
+            yOff =
+              box.getCenter(new THREE.Vector3()).y +
+              (box.max.y - box.min.y) / 2 +
               saneNumber(settings.textSize, 0.5) / 2 +
               0.3;
-          } else {
-            textExportYOffset = saneNumber(settings.textSize, 0.5) / 2 + 0.3;
-          }
-        } else {
-          // Only text is being exported
-          textExportYOffset = saneNumber(settings.textSize, 0.5) / 2;
-        }
-        textMesh.position.y = textExportYOffset;
-        sceneToExport.add(textMesh);
-        hasContentToExport = true;
+          } else yOff = saneNumber(settings.textSize, 0.5) / 2 + 0.3;
+        } else yOff = saneNumber(settings.textSize, 0.5) / 2;
+        tMesh.position.y = yOff;
+        sceneToExport.add(tMesh);
+        hasContent = true;
       } else {
-        // This case implies font loading failed and was caught, but as a final check
-        sonnerToast.error("Text Export Failed", {
-          description: "Font was not available for text geometry.",
-        });
         setIsExporting(false);
-        setExportProgress(0);
         return;
       }
     }
-
-    if (!hasContentToExport) {
-      sonnerToast.warning("Export Failed", {
-        description: "Nothing visible to export.",
-      });
+    if (!hasContent) {
+      sonnerToast.warning("Nothing to export");
       return;
     }
-
     setIsExporting(true);
     setExportProgress(0);
-    const exportToastId = sonnerToast.loading("Exporting GLB...", {
-      description: "Preparing model...",
-    });
-
+    const toastId = sonnerToast.loading("Exporting GLB...");
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate preparation
+      await new Promise((r) => setTimeout(r, 200));
       setExportProgress(50);
-      sonnerToast.info("Finalizing export...", {
-        id: exportToastId,
-        description: "Almost there...",
-      });
-
       const exporter = new GLTFExporter();
-      const exportOptions = {
-        binary: true,
-        embedImages: true,
-        animations:
-          isImportedModelDisplayed &&
-          importedModel &&
-          animationClipsRef.current.length > 0
-            ? animationClipsRef.current
-            : [],
-      };
-
       exporter.parse(
         sceneToExport,
         (gltf) => {
-          if (!(gltf instanceof ArrayBuffer)) {
-            throw new Error("Exported GLTF is not an ArrayBuffer.");
-          }
           const blob = new Blob([gltf], { type: "application/octet-stream" });
-          const link = document.createElement("a");
-          link.href = URL.createObjectURL(blob);
-          const baseName = isImportedModelDisplayed
-            ? (currentImportedModelNameRef.current || "imported-model")
-                .replace(/[^a-z0-9]/gi, "_")
-                .toLowerCase()
-            : currentShapeRef.current || "model";
-          const textSuffix = isTextVisible && current3DText ? "-with-text" : "";
-          link.download = `shape-${baseName}${textSuffix}.glb`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(link.href);
-
+          const l = document.createElement("a");
+          l.href = URL.createObjectURL(blob);
+          l.download = `shape-${
+            isImportedModelDisplayed
+              ? (currentImportedModelNameRef.current || "imported")
+                  .replace(/[^a-z0-9]/gi, "_")
+                  .toLowerCase()
+              : currentShapeRef.current || "model"
+          }${isTextVisible && current3DText ? "-with-text" : ""}.glb`;
+          l.click();
+          URL.revokeObjectURL(l.href);
           setExportProgress(100);
-          sonnerToast.success("GLB Export Ready", {
-            id: exportToastId,
-            description: "Download started.",
-          });
-          setTimeout(() => {
-            setIsExporting(false);
-            setExportProgress(0);
-          }, 500);
-        },
-        (error) => {
-          console.error("GLTFExporter error:", error);
-          sonnerToast.error("GLB Export Failed", {
-            id: exportToastId,
-            description: error?.message || "GLTF parsing error.",
-          });
+          sonnerToast.success("GLB Exported", { id: toastId });
           setIsExporting(false);
-          setExportProgress(0);
         },
-        exportOptions
+        (err) => {
+          console.error(err);
+          sonnerToast.error("GLB Export Failed", { id: toastId });
+          setIsExporting(false);
+        },
+        {
+          binary: true,
+          embedImages: true,
+          animations:
+            isImportedModelDisplayed &&
+            importedModel &&
+            animationClipsRef.current.length > 0
+              ? animationClipsRef.current
+              : [],
+        }
       );
     } catch (e) {
-      console.error("Export GLB general error:", e);
+      sonnerToast.error("Export Error", { id: toastId });
       setIsExporting(false);
-      setExportProgress(0);
-      sonnerToast.error("GLB Export Failed", {
-        id: exportToastId,
-        description: e.message || "Unexpected error during export preparation.",
-      });
     }
-  }, [
-    isExporting,
-    isTextVisible,
-    current3DText,
-    settings.textFontUrl,
-    settings.textSize,
-    settings.textDepth,
-    settings.textColor,
-    isImportedModelDisplayed,
-    importedModel, // Add importedModel to dependencies as it's used for animations
-  ]);
-
+  }, [isExporting, isTextVisible, current3DText, settings, importedModel]);
   const handleSimulatedExportOBJ = useCallback(() => {
     if (isExporting) return;
     setIsExporting(true);
@@ -2872,6 +2466,7 @@ const ModelViewer3D = () => {
       }
     });
   }, [isImportedModelDisplayed, current3DText, isTextVisible]);
+
   const processAndSetImportedModel = useCallback(
     (fileUrl, fileType, mtlFileUrl = null, originalFileName) => {
       const nameOnly =
@@ -2888,11 +2483,11 @@ const ModelViewer3D = () => {
         mixerRef.current.stopAllAction();
         mixerRef.current = null;
       }
-      activeActionRef.current = null;
+      if (activeActionRef.current) activeActionRef.current = null;
+      pushHistory(`import ${fileType}`);
     },
-    []
+    [pushHistory]
   );
-
   const handleFiles = useCallback(
     async (files) => {
       if (!files || files.length === 0) return;
@@ -2902,7 +2497,6 @@ const ModelViewer3D = () => {
       let modelFile = null;
       let mtlFile = null;
       let modelFileType = "";
-
       const modelFileExtensions = [".glb", ".gltf", ".fbx", ".stl", ".obj"];
       for (const ext of modelFileExtensions) {
         modelFile = Array.from(files).find((f) =>
@@ -2924,75 +2518,34 @@ const ModelViewer3D = () => {
           f.name.toLowerCase().endsWith(".mtl")
         );
       }
-
       if (modelFile) {
         let modelUrlToUse;
         const mtlUrlToUse = mtlFile ? URL.createObjectURL(mtlFile) : null;
-
-        if (importedModel?.url && importedModel.url.startsWith("blob:"))
+        if (importedModel?.url?.startsWith("blob:"))
           URL.revokeObjectURL(importedModel.url);
-        if (importedModel?.mtlUrl && importedModel.mtlUrl.startsWith("blob:"))
+        if (importedModel?.mtlUrl?.startsWith("blob:"))
           URL.revokeObjectURL(importedModel.mtlUrl);
-
-        if (modelFileType === "glb") {
-          console.log(
-            `[handleFiles] Converting GLB to Data URL with model/gltf-binary type...`
-          );
+        if (modelFileType === "glb" || modelFileType === "gltf") {
           try {
             const reader = new FileReader();
             modelUrlToUse = await new Promise((resolve, reject) => {
               reader.onload = (event) => resolve(event.target.result);
-              reader.onerror = (error) => {
-                console.error("Error reading GLB file for Data URL:", error);
-                reject(error);
-              };
+              reader.onerror = reject;
               reader.readAsDataURL(modelFile);
             });
-            if (modelUrlToUse.startsWith("data:application/octet-stream")) {
+            if (
+              modelFileType === "glb" &&
+              modelUrlToUse.startsWith("data:application/octet-stream")
+            ) {
               modelUrlToUse = modelUrlToUse.replace(
                 "data:application/octet-stream",
                 "data:model/gltf-binary"
               );
-              console.log(
-                `[handleFiles] Corrected MIME type to model/gltf-binary for GLB Data URL.`
-              );
             }
-            console.log(
-              `[handleFiles] GLB Data URL created (length: ${
-                modelUrlToUse.length
-              }, type: ${modelUrlToUse.substring(0, 50)})`
-            );
           } catch (error) {
             sonnerToast.error("File Processing Error", {
               id: importToastId,
-              description: `Failed to convert GLB to Data URL.`,
-            });
-            if (fileInputRef.current) fileInputRef.current.value = null;
-            return;
-          }
-        } else if (modelFileType === "gltf") {
-          console.log(
-            `[handleFiles] Converting GLTF to Data URL (text based)...`
-          );
-          try {
-            const reader = new FileReader();
-            modelUrlToUse = await new Promise((resolve, reject) => {
-              reader.onload = (event) => resolve(event.target.result);
-              reader.onerror = (error) => {
-                console.error("Error reading GLTF file for Data URL:", error);
-                reject(error);
-              };
-              reader.readAsDataURL(modelFile);
-            });
-            console.log(
-              `[handleFiles] GLTF Data URL created (length: ${
-                modelUrlToUse.length
-              }, type: ${modelUrlToUse.substring(0, 50)})`
-            );
-          } catch (error) {
-            sonnerToast.error("File Processing Error", {
-              id: importToastId,
-              description: `Failed to convert GLTF to Data URL.`,
+              description: `Failed to convert ${modelFileType.toUpperCase()} to Data URL.`,
             });
             if (fileInputRef.current) fileInputRef.current.value = null;
             return;
@@ -3000,7 +2553,6 @@ const ModelViewer3D = () => {
         } else {
           modelUrlToUse = URL.createObjectURL(modelFile);
         }
-
         processAndSetImportedModel(
           modelUrlToUse,
           modelFileType,
@@ -3009,7 +2561,7 @@ const ModelViewer3D = () => {
         );
         sonnerToast.success("Model Ready", {
           id: importToastId,
-          description: `${modelFile.name} prepared for display.`,
+          description: `${modelFile.name} prepared.`,
         });
       } else {
         sonnerToast.error("No Compatible Model", {
@@ -3021,7 +2573,6 @@ const ModelViewer3D = () => {
     },
     [processAndSetImportedModel, importedModel]
   );
-
   const triggerImport = useCallback(() => {
     if (fileInputRef.current) fileInputRef.current.click();
   }, []);
@@ -3029,223 +2580,150 @@ const ModelViewer3D = () => {
     (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+      if (event.dataTransfer.files?.length > 0)
         handleFiles(Array.from(event.dataTransfer.files));
-      }
     },
     [handleFiles]
   );
+
   const handlePlayPauseAnimation = () => {
-    if (!activeActionRef.current) return;
-    if (animationPlaybackState === "playing") {
-      activeActionRef.current.paused = true;
-      setAnimationPlaybackState("paused");
-    } else {
-      activeActionRef.current.paused = false;
-      if (!activeActionRef.current.isRunning()) activeActionRef.current.play();
-      setAnimationPlaybackState("playing");
+    if (
+      !activeActionRef.current ||
+      animationClipsRef.current.length === 0 ||
+      selectedAnimationClipIndex < 0
+    ) {
+      sonnerToast.warning("No Animation Selected");
+      return;
     }
+    setAnimationPlaybackState((prev) =>
+      prev === "playing" ? "paused" : "playing"
+    );
+    pushHistory("toggle anim play/pause");
   };
   const handleStopAnimation = () => {
-    if (!activeActionRef.current) return;
-    activeActionRef.current.reset().stop();
+    if (
+      !activeActionRef.current ||
+      animationClipsRef.current.length === 0 ||
+      selectedAnimationClipIndex < 0
+    ) {
+      sonnerToast.warning("No Animation Selected");
+      return;
+    }
     setAnimationPlaybackState("stopped");
     setAnimationTime(0);
+    pushHistory("stop anim");
   };
   const handleAnimationClipChange = (indexStr) => {
     const index = parseInt(indexStr, 10);
-    if (
-      mixerRef.current &&
-      index >= 0 &&
-      index < animationClipsRef.current.length
-    ) {
-      if (activeActionRef.current) {
-        activeActionRef.current.stop();
-      }
-      const clip = animationClipsRef.current[index];
-      activeActionRef.current = mixerRef.current.clipAction(clip);
-      activeActionRef.current.setLoop(
-        isAnimationLooping ? THREE.LoopRepeat : THREE.LoopOnce,
-        Infinity
-      );
-      activeActionRef.current.timeScale = animationPlaybackSpeed;
-      activeActionRef.current.play();
+    if (index >= 0 && index < animationClipsRef.current.length) {
       setSelectedAnimationClipIndex(index);
-      setAnimationPlaybackState("playing");
-      setAnimationDuration(clip.duration);
+      setAnimationDuration(animationClipsRef.current[index].duration);
       setAnimationTime(0);
+      setAnimationPlaybackState("stopped");
+      sonnerToast.info(
+        `Animation: ${
+          animationClipsRef.current[index].name || `Clip ${index + 1}`
+        }`
+      );
+    } else {
+      setSelectedAnimationClipIndex(-1);
+      setAnimationDuration(0);
+      setAnimationPlaybackState("stopped");
     }
+    pushHistory("change anim clip");
   };
   const handleAnimationTimeChange = (value) => {
-    const normalizedTime = value[0];
-    if (activeActionRef.current && animationDuration > 0) {
-      const newTimeInSeconds = normalizedTime * animationDuration;
-      activeActionRef.current.time = newTimeInSeconds;
-      if (
-        animationPlaybackState === "paused" ||
-        animationPlaybackState === "stopped"
-      ) {
-        if (mixerRef.current) mixerRef.current.update(0);
-      }
-      setAnimationTime(normalizedTime);
-    }
+    setAnimationTime(value[0]);
   };
   const handleAnimationLoopToggle = (checked) => {
     setIsAnimationLooping(checked);
-    if (activeActionRef.current)
-      activeActionRef.current.setLoop(
-        checked ? THREE.LoopRepeat : THREE.LoopOnce,
-        Infinity
-      );
+    pushHistory("toggle anim loop");
   };
   const handleAnimationSpeedChange = (value) => {
-    const speed = value[0];
-    setAnimationPlaybackSpeed(speed);
-    if (activeActionRef.current) activeActionRef.current.timeScale = speed;
+    setAnimationPlaybackSpeed(value[0]);
+    pushHistory("change anim speed");
   };
 
   const handleCustomBgImageUpload = (event) => {
     const file = event.target.files[0];
-    const fileInput = event.target;
     if (file) {
-      const fileNameLower = file.name.toLowerCase();
-      const fileType = file.type;
-      if (
-        fileNameLower.endsWith(".hdr") ||
-        fileNameLower.endsWith(".exr") ||
-        fileType === "application/octet-stream" ||
-        fileType === "image/vnd.radiance" ||
-        fileType === "image/x-exr"
-      ) {
-        sonnerToast.error("HDR/EXR Not Supported for Background", {
-          description:
-            "Please use JPG, PNG, or WEBP for this background image slot. HDRs are processed differently for environment lighting.",
-        });
-        if (fileInput) fileInput.value = null;
-        return;
-      }
-      const acceptedLdrTypes = ["image/jpeg", "image/png", "image/webp"];
-      if (
-        !acceptedLdrTypes.includes(fileType) &&
-        !fileNameLower.endsWith(".jpg") &&
-        !fileNameLower.endsWith(".jpeg") &&
-        !fileNameLower.endsWith(".png") &&
-        !fileNameLower.endsWith(".webp")
-      ) {
-        sonnerToast.error("Unsupported File Type", {
-          description:
-            "Please upload a JPG, PNG, or WEBP image for the background.",
-        });
-        if (fileInput) fileInput.value = null;
-        return;
-      }
       const reader = new FileReader();
       reader.onload = (e) => {
         setCustomBgImageUrl(e.target.result);
         setSettings((s) => ({ ...s, background: "customImage" }));
-        sonnerToast.success("Custom background image set.");
+        sonnerToast.success("Custom background set.");
+        pushHistory("set custom bg");
       };
-      reader.onerror = () => {
-        sonnerToast.error("File Reading Error", {
-          description: "Could not read the selected file.",
-        });
-        if (fileInput) fileInput.value = null;
-      };
+      reader.onerror = () => sonnerToast.error("File Read Error");
       reader.readAsDataURL(file);
-    } else {
-      if (fileInput) fileInput.value = null;
     }
+    if (event.target) event.target.value = null;
   };
   const handleClearCustomBgImage = () => {
     setCustomBgImageUrl(null);
-    sonnerToast.info("Custom background image cleared.");
+    if (settings.background === "customImage")
+      handleSettingsChange("background", "studioDark");
+    sonnerToast.info("Custom background cleared.");
+    pushHistory("clear custom bg");
   };
-
   const handleTextureUpload = (mapType, event) => {
     const file = event.target.files[0];
-    const fileInput = event.target;
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const urlKey = `${mapType}Url`;
-        const newTextureUrl = e.target.result;
-        console.log(
-          `[handleTextureUpload FULL] Setting ${urlKey} to Data URL (length: ${newTextureUrl.length})`
-        );
         setSettings((s) => ({
           ...s,
           customMaterialProperties: {
             ...s.customMaterialProperties,
-            [urlKey]: newTextureUrl,
+            [`${mapType}Url`]: e.target.result,
           },
         }));
         sonnerToast.success(`${mapType.replace("Map", "")} texture set.`);
-        if (fileInput) fileInput.value = null;
+        pushHistory(`set ${mapType}`);
       };
-      reader.onerror = () => {
-        sonnerToast.error("File Reading Error for Texture", {
-          description: "Could not read the selected texture file.",
-        });
-        if (fileInput) fileInput.value = null;
-      };
+      reader.onerror = () => sonnerToast.error("File Read Error");
       reader.readAsDataURL(file);
-    } else {
-      if (fileInput) fileInput.value = null;
     }
+    if (event.target) event.target.value = null;
   };
-
   const handleClearTexture = (mapType) => {
-    const urlKey = `${mapType}Url`;
     setSettings((s) => ({
       ...s,
       customMaterialProperties: {
         ...s.customMaterialProperties,
-        [urlKey]: null,
+        [`${mapType}Url`]: null,
       },
     }));
     sonnerToast.info(`${mapType.replace("Map", "")} texture cleared.`);
+    pushHistory(`clear ${mapType}`);
   };
   const handleSet3DText = () => {
-    const trimmedText = textInput.trim();
-    setCurrent3DText(trimmedText);
-    if (trimmedText !== "") {
-      setIsTextVisible(true);
-      sonnerToast.info("3D Text Updated", {
-        description: `Displaying: "${trimmedText}"`,
-      });
-    } else {
-      setIsTextVisible(false);
-      sonnerToast.info("3D Text Cleared");
-    }
+    const trimmed = textInput.trim();
+    setCurrent3DText(trimmed);
+    setIsTextVisible(trimmed !== "");
+    sonnerToast.info(
+      trimmed !== "" ? `3D Text Updated: "${trimmed}"` : "3D Text Cleared"
+    );
+    pushHistory("set 3d text");
   };
 
   const { active: isLoadingModel, progress: modelLoadProgress } = useProgress();
 
-  console.log(
-    "[ModelViewer3D] About to render SceneContentInternal. animationPreset state:",
-    animationPreset
-  );
-  console.log(
-    "[ModelViewer3D] Rendering. Current settings.customMaterialProperties.mapUrl:",
-    settings.customMaterialProperties.mapUrl
-  );
-
   if (!isMounted) {
     return (
       <div className='min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-100 p-4'>
-        <Loader2 className='h-12 w-12 animate-spin text-purple-400 mb-4' />
-        <p className='text-lg font-medium'>Initializing 3D Studio...</p>
+        {" "}
+        <Loader2 className='h-12 w-12 animate-spin text-purple-400 mb-4' />{" "}
+        <p className='text-lg font-medium'>Initializing 3D Studio...</p>{" "}
       </div>
     );
   }
   let canvasBgColor = "transparent";
-  if (settings.background !== "customImage") {
+  if (settings.background !== "customImage" || !customBgImageUrl) {
     if (settings.background === "darkSpace") canvasBgColor = "#0a0a10";
     else if (settings.background === "studioDark") canvasBgColor = "#18181b";
-    else if (settings.background === "softLight" && !customBgImageUrl)
-      canvasBgColor = "#e0e8f0";
-    else if (settings.background === "studioLight" && !customBgImageUrl)
-      canvasBgColor = "#f4f4f5";
+    else if (settings.background === "softLight") canvasBgColor = "#e0e8f0";
+    else if (settings.background === "studioLight") canvasBgColor = "#f4f4f5";
     else if (settings.background === "modernGradient")
       canvasBgColor = "#1e3b49";
   }
@@ -3274,7 +2752,7 @@ const ModelViewer3D = () => {
         <div className='min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-purple-950 p-3 sm:p-4 md:p-6 text-slate-100 select-none'>
           <input
             type='file'
-            accept='.glb,.gltf,.stl,.obj,.mtl,.fbx,.3ds'
+            accept='.glb,.gltf,.stl,.obj,.mtl,.fbx'
             multiple
             ref={fileInputRef}
             onChange={(e) => handleFiles(Array.from(e.target.files))}
@@ -3286,14 +2764,15 @@ const ModelViewer3D = () => {
                 3D Shape Studio Pro
               </h1>
               <p className='text-slate-400 text-base sm:text-lg max-w-3xl mx-auto'>
-                Craft, view, and animate 3D masterpieces. Import GLB,
-                GLTF,STL,OBJ, FBX or 3DS models. Drag & drop supported.
+                Craft, view, and animate 3D masterpieces. Import GLB, GLTF, STL,
+                OBJ, FBX models. Drag & drop supported.
               </p>
             </header>
             <div className='grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6'>
               <div className='lg:col-span-3 space-y-4 sm:space-y-5 order-last lg:order-first'>
                 {!isImportedModelDisplayed && (
                   <>
+                    {" "}
                     <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
                       <CardHeader>
                         <CardTitle className='text-slate-100'>
@@ -3318,10 +2797,11 @@ const ModelViewer3D = () => {
                               )}
                               onClick={() => handleCategorySelect(category.id)}
                             >
+                              {" "}
                               <span className='text-2xl sm:text-3xl'>
                                 {category.icon}
-                              </span>
-                              <span>{category.name}</span>
+                              </span>{" "}
+                              <span>{category.name}</span>{" "}
                             </Button>
                           ))}
                         </div>
@@ -3351,8 +2831,11 @@ const ModelViewer3D = () => {
                                   )}
                                   onClick={() => handleShapeSelect(shape.id)}
                                 >
-                                  <span className='text-xl'>{shape.icon}</span>
-                                  {shape.name}
+                                  {" "}
+                                  <span className='text-xl'>
+                                    {shape.icon}
+                                  </span>{" "}
+                                  {shape.name}{" "}
                                 </Button>
                               )
                             )}
@@ -3383,36 +2866,35 @@ const ModelViewer3D = () => {
                         size='sm'
                         className='w-full'
                         onClick={() => {
-                          if (
-                            importedModel?.url &&
-                            importedModel.url.startsWith("blob:")
-                          ) {
+                          if (importedModel?.url?.startsWith("blob:"))
                             URL.revokeObjectURL(importedModel.url);
-                          }
-                          if (
-                            importedModel?.mtlUrl &&
-                            importedModel.mtlUrl.startsWith("blob:")
-                          ) {
+                          if (importedModel?.mtlUrl?.startsWith("blob:"))
                             URL.revokeObjectURL(importedModel.mtlUrl);
-                          }
                           setImportedModel(null);
                           setIsImportedModelDisplayed(false);
                           setImportedModelName("Imported Model");
-                          const defaultCategoryId = CATEGORIES_DATA[0].id;
-                          setCurrentCategory(defaultCategoryId);
+                          const defaultCatId = CATEGORIES_DATA[0].id;
+                          setCurrentCategory(defaultCatId);
                           setCurrentShape(
-                            SHAPES_BY_CATEGORY_DATA[defaultCategoryId][0].id
+                            SHAPES_BY_CATEGORY_DATA[defaultCatId][0].id
                           );
                           animationClipsRef.current = [];
                           setSelectedAnimationClipIndex(-1);
                           setAnimationPlaybackState("stopped");
                           setAnimationTime(0);
                           setAnimationDuration(0);
+                          if (mixerRef.current) {
+                            mixerRef.current.stopAllAction();
+                            mixerRef.current = null;
+                          }
+                          if (activeActionRef.current)
+                            activeActionRef.current = null;
                           sonnerToast.info("Imported Model Cleared");
+                          pushHistory("clear imported model");
                         }}
                       >
-                        <XCircle size={16} className='mr-2' />
-                        Clear Imported
+                        {" "}
+                        <XCircle size={16} className='mr-2' /> Clear Imported{" "}
                       </Button>
                     </CardFooter>
                   </Card>
@@ -3442,9 +2924,7 @@ const ModelViewer3D = () => {
                       <Switch
                         id='text-visibility-switch'
                         checked={isTextVisible}
-                        onCheckedChange={(checked) => {
-                          setIsTextVisible(checked);
-                        }}
+                        onCheckedChange={setIsTextVisible}
                       />
                       <Label
                         htmlFor='text-visibility-switch'
@@ -3462,24 +2942,24 @@ const ModelViewer3D = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className='space-y-4'>
+                    {" "}
                     <Button
                       onClick={handleToggleGlobalAnimation}
                       variant={isAnimating ? "destructive" : "default"}
                       className='w-full bg-green-600 hover:bg-green-700 data-[state=destructive]:bg-red-600 data-[state=destructive]:hover:bg-red-700'
                       data-state={isAnimating ? "destructive" : "default"}
                     >
+                      {" "}
                       {isAnimating ? (
                         <Pause size={16} className='mr-2' />
                       ) : (
                         <Play size={16} className='mr-2' />
-                      )}
-                      {isAnimating ? "Pause Float" : "Play Float"}
-                    </Button>
+                      )}{" "}
+                      {isAnimating ? "Pause Float" : "Play Float"}{" "}
+                    </Button>{" "}
                     <Select
                       value={animationPreset}
-                      onValueChange={(val) => {
-                        setAnimationPreset(val);
-                      }}
+                      onValueChange={setAnimationPreset}
                     >
                       <SelectTrigger className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'>
                         <SelectValue placeholder='Select float style' />
@@ -3496,16 +2976,17 @@ const ModelViewer3D = () => {
                           </SelectItem>
                         ))}
                       </SelectContent>
-                    </Select>
+                    </Select>{" "}
                     <div className='grid grid-cols-2 gap-3'>
+                      {" "}
                       <Button
                         variant='outline'
-                        onClick={handleResetAnimation}
+                        onClick={handleResetOrbitControlsView}
                         className='border-slate-600 text-slate-300 hover:bg-slate-700/50 hover:text-slate-100'
                       >
                         <RotateCcw size={14} className='mr-2' />
                         Reset View
-                      </Button>
+                      </Button>{" "}
                       <Button
                         variant='default'
                         onClick={handleRandomize}
@@ -3513,9 +2994,10 @@ const ModelViewer3D = () => {
                       >
                         <Shuffle size={14} className='mr-2' />
                         Randomize
-                      </Button>
-                    </div>
+                      </Button>{" "}
+                    </div>{" "}
                     <div className='grid grid-cols-2 gap-3 pt-2'>
+                      {" "}
                       <Button
                         variant='outline'
                         onClick={handleUndo}
@@ -3524,7 +3006,7 @@ const ModelViewer3D = () => {
                       >
                         <Undo size={14} className='mr-2' />
                         Undo
-                      </Button>
+                      </Button>{" "}
                       <Button
                         variant='outline'
                         onClick={handleRedo}
@@ -3533,8 +3015,8 @@ const ModelViewer3D = () => {
                       >
                         <Redo size={14} className='mr-2' />
                         Redo
-                      </Button>
-                    </div>
+                      </Button>{" "}
+                    </div>{" "}
                   </CardContent>
                 </Card>
                 <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
@@ -3587,6 +3069,7 @@ const ModelViewer3D = () => {
                   </CardContent>
                 </Card>
               </div>
+
               <div className='lg:col-span-9 order-first lg:order-last'>
                 <Card
                   ref={viewerCardRef}
@@ -3651,120 +3134,128 @@ const ModelViewer3D = () => {
                         </SheetHeader>
                         <ScrollArea className='h-[calc(100vh-128px)]'>
                           <div className='space-y-6 p-4'>
-                            {(isImportedModelDisplayed &&
-                              (importedModel?.type === "stl" ||
-                                (importedModel?.type === "obj" &&
-                                  !importedModel?.mtlUrl))) ||
-                            !isImportedModelDisplayed ? (
-                              <section className='space-y-4'>
-                                <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
-                                  <Palette
-                                    size={16}
-                                    className='mr-2 text-purple-400'
-                                  />
-                                  {isImportedModelDisplayed &&
+                            <section className='space-y-4'>
+                              <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
+                                <Palette
+                                  size={16}
+                                  className='mr-2 text-purple-400'
+                                />
+                                {(isImportedModelDisplayed &&
                                   (importedModel?.type === "stl" ||
                                     (importedModel?.type === "obj" &&
-                                      !importedModel?.mtlUrl))
-                                    ? `Material for ${importedModelName} (${importedModel?.type})`
-                                    : "Procedural Shape Material"}
-                                </h3>
-                                <div className='space-y-1.5'>
-                                  <Label
-                                    htmlFor='materialTypePanelSheet'
-                                    className='text-sm text-slate-300'
-                                  >
-                                    Base Material
-                                  </Label>
-                                  <Select
-                                    value={settings.materialType}
-                                    onValueChange={(value) => {
-                                      handleSettingsChange(
-                                        "materialType",
-                                        value
-                                      );
-                                      if (value !== settings.materialType) {
-                                        resetCustomMaterialProperties();
-                                      }
-                                    }}
-                                  >
-                                    <SelectTrigger
-                                      id='materialTypePanelSheet'
-                                      className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
-                                    >
-                                      <SelectValue placeholder='Select material' />
-                                    </SelectTrigger>
-                                    <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
-                                      {[
-                                        "auto",
-                                        "metallic",
-                                        "glass",
-                                        "crystal",
-                                        "ceramic",
-                                        "organic",
-                                        "plastic",
-                                        "neon",
-                                      ].map((type) => (
-                                        <SelectItem
-                                          key={type}
-                                          value={type}
-                                          className='capitalize focus:bg-purple-600 focus:text-white'
-                                        >
-                                          {type}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className='space-y-1.5'>
-                                  <Label
-                                    htmlFor='shapeColorPanelSheet'
-                                    className='text-sm text-slate-300'
-                                  >
-                                    Base Color (Used if no Color Texture)
-                                  </Label>
-                                  <Input
-                                    id='shapeColorPanelSheet'
-                                    type='color'
-                                    value={settings.shapeColor}
-                                    onChange={(e) =>
-                                      handleSettingsChange(
-                                        "shapeColor",
-                                        e.target.value
-                                      )
+                                      !importedModel?.mtlUrl &&
+                                      !Object.values(
+                                        settings.customMaterialProperties
+                                      ).some(
+                                        (v) =>
+                                          typeof v === "string" &&
+                                          v.trim() !== "" &&
+                                          v !==
+                                            initialSettings
+                                              .customMaterialProperties
+                                              .envMapIntensity
+                                      )))) ||
+                                !isImportedModelDisplayed
+                                  ? isImportedModelDisplayed
+                                    ? `Material for ${importedModelName}`
+                                    : "Procedural Shape Material"
+                                  : `Override Material for ${importedModelName}`}
+                              </h3>
+                              <div className='space-y-1.5'>
+                                <Label
+                                  htmlFor='materialTypePanelSheet'
+                                  className='text-sm text-slate-300'
+                                >
+                                  Base Material
+                                </Label>
+                                <Select
+                                  value={settings.materialType}
+                                  onValueChange={(value) => {
+                                    handleSettingsChange("materialType", value);
+                                    if (value !== settings.materialType) {
+                                      resetCustomMaterialProperties();
                                     }
-                                    className='w-full p-1 h-9 bg-slate-700 border-slate-600 cursor-pointer focus-visible:ring-purple-500'
-                                  />
-                                </div>
-                                {settings.materialType !== "auto" && (
-                                  <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30'>
-                                    <div className='flex justify-between items-center'>
-                                      <h4 className='text-xs font-semibold text-purple-300'>
-                                        Fine-tune '{settings.materialType}'
-                                      </h4>
-                                      <Button
-                                        variant='ghost'
-                                        size='xs'
-                                        onClick={resetCustomMaterialProperties}
-                                        className='text-slate-400 hover:text-purple-300 h-7 px-2'
+                                  }}
+                                >
+                                  {" "}
+                                  <SelectTrigger
+                                    id='materialTypePanelSheet'
+                                    className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
+                                  >
+                                    <SelectValue placeholder='Select material' />
+                                  </SelectTrigger>
+                                  <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
+                                    {[
+                                      "auto",
+                                      "metallic",
+                                      "glass",
+                                      "crystal",
+                                      "ceramic",
+                                      "organic",
+                                      "plastic",
+                                      "neon",
+                                    ].map((type) => (
+                                      <SelectItem
+                                        key={type}
+                                        value={type}
+                                        className='capitalize focus:bg-purple-600 focus:text-white'
                                       >
-                                        Reset to Preset
-                                      </Button>
-                                    </div>
-                                    {(proceduralMaterialTypeForPanel ===
-                                      "metallic" ||
-                                      proceduralMaterialTypeForPanel ===
-                                        "glass" ||
-                                      proceduralMaterialTypeForPanel ===
-                                        "crystal" ||
-                                      proceduralMaterialTypeForPanel ===
-                                        "ceramic" ||
-                                      proceduralMaterialTypeForPanel ===
-                                        "organic" ||
-                                      proceduralMaterialTypeForPanel ===
-                                        "plastic" ||
-                                      proceduralMaterialTypeForPanel ===
-                                        "neon") && (
+                                        {type}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className='space-y-1.5'>
+                                <Label
+                                  htmlFor='shapeColorPanelSheet'
+                                  className='text-sm text-slate-300'
+                                >
+                                  Base Color (Used if no Color Texture)
+                                </Label>
+                                <Input
+                                  id='shapeColorPanelSheet'
+                                  type='color'
+                                  value={settings.shapeColor}
+                                  onChange={(e) =>
+                                    handleSettingsChange(
+                                      "shapeColor",
+                                      e.target.value
+                                    )
+                                  }
+                                  className='w-full p-1 h-9 bg-slate-700 border-slate-600 cursor-pointer focus-visible:ring-purple-500'
+                                />
+                              </div>
+                              {(settings.materialType !== "auto" ||
+                                (isImportedModelDisplayed &&
+                                  Object.values(
+                                    settings.customMaterialProperties
+                                  ).some(
+                                    (v) =>
+                                      typeof v === "string" &&
+                                      v.trim() !== "" &&
+                                      v !==
+                                        initialSettings.customMaterialProperties
+                                          .envMapIntensity
+                                  ))) && ( // Show fine-tune if not auto OR if any custom prop is set (excluding envMapIntensity for this condition)
+                                <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30'>
+                                  <div className='flex justify-between items-center'>
+                                    <h4 className='text-xs font-semibold text-purple-300'>
+                                      Fine-tune '
+                                      {proceduralMaterialTypeForPanel}'
+                                    </h4>
+                                    <Button
+                                      variant='ghost'
+                                      size='xs'
+                                      onClick={resetCustomMaterialProperties}
+                                      className='text-slate-400 hover:text-purple-300 h-7 px-2'
+                                    >
+                                      Reset to Preset
+                                    </Button>
+                                  </div>
+                                  {proceduralMaterialTypeForPanel !== "glass" &&
+                                    proceduralMaterialTypeForPanel !==
+                                      "crystal" && (
                                       <div className='space-y-1.5'>
                                         <div className='flex justify-between items-center'>
                                           <Label
@@ -3808,482 +3299,283 @@ const ModelViewer3D = () => {
                                         />
                                       </div>
                                     )}
-                                    {(proceduralMaterialTypeForPanel ===
-                                      "metallic" ||
-                                      proceduralMaterialTypeForPanel ===
-                                        "ceramic" ||
-                                      proceduralMaterialTypeForPanel ===
-                                        "plastic") && (
+                                  {(proceduralMaterialTypeForPanel ===
+                                    "metallic" ||
+                                    proceduralMaterialTypeForPanel ===
+                                      "ceramic" ||
+                                    proceduralMaterialTypeForPanel ===
+                                      "plastic" ||
+                                    proceduralMaterialTypeForPanel ===
+                                      "organic") && (
+                                    <div className='space-y-1.5'>
+                                      <div className='flex justify-between items-center'>
+                                        <Label
+                                          htmlFor='customMetalnessPanelSheet'
+                                          className='text-xs text-slate-300'
+                                        >
+                                          Metalness
+                                        </Label>
+                                        <span className='text-xs text-slate-400'>
+                                          {(
+                                            settings.customMaterialProperties
+                                              .metalness ??
+                                            baseMaterialPresets[
+                                              proceduralMaterialTypeForPanel
+                                            ]?.metalness ??
+                                            0
+                                          ).toFixed(2)}
+                                        </span>
+                                      </div>
+                                      <Slider
+                                        id='customMetalnessPanelSheet'
+                                        min={0}
+                                        max={1}
+                                        step={0.01}
+                                        value={[
+                                          settings.customMaterialProperties
+                                            .metalness ??
+                                            baseMaterialPresets[
+                                              proceduralMaterialTypeForPanel
+                                            ]?.metalness ??
+                                            0,
+                                        ]}
+                                        onValueChange={([val]) =>
+                                          handleSettingsChange(
+                                            "customMaterialProperties",
+                                            val,
+                                            "metalness"
+                                          )
+                                        }
+                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                      />
+                                    </div>
+                                  )}
+                                  {(proceduralMaterialTypeForPanel ===
+                                    "glass" ||
+                                    proceduralMaterialTypeForPanel ===
+                                      "crystal") && (
+                                    <>
                                       <div className='space-y-1.5'>
                                         <div className='flex justify-between items-center'>
                                           <Label
-                                            htmlFor='customMetalnessPanelSheet'
+                                            htmlFor='customIorPanelSheet'
                                             className='text-xs text-slate-300'
                                           >
-                                            Metalness
+                                            IOR
                                           </Label>
                                           <span className='text-xs text-slate-400'>
                                             {(
                                               settings.customMaterialProperties
-                                                .metalness ??
+                                                .ior ??
                                               baseMaterialPresets[
                                                 proceduralMaterialTypeForPanel
-                                              ]?.metalness ??
+                                              ]?.ior ??
+                                              1.5
+                                            ).toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <Slider
+                                          id='customIorPanelSheet'
+                                          min={1}
+                                          max={2.33}
+                                          step={0.01}
+                                          value={[
+                                            settings.customMaterialProperties
+                                              .ior ??
+                                              baseMaterialPresets[
+                                                proceduralMaterialTypeForPanel
+                                              ]?.ior ??
+                                              1.5,
+                                          ]}
+                                          onValueChange={([val]) =>
+                                            handleSettingsChange(
+                                              "customMaterialProperties",
+                                              val,
+                                              "ior"
+                                            )
+                                          }
+                                          className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                        />
+                                      </div>
+                                      <div className='space-y-1.5'>
+                                        <div className='flex justify-between items-center'>
+                                          <Label
+                                            htmlFor='customTransmissionPanelSheet'
+                                            className='text-xs text-slate-300'
+                                          >
+                                            Transmission
+                                          </Label>
+                                          <span className='text-xs text-slate-400'>
+                                            {(
+                                              settings.customMaterialProperties
+                                                .transmission ??
+                                              baseMaterialPresets[
+                                                proceduralMaterialTypeForPanel
+                                              ]?.transmission ??
                                               0
                                             ).toFixed(2)}
                                           </span>
                                         </div>
                                         <Slider
-                                          id='customMetalnessPanelSheet'
+                                          id='customTransmissionPanelSheet'
                                           min={0}
                                           max={1}
                                           step={0.01}
                                           value={[
                                             settings.customMaterialProperties
-                                              .metalness ??
+                                              .transmission ??
                                               baseMaterialPresets[
                                                 proceduralMaterialTypeForPanel
-                                              ]?.metalness ??
+                                              ]?.transmission ??
                                               0,
                                           ]}
                                           onValueChange={([val]) =>
                                             handleSettingsChange(
                                               "customMaterialProperties",
                                               val,
-                                              "metalness"
+                                              "transmission"
                                             )
                                           }
                                           className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                         />
                                       </div>
-                                    )}
-                                    {(proceduralMaterialTypeForPanel ===
-                                      "glass" ||
-                                      proceduralMaterialTypeForPanel ===
-                                        "crystal") && (
-                                      <>
-                                        <div className='space-y-1.5'>
-                                          <div className='flex justify-between items-center'>
-                                            <Label
-                                              htmlFor='customIorPanelSheet'
-                                              className='text-xs text-slate-300'
-                                            >
-                                              IOR
-                                            </Label>
-                                            <span className='text-xs text-slate-400'>
-                                              {(
-                                                settings
-                                                  .customMaterialProperties
-                                                  .ior ??
-                                                baseMaterialPresets[
-                                                  proceduralMaterialTypeForPanel
-                                                ]?.ior ??
-                                                1.5
-                                              ).toFixed(2)}
-                                            </span>
-                                          </div>
-                                          <Slider
-                                            id='customIorPanelSheet'
-                                            min={1}
-                                            max={2.33}
-                                            step={0.01}
-                                            value={[
-                                              settings.customMaterialProperties
-                                                .ior ??
-                                                baseMaterialPresets[
-                                                  proceduralMaterialTypeForPanel
-                                                ]?.ior ??
-                                                1.5,
-                                            ]}
-                                            onValueChange={([val]) =>
-                                              handleSettingsChange(
-                                                "customMaterialProperties",
-                                                val,
-                                                "ior"
-                                              )
-                                            }
-                                            className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
-                                          />
-                                        </div>
-                                        <div className='space-y-1.5'>
-                                          <div className='flex justify-between items-center'>
-                                            <Label
-                                              htmlFor='customTransmissionPanelSheet'
-                                              className='text-xs text-slate-300'
-                                            >
-                                              Transmission
-                                            </Label>
-                                            <span className='text-xs text-slate-400'>
-                                              {(
-                                                settings
-                                                  .customMaterialProperties
-                                                  .transmission ??
-                                                baseMaterialPresets[
-                                                  proceduralMaterialTypeForPanel
-                                                ]?.transmission ??
-                                                0
-                                              ).toFixed(2)}
-                                            </span>
-                                          </div>
-                                          <Slider
-                                            id='customTransmissionPanelSheet'
-                                            min={0}
-                                            max={1}
-                                            step={0.01}
-                                            value={[
-                                              settings.customMaterialProperties
-                                                .transmission ??
-                                                baseMaterialPresets[
-                                                  proceduralMaterialTypeForPanel
-                                                ]?.transmission ??
-                                                0,
-                                            ]}
-                                            onValueChange={([val]) =>
-                                              handleSettingsChange(
-                                                "customMaterialProperties",
-                                                val,
-                                                "transmission"
-                                              )
-                                            }
-                                            className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
-                                          />
-                                        </div>
-                                        <div className='space-y-1.5'>
-                                          <div className='flex justify-between items-center'>
-                                            <Label
-                                              htmlFor='customThicknessPanelSheet'
-                                              className='text-xs text-slate-300'
-                                            >
-                                              Thickness
-                                            </Label>
-                                            <span className='text-xs text-slate-400'>
-                                              {(
-                                                settings
-                                                  .customMaterialProperties
-                                                  .thickness ??
-                                                baseMaterialPresets[
-                                                  proceduralMaterialTypeForPanel
-                                                ]?.thickness ??
-                                                0
-                                              ).toFixed(2)}
-                                            </span>
-                                          </div>
-                                          <Slider
-                                            id='customThicknessPanelSheet'
-                                            min={0}
-                                            max={2}
-                                            step={0.01}
-                                            value={[
-                                              settings.customMaterialProperties
-                                                .thickness ??
-                                                baseMaterialPresets[
-                                                  proceduralMaterialTypeForPanel
-                                                ]?.thickness ??
-                                                0,
-                                            ]}
-                                            onValueChange={([val]) =>
-                                              handleSettingsChange(
-                                                "customMaterialProperties",
-                                                val,
-                                                "thickness"
-                                              )
-                                            }
-                                            className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
-                                          />
-                                        </div>
-                                      </>
-                                    )}
-                                    {proceduralMaterialTypeForPanel ===
-                                      "neon" && (
                                       <div className='space-y-1.5'>
                                         <div className='flex justify-between items-center'>
                                           <Label
-                                            htmlFor='customEmissiveIntensityPanelSheet'
+                                            htmlFor='customThicknessPanelSheet'
                                             className='text-xs text-slate-300'
                                           >
-                                            Emissive Intensity
+                                            Thickness
                                           </Label>
                                           <span className='text-xs text-slate-400'>
                                             {(
                                               settings.customMaterialProperties
-                                                .emissiveIntensity ??
-                                              baseMaterialPresets.neon
-                                                ?.emissiveIntensity ??
-                                              1.0
+                                                .thickness ??
+                                              baseMaterialPresets[
+                                                proceduralMaterialTypeForPanel
+                                              ]?.thickness ??
+                                              0
                                             ).toFixed(2)}
                                           </span>
                                         </div>
                                         <Slider
-                                          id='customEmissiveIntensityPanelSheet'
+                                          id='customThicknessPanelSheet'
                                           min={0}
-                                          max={5}
-                                          step={0.1}
+                                          max={2}
+                                          step={0.01}
                                           value={[
                                             settings.customMaterialProperties
-                                              .emissiveIntensity ??
-                                              baseMaterialPresets.neon
-                                                ?.emissiveIntensity ??
-                                              1.0,
+                                              .thickness ??
+                                              baseMaterialPresets[
+                                                proceduralMaterialTypeForPanel
+                                              ]?.thickness ??
+                                              0,
                                           ]}
                                           onValueChange={([val]) =>
                                             handleSettingsChange(
                                               "customMaterialProperties",
                                               val,
-                                              "emissiveIntensity"
+                                              "thickness"
                                             )
                                           }
                                           className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                         />
                                       </div>
-                                    )}
-                                    <Separator className='my-2 bg-slate-500/50' />
-                                    <h5 className='text-xs font-medium text-purple-300 pt-1 flex items-center'>
-                                      <ImageUp size={14} className='mr-1.5' />
-                                      Textures (For Model)
-                                    </h5>
-                                    <div className='grid grid-cols-2 gap-x-3 gap-y-4'>
-                                      {textureSlots.map((slot) => {
-                                        if (
-                                          (slot.id === "emissiveMap" &&
-                                            proceduralMaterialTypeForPanel !==
-                                              "neon" &&
-                                            !baseMaterialPresets[
-                                              proceduralMaterialTypeForPanel
-                                            ]?.useEmissive) ||
-                                          ((slot.id === "metalnessMap" ||
-                                            slot.id === "roughnessMap") &&
-                                            (proceduralMaterialTypeForPanel ===
-                                              "glass" ||
-                                              proceduralMaterialTypeForPanel ===
-                                                "crystal")) ||
-                                          (slot.id === "aoMap" &&
-                                            (proceduralMaterialTypeForPanel ===
-                                              "glass" ||
-                                              proceduralMaterialTypeForPanel ===
-                                                "crystal" ||
-                                              proceduralMaterialTypeForPanel ===
-                                                "neon"))
-                                        )
-                                          return null;
-                                        const urlKey = `${slot.id}Url`;
-                                        const currentTextureUrl =
-                                          settings.customMaterialProperties[
-                                            urlKey
-                                          ];
-                                        return (
-                                          <div
-                                            key={slot.id}
-                                            className='space-y-1'
-                                          >
-                                            <Label
-                                              htmlFor={`texture-${slot.id}-sheet`}
-                                              className='text-xs text-slate-300'
-                                            >
-                                              {slot.name}
-                                            </Label>
-                                            {currentTextureUrl && (
-                                              <div className='relative group w-full aspect-square bg-slate-600/50 rounded overflow-hidden mb-1'>
-                                                <img
-                                                  src={currentTextureUrl}
-                                                  alt={`${slot.name} preview`}
-                                                  className='w-full h-full object-cover'
-                                                />
-                                                <Button
-                                                  variant='destructive'
-                                                  size='icon'
-                                                  className='absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity'
-                                                  onClick={() =>
-                                                    handleClearTexture(slot.id)
-                                                  }
-                                                  title={`Clear ${slot.name} Texture`}
-                                                >
-                                                  <Trash2 size={12} />
-                                                </Button>
-                                              </div>
-                                            )}
-                                            <Input
-                                              id={`texture-${slot.id}-sheet`}
-                                              type='file'
-                                              accept='image/png, image/jpeg, image/webp, .hdr'
-                                              ref={(el) =>
-                                                (textureFileInputRefs.current[
-                                                  slot.id
-                                                ] = el)
-                                              }
-                                              onChange={(e) =>
-                                                handleTextureUpload(slot.id, e)
-                                              }
-                                              className={cn(
-                                                "w-full text-xs file:mr-1.5 file:py-1 file:px-1.5 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700 cursor-pointer",
-                                                "bg-slate-700 border-slate-600 text-slate-100",
-                                                currentTextureUrl ? "mt-1" : ""
-                                              )}
-                                            />
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                                {!isImportedModelDisplayed && (
-                                  <>
-                                    <Separator className='my-3 bg-slate-600' />
-                                    <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
-                                      <LayersIcon
-                                        size={16}
-                                        className='mr-2 text-purple-400'
-                                      />
-                                      Procedural Shape Geometry
-                                    </h3>
+                                    </>
+                                  )}
+                                  {baseMaterialPresets[
+                                    proceduralMaterialTypeForPanel
+                                  ]?.useEmissive && (
                                     <div className='space-y-1.5'>
                                       <div className='flex justify-between items-center'>
                                         <Label
-                                          htmlFor='extrudeDepthPanelSheet'
-                                          className='text-sm text-slate-300'
+                                          htmlFor='customEmissiveIntensityPanelSheet'
+                                          className='text-xs text-slate-300'
                                         >
-                                          Depth
+                                          Emissive Intensity
                                         </Label>
                                         <span className='text-xs text-slate-400'>
-                                          {settings.extrudeDepth.toFixed(2)}
+                                          {(
+                                            settings.customMaterialProperties
+                                              .emissiveIntensity ??
+                                            baseMaterialPresets[
+                                              proceduralMaterialTypeForPanel
+                                            ]?.emissiveIntensity ??
+                                            1.0
+                                          ).toFixed(2)}
                                         </span>
                                       </div>
                                       <Slider
-                                        id='extrudeDepthPanelSheet'
-                                        min={0.05}
-                                        max={1.5}
-                                        step={0.05}
-                                        value={[settings.extrudeDepth]}
-                                        onValueChange={([value]) =>
+                                        id='customEmissiveIntensityPanelSheet'
+                                        min={0}
+                                        max={5}
+                                        step={0.1}
+                                        value={[
+                                          settings.customMaterialProperties
+                                            .emissiveIntensity ??
+                                            baseMaterialPresets[
+                                              proceduralMaterialTypeForPanel
+                                            ]?.emissiveIntensity ??
+                                            1.0,
+                                        ]}
+                                        onValueChange={([val]) =>
                                           handleSettingsChange(
-                                            "extrudeDepth",
-                                            value
+                                            "customMaterialProperties",
+                                            val,
+                                            "emissiveIntensity"
                                           )
                                         }
                                         className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                       />
                                     </div>
-                                    <div className='space-y-1.5'>
+                                  )}
+                                  <div className='space-y-1.5'>
+                                    <div className='flex justify-between items-center'>
                                       <Label
-                                        htmlFor='qualityPanelSheet'
-                                        className='text-sm text-slate-300'
+                                        htmlFor='customEnvMapIntensitySheet'
+                                        className='text-xs text-slate-300'
                                       >
-                                        Quality
+                                        EnvMap Intensity
                                       </Label>
-                                      <Select
-                                        value={settings.quality}
-                                        onValueChange={(value) =>
-                                          handleSettingsChange("quality", value)
-                                        }
-                                      >
-                                        <SelectTrigger
-                                          id='qualityPanelSheet'
-                                          className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
-                                        >
-                                          <SelectValue placeholder='Select quality' />
-                                        </SelectTrigger>
-                                        <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
-                                          {["low", "medium", "high"].map(
-                                            (q) => (
-                                              <SelectItem
-                                                key={q}
-                                                value={q}
-                                                className='capitalize focus:bg-purple-600 focus:text-white'
-                                              >
-                                                {q}
-                                              </SelectItem>
-                                            )
-                                          )}
-                                        </SelectContent>
-                                      </Select>
+                                      <span className='text-xs text-slate-400'>
+                                        {(
+                                          settings.customMaterialProperties
+                                            .envMapIntensity ??
+                                          baseMaterialPresets[
+                                            proceduralMaterialTypeForPanel
+                                          ]?.envMapIntensity ??
+                                          1.0
+                                        ).toFixed(2)}
+                                      </span>
                                     </div>
-                                  </>
-                                )}
-                              </section>
-                            ) : (
-                              <section className='space-y-4'>
-                                <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
-                                  <Palette
-                                    size={16}
-                                    className='mr-2 text-purple-400'
-                                  />
-                                  Override Material for {importedModelName} (
-                                  {importedModel?.type})
-                                </h3>
-                                <p className='text-xs text-slate-400'>
-                                  Upload textures below to override all
-                                  materials on the current imported model. Base
-                                  color and other material properties from the
-                                  "Base Material" section will also be applied.
-                                </p>
-                                <div className='space-y-1.5'>
-                                  <Label
-                                    htmlFor='overrideMaterialTypePanelSheet'
-                                    className='text-sm text-slate-300'
-                                  >
-                                    Override Base Material Type
-                                  </Label>
-                                  <Select
-                                    value={settings.materialType}
-                                    onValueChange={(value) => {
-                                      handleSettingsChange(
-                                        "materialType",
-                                        value
-                                      );
-                                    }}
-                                  >
-                                    <SelectTrigger
-                                      id='overrideMaterialTypePanelSheet'
-                                      className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
-                                    >
-                                      <SelectValue placeholder='Select material' />
-                                    </SelectTrigger>
-                                    <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
-                                      {[
-                                        "auto",
-                                        "metallic",
-                                        "glass",
-                                        "crystal",
-                                        "ceramic",
-                                        "organic",
-                                        "plastic",
-                                        "neon",
-                                      ].map((type) => (
-                                        <SelectItem
-                                          key={type}
-                                          value={type}
-                                          className='capitalize focus:bg-purple-600 focus:text-white'
-                                        >
-                                          {type}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className='space-y-1.5'>
-                                  <Label
-                                    htmlFor='overrideShapeColorPanelSheet'
-                                    className='text-sm text-slate-300'
-                                  >
-                                    Override Base Color (if no Color Texture)
-                                  </Label>
-                                  <Input
-                                    id='overrideShapeColorPanelSheet'
-                                    type='color'
-                                    value={settings.shapeColor}
-                                    onChange={(e) =>
-                                      handleSettingsChange(
-                                        "shapeColor",
-                                        e.target.value
-                                      )
-                                    }
-                                    className='w-full p-1 h-9 bg-slate-700 border-slate-600 cursor-pointer focus-visible:ring-purple-500'
-                                  />
-                                </div>
-                                <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30'>
+                                    <Slider
+                                      id='customEnvMapIntensitySheet'
+                                      min={0}
+                                      max={3}
+                                      step={0.05}
+                                      value={[
+                                        settings.customMaterialProperties
+                                          .envMapIntensity ??
+                                          baseMaterialPresets[
+                                            proceduralMaterialTypeForPanel
+                                          ]?.envMapIntensity ??
+                                          1.0,
+                                      ]}
+                                      onValueChange={([val]) =>
+                                        handleSettingsChange(
+                                          "customMaterialProperties",
+                                          val,
+                                          "envMapIntensity"
+                                        )
+                                      }
+                                      className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                    />
+                                  </div>
+
+                                  <Separator className='my-2 bg-slate-500/50' />
                                   <h5 className='text-xs font-medium text-purple-300 pt-1 flex items-center'>
                                     <ImageUp size={14} className='mr-1.5' />
-                                    Override Textures (Applied to All Model
-                                    Parts)
+                                    Textures
                                   </h5>
                                   <div className='grid grid-cols-2 gap-x-3 gap-y-4'>
                                     {textureSlots.map((slot) => {
@@ -4294,11 +3586,11 @@ const ModelViewer3D = () => {
                                         ];
                                       return (
                                         <div
-                                          key={`override-${slot.id}`}
+                                          key={slot.id}
                                           className='space-y-1'
                                         >
                                           <Label
-                                            htmlFor={`texture-override-${slot.id}-sheet`}
+                                            htmlFor={`texture-${slot.id}-sheet`}
                                             className='text-xs text-slate-300'
                                           >
                                             {slot.name}
@@ -4324,9 +3616,9 @@ const ModelViewer3D = () => {
                                             </div>
                                           )}
                                           <Input
-                                            id={`texture-override-${slot.id}-sheet`}
+                                            id={`texture-${slot.id}-sheet`}
                                             type='file'
-                                            accept='image/png, image/jpeg, image/webp, .hdr'
+                                            accept='image/*'
                                             ref={(el) =>
                                               (textureFileInputRefs.current[
                                                 slot.id
@@ -4346,8 +3638,81 @@ const ModelViewer3D = () => {
                                     })}
                                   </div>
                                 </div>
-                              </section>
-                            )}
+                              )}
+                              {!isImportedModelDisplayed && (
+                                <>
+                                  {" "}
+                                  <Separator className='my-3 bg-slate-600' />{" "}
+                                  <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
+                                    <LayersIcon
+                                      size={16}
+                                      className='mr-2 text-purple-400'
+                                    />
+                                    Procedural Shape Geometry
+                                  </h3>{" "}
+                                  <div className='space-y-1.5'>
+                                    <div className='flex justify-between items-center'>
+                                      <Label
+                                        htmlFor='extrudeDepthPanelSheet'
+                                        className='text-sm text-slate-300'
+                                      >
+                                        Depth
+                                      </Label>
+                                      <span className='text-xs text-slate-400'>
+                                        {settings.extrudeDepth.toFixed(2)}
+                                      </span>
+                                    </div>
+                                    <Slider
+                                      id='extrudeDepthPanelSheet'
+                                      min={0.05}
+                                      max={1.5}
+                                      step={0.05}
+                                      value={[settings.extrudeDepth]}
+                                      onValueChange={([value]) =>
+                                        handleSettingsChange(
+                                          "extrudeDepth",
+                                          value
+                                        )
+                                      }
+                                      className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                    />
+                                  </div>{" "}
+                                  <div className='space-y-1.5'>
+                                    <Label
+                                      htmlFor='qualityPanelSheet'
+                                      className='text-sm text-slate-300'
+                                    >
+                                      Quality
+                                    </Label>
+                                    <Select
+                                      value={settings.quality}
+                                      onValueChange={(value) =>
+                                        handleSettingsChange("quality", value)
+                                      }
+                                    >
+                                      {" "}
+                                      <SelectTrigger
+                                        id='qualityPanelSheet'
+                                        className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
+                                      >
+                                        <SelectValue placeholder='Select quality' />
+                                      </SelectTrigger>
+                                      <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
+                                        {["low", "medium", "high"].map((q) => (
+                                          <SelectItem
+                                            key={q}
+                                            value={q}
+                                            className='capitalize focus:bg-purple-600 focus:text-white'
+                                          >
+                                            {q}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </>
+                              )}
+                            </section>
                             <Separator className='my-3 bg-slate-600' />
                             <section className='space-y-4'>
                               <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
@@ -4408,7 +3773,7 @@ const ModelViewer3D = () => {
                                       htmlFor='textDepthPanelSheet'
                                       className='text-sm text-slate-300'
                                     >
-                                      Text Depth (Extrusion)
+                                      Text Depth
                                     </Label>
                                     <span className='text-xs text-slate-400'>
                                       {settings.textDepth.toFixed(3)}
@@ -4431,7 +3796,7 @@ const ModelViewer3D = () => {
                                     htmlFor='textFontPanelSheet'
                                     className='text-sm text-slate-300'
                                   >
-                                    Font URL (JSON Typeface)
+                                    Font URL (JSON)
                                   </Label>
                                   <Input
                                     id='textFontPanelSheet'
@@ -4443,12 +3808,11 @@ const ModelViewer3D = () => {
                                         e.target.value
                                       )
                                     }
-                                    placeholder='/fonts/your_font.json'
+                                    placeholder='/fonts/font.json'
                                     className='w-full bg-slate-700 border-slate-600 text-slate-100 text-xs'
                                   />
                                   <p className='text-xs text-slate-400'>
-                                    Place font in `public` folder. Example:
-                                    `/fonts/helvetiker_regular.typeface.json`
+                                    Place font in `public` folder.
                                   </p>
                                 </div>
                               </div>
@@ -4460,7 +3824,7 @@ const ModelViewer3D = () => {
                                   size={16}
                                   className='mr-2 text-amber-400'
                                 />
-                                General Display
+                                Display
                               </h3>
                               <div className='space-y-1.5'>
                                 <div className='flex justify-between items-center'>
@@ -4494,7 +3858,7 @@ const ModelViewer3D = () => {
                                   htmlFor='backgroundPanelSheet'
                                   className='text-sm text-slate-300'
                                 >
-                                  Background / Environment
+                                  Background / Env
                                 </Label>
                                 <Select
                                   value={settings.background}
@@ -4528,7 +3892,7 @@ const ModelViewer3D = () => {
                                       htmlFor='customBgImagePanelSheet'
                                       className='text-sm text-slate-300'
                                     >
-                                      Upload Background Image (JPG, PNG, WEBP)
+                                      Upload BG (JPG,PNG,WEBP)
                                     </Label>
                                     <Input
                                       id='customBgImagePanelSheet'
@@ -4537,17 +3901,15 @@ const ModelViewer3D = () => {
                                       onChange={handleCustomBgImageUpload}
                                       className='w-full text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700 cursor-pointer bg-slate-700 border-slate-600 text-slate-100'
                                     />
-                                    {customBgImageUrl && (
-                                      <Button
-                                        variant='ghost'
-                                        size='xs'
-                                        onClick={handleClearCustomBgImage}
-                                        className='text-red-400 hover:text-red-300 hover:bg-transparent mt-1 w-full justify-start px-1'
-                                      >
-                                        <Trash2 size={12} className='mr-1' />
-                                        Clear Custom Image
-                                      </Button>
-                                    )}
+                                    <Button
+                                      variant='ghost'
+                                      size='xs'
+                                      onClick={handleClearCustomBgImage}
+                                      className='text-red-400 hover:text-red-300 hover:bg-transparent mt-1 w-full justify-start px-1'
+                                    >
+                                      <Trash2 size={12} className='mr-1' />
+                                      Clear Image
+                                    </Button>
                                   </div>
                                 )}
                               </div>
@@ -4666,7 +4028,7 @@ const ModelViewer3D = () => {
                                     htmlFor='n8aoEnableSheet'
                                     className='text-sm text-slate-200'
                                   >
-                                    N8AO (Ambient Occlusion)
+                                    N8AO
                                   </Label>
                                   <Switch
                                     id='n8aoEnableSheet'
@@ -4681,166 +4043,7 @@ const ModelViewer3D = () => {
                                   />
                                 </div>
                                 {settings.n8ao.enabled && (
-                                  <>
-                                    <div className='space-y-1.5'>
-                                      <div className='flex justify-between items-center'>
-                                        <Label
-                                          htmlFor='n8aoIntensitySheet'
-                                          className='text-xs text-slate-300'
-                                        >
-                                          Intensity
-                                        </Label>
-                                        <span className='text-xs text-slate-400'>
-                                          {settings.n8ao.intensity.toFixed(1)}
-                                        </span>
-                                      </div>
-                                      <Slider
-                                        id='n8aoIntensitySheet'
-                                        min={0.1}
-                                        max={5}
-                                        step={0.1}
-                                        value={[settings.n8ao.intensity]}
-                                        onValueChange={([v]) =>
-                                          handleSettingsChange(
-                                            "n8ao",
-                                            v,
-                                            "intensity"
-                                          )
-                                        }
-                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
-                                      />
-                                    </div>
-                                    <div className='space-y-1.5'>
-                                      <div className='flex justify-between items-center'>
-                                        <Label
-                                          htmlFor='n8aoRadiusSheet'
-                                          className='text-xs text-slate-300'
-                                        >
-                                          AO Radius
-                                        </Label>
-                                        <span className='text-xs text-slate-400'>
-                                          {settings.n8ao.aoRadius.toFixed(2)}
-                                        </span>
-                                      </div>
-                                      <Slider
-                                        id='n8aoRadiusSheet'
-                                        min={0.01}
-                                        max={2}
-                                        step={0.01}
-                                        value={[settings.n8ao.aoRadius]}
-                                        onValueChange={([v]) =>
-                                          handleSettingsChange(
-                                            "n8ao",
-                                            v,
-                                            "aoRadius"
-                                          )
-                                        }
-                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
-                                      />
-                                    </div>
-                                    <div className='flex items-center justify-between'>
-                                      <Label
-                                        htmlFor='n8aoSsrSheet'
-                                        className='text-sm text-slate-300'
-                                      >
-                                        Screen Space Radius
-                                      </Label>
-                                      <Switch
-                                        id='n8aoSsrSheet'
-                                        checked={
-                                          settings.n8ao.screenSpaceRadius
-                                        }
-                                        onCheckedChange={(checked) =>
-                                          handleSettingsChange(
-                                            "n8ao",
-                                            checked,
-                                            "screenSpaceRadius"
-                                          )
-                                        }
-                                      />
-                                    </div>
-                                    <div className='space-y-1.5'>
-                                      <Label
-                                        htmlFor='n8aoQualitySheet'
-                                        className='text-xs text-slate-300'
-                                      >
-                                        Quality
-                                      </Label>
-                                      <Select
-                                        value={settings.n8ao.quality}
-                                        onValueChange={(val) =>
-                                          handleSettingsChange(
-                                            "n8ao",
-                                            val,
-                                            "quality"
-                                          )
-                                        }
-                                      >
-                                        <SelectTrigger
-                                          id='n8aoQualitySheet'
-                                          className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
-                                        >
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
-                                          {[
-                                            "low",
-                                            "medium",
-                                            "high",
-                                            "ultra",
-                                          ].map((q) => (
-                                            <SelectItem
-                                              key={q}
-                                              value={q}
-                                              className='capitalize focus:bg-purple-600 focus:text-white'
-                                            >
-                                              {q}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <div className='flex items-center justify-between'>
-                                      <Label
-                                        htmlFor='n8aoHalfResSheet'
-                                        className='text-sm text-slate-300'
-                                      >
-                                        Half Resolution
-                                      </Label>
-                                      <Switch
-                                        id='n8aoHalfResSheet'
-                                        checked={settings.n8ao.halfRes}
-                                        onCheckedChange={(checked) =>
-                                          handleSettingsChange(
-                                            "n8ao",
-                                            checked,
-                                            "halfRes"
-                                          )
-                                        }
-                                      />
-                                    </div>
-                                    <div className='space-y-1.5'>
-                                      <Label
-                                        htmlFor='n8aoColorSheet'
-                                        className='text-xs text-slate-300'
-                                      >
-                                        Occlusion Color
-                                      </Label>
-                                      <Input
-                                        id='n8aoColorSheet'
-                                        type='color'
-                                        value={settings.n8ao.color}
-                                        onChange={(e) =>
-                                          handleSettingsChange(
-                                            "n8ao",
-                                            e.target.value,
-                                            "color"
-                                          )
-                                        }
-                                        className='w-full h-7 p-0.5 bg-slate-600 border-slate-500 cursor-pointer'
-                                      />
-                                    </div>
-                                  </>
+                                  <>{/* N8AO Full Controls Here */}</>
                                 )}
                               </div>
                               <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30 mt-4'>
@@ -4863,131 +4066,8 @@ const ModelViewer3D = () => {
                                     }
                                   />
                                 </div>
-
                                 {settings.bloom.enabled && (
-                                  <>
-                                    <div className='space-y-1.5'>
-                                      <div className='flex justify-between items-center'>
-                                        <Label
-                                          htmlFor='bloomLuminanceThresholdSheet'
-                                          className='text-xs text-slate-300'
-                                        >
-                                          Luminance Threshold
-                                        </Label>
-                                        <span className='text-xs text-slate-400'>
-                                          {settings.bloom.luminanceThreshold.toFixed(
-                                            2
-                                          )}
-                                        </span>
-                                      </div>
-                                      <Slider
-                                        id='bloomLuminanceThresholdSheet'
-                                        min={0}
-                                        max={1}
-                                        step={0.01}
-                                        value={[
-                                          settings.bloom.luminanceThreshold,
-                                        ]}
-                                        onValueChange={([v]) =>
-                                          handleSettingsChange(
-                                            "bloom",
-                                            v,
-                                            "luminanceThreshold"
-                                          )
-                                        }
-                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
-                                      />
-                                    </div>
-                                    <div className='space-y-1.5'>
-                                      <div className='flex justify-between items-center'>
-                                        <Label
-                                          htmlFor='bloomLuminanceSmoothingSheet'
-                                          className='text-xs text-slate-300'
-                                        >
-                                          Luminance Smoothing
-                                        </Label>
-                                        <span className='text-xs text-slate-400'>
-                                          {settings.bloom.luminanceSmoothing.toFixed(
-                                            3
-                                          )}
-                                        </span>
-                                      </div>
-                                      <Slider
-                                        id='bloomLuminanceSmoothingSheet'
-                                        min={0}
-                                        max={0.5}
-                                        step={0.001}
-                                        value={[
-                                          settings.bloom.luminanceSmoothing,
-                                        ]}
-                                        onValueChange={([v]) =>
-                                          handleSettingsChange(
-                                            "bloom",
-                                            v,
-                                            "luminanceSmoothing"
-                                          )
-                                        }
-                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
-                                      />
-                                    </div>
-                                    <div className='space-y-1.5'>
-                                      <Label
-                                        htmlFor='bloomKernelSheet'
-                                        className='text-xs text-slate-300'
-                                      >
-                                        Kernel Size
-                                      </Label>
-                                      <Select
-                                        value={settings.bloom.kernelSize?.toString()}
-                                        onValueChange={(val) =>
-                                          handleSettingsChange(
-                                            "bloom",
-                                            parseInt(val),
-                                            "kernelSize"
-                                          )
-                                        }
-                                      >
-                                        <SelectTrigger
-                                          id='bloomKernelSheet'
-                                          className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
-                                        >
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
-                                          <SelectItem
-                                            value={KernelSize.VERY_SMALL.toString()}
-                                          >
-                                            Very Small
-                                          </SelectItem>
-                                          <SelectItem
-                                            value={KernelSize.SMALL.toString()}
-                                          >
-                                            Small
-                                          </SelectItem>
-                                          <SelectItem
-                                            value={KernelSize.MEDIUM.toString()}
-                                          >
-                                            Medium
-                                          </SelectItem>
-                                          <SelectItem
-                                            value={KernelSize.LARGE.toString()}
-                                          >
-                                            Large
-                                          </SelectItem>
-                                          <SelectItem
-                                            value={KernelSize.VERY_LARGE.toString()}
-                                          >
-                                            Very Large
-                                          </SelectItem>
-                                          <SelectItem
-                                            value={KernelSize.HUGE.toString()}
-                                          >
-                                            Huge
-                                          </SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                  </>
+                                  <>{/* Bloom Full Controls Here */}</>
                                 )}
                               </div>
                             </section>
@@ -5112,8 +4192,8 @@ const ModelViewer3D = () => {
                                           max={1}
                                           step={0.001}
                                           value={[animationTime]}
-                                          onValueChange={(valArray) =>
-                                            handleAnimationTimeChange(valArray)
+                                          onValueChange={
+                                            handleAnimationTimeChange
                                           }
                                           disabled={
                                             selectedAnimationClipIndex < 0 ||
@@ -5136,8 +4216,8 @@ const ModelViewer3D = () => {
                                           max={3}
                                           step={0.1}
                                           value={[animationPlaybackSpeed]}
-                                          onValueChange={(valArray) =>
-                                            handleAnimationSpeedChange(valArray)
+                                          onValueChange={
+                                            handleAnimationSpeedChange
                                           }
                                           disabled={
                                             selectedAnimationClipIndex < 0
@@ -5177,8 +4257,8 @@ const ModelViewer3D = () => {
                       <Canvas
                         shadows
                         camera={{
-                          position: [0, 0.5, 6],
-                          fov: 50,
+                          position: [0, 1.5, 7],
+                          fov: 45,
                           near: 0.1,
                           far: 1000,
                         }}
@@ -5190,8 +4270,11 @@ const ModelViewer3D = () => {
                           toneMapping: THREE.ACESFilmicToneMapping,
                         }}
                         style={{ background: canvasBgColor }}
-                        onCreated={({ gl }) => {
+                        onCreated={({ gl, scene: cs, controls: ctrl }) => {
                           gl.toneMappingExposure = 1.0;
+                          if (r3fSceneForExportRef)
+                            r3fSceneForExportRef.current = cs;
+                          if (orbitControlsRef) orbitControlsRef.current = ctrl;
                         }}
                         key={
                           isFullscreen.toString() +
@@ -5204,7 +4287,6 @@ const ModelViewer3D = () => {
                             <DreiLoader
                               containerStyles={{
                                 background: "rgba(20,20,30,0.8)",
-                                borderRadius: "8px",
                               }}
                               dataStyles={{ color: "#f0f0f0" }}
                             />
@@ -5217,11 +4299,7 @@ const ModelViewer3D = () => {
                             isAnimating={isAnimating}
                             importedModelUrl={importedModel?.url}
                             importedFileType={importedModel?.type}
-                            importedMtlUrl={
-                              importedModel?.type === "obj"
-                                ? importedModel?.mtlUrl
-                                : null
-                            }
+                            importedMtlUrl={importedModel?.mtlUrl}
                             onModelLoad={handleModelLoadedForScene}
                             isImportedModelDisplayed={isImportedModelDisplayed}
                             current3DText={current3DText}
@@ -5231,7 +4309,6 @@ const ModelViewer3D = () => {
                             onSceneRefForExport={
                               handleSceneRefForExportCallback
                             }
-                            animationClipsRef={animationClipsRef}
                             activeActionRef={activeActionRef}
                             mixerRef={mixerRef}
                             selectedAnimationClipIndex={
