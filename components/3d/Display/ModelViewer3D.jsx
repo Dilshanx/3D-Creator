@@ -7,6 +7,7 @@ import React, {
   Suspense,
 } from "react";
 import * as THREE from "three";
+
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { FontLoader } from "three/examples/jsm/loaders/FontLoader.js";
 import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
@@ -813,22 +814,20 @@ const AppliedMaterial = React.memo(
     const allArgs = { ...safeMaterialArgs, ...texturesToApply };
     return (
       <>
-        {" "}
         {hasValidUrls && (
           <Suspense fallback={null}>
-            {" "}
             <TextureLoaderInternal
               key={JSON.stringify(validUrls)}
               urls={validUrls}
               onLoaded={handleTexturesLoaded}
-            />{" "}
+            />
           </Suspense>
-        )}{" "}
+        )}
         {MaterialConstructor === THREE.MeshPhysicalMaterial ? (
           <meshPhysicalMaterial {...allArgs} />
         ) : (
           <meshStandardMaterial {...allArgs} />
-        )}{" "}
+        )}
       </>
     );
   }
@@ -1016,7 +1015,7 @@ const ImportedModel = React.memo(
         onModelLoad,
         isAnimating,
         animationPresetKey,
-        activeActionRef,
+        activeActionRef, // For single animation mode
         mixerRef,
         selectedAnimationClipIndex,
         animationPlaybackState,
@@ -1026,6 +1025,7 @@ const ImportedModel = React.memo(
         forceMaterialResetKey,
         isAutoRotating,
         autoRotateSpeed,
+        playAllAnimations, // New prop
       },
       ref
     ) => {
@@ -1044,8 +1044,9 @@ const ImportedModel = React.memo(
         useState(false);
       const lastProcessedModelID = useRef(null);
 
-      const dracoPath = "/draco/gltf/";
+      const dracoPath = "/draco/gltf/"; // Ensure this path is correct
       const modelAnimationState = useRef({ startTime: Date.now() });
+      const allActiveActionsRef = useRef([]); // For "Play All" mode
 
       useEffect(() => {
         let targetObject = null;
@@ -1074,10 +1075,6 @@ const ImportedModel = React.memo(
           (currentModelID !== lastProcessedModelID.current ||
             !modelInitiallyProcessed)
         ) {
-          console.log(
-            "[ImportedModel InitialProcessEffect] New/updated model, scaling/centering:",
-            targetObject.name || fileType
-          );
           let boxSource = targetObject;
           if (fileType === "stl" && targetObject.children[0]?.isMesh)
             boxSource = targetObject.children[0];
@@ -1110,12 +1107,6 @@ const ImportedModel = React.memo(
             const scCtr = scBox.getCenter(new THREE.Vector3());
             if (!isNaN(scCtr.x)) targetObject.position.sub(scCtr);
             else targetObject.position.set(0, 0, 0);
-            console.log(
-              `[ImportedModel InitialProcessEffect] Centered/scaled. Pos:`,
-              targetObject.position.toArray().map((c) => c.toFixed(2)),
-              `Scale:`,
-              targetObject.scale.toArray().map((c) => c.toFixed(2))
-            );
           }
           lastProcessedModelID.current = currentModelID;
           setModelInitiallyProcessed(true);
@@ -1135,14 +1126,6 @@ const ImportedModel = React.memo(
 
       const applyMaterialsOnly = useCallback(
         (object, animations) => {
-          console.log(
-            "[ImportedModel applyMaterialsOnly] Applying materials for:",
-            object?.name,
-            "Type:",
-            fileType,
-            "Settings Material:",
-            settings.materialType
-          );
           const targetObject = object || internalGroupRef.current;
           if (!targetObject) {
             onModelLoad(null, animations || []);
@@ -1197,10 +1180,7 @@ const ImportedModel = React.memo(
               targetObject.traverse((child) => {
                 if (child.isMesh) meshesToProcess.push(child);
               });
-            if (meshesToProcess.length === 0)
-              console.warn(
-                "[ImportedModel applyMaterialsOnly] No meshes found."
-              );
+
             meshesToProcess.forEach(async (mesh) => {
               mesh.castShadow = true;
               mesh.receiveShadow = true;
@@ -1292,6 +1272,7 @@ const ImportedModel = React.memo(
           return () => draco.dispose();
         }
       }, [fileType, modelUrl, dracoPath]);
+
       useEffect(() => {
         setManualFbxScene(null);
         setManualFbxAnimations([]);
@@ -1311,6 +1292,7 @@ const ImportedModel = React.memo(
           );
         }
       }, [fileType, modelUrl]);
+
       useEffect(() => {
         setManualObjScene(null);
         if (fileType === "obj" && modelUrl) {
@@ -1337,7 +1319,9 @@ const ImportedModel = React.memo(
               },
               undefined,
               () => {
-                sonnerToast.warn("MTL Load Failed");
+                sonnerToast.warn(
+                  "MTL Load Failed, loading OBJ without materials."
+                );
                 objLoader.load(
                   modelUrl,
                   (obj) => setManualObjScene(obj),
@@ -1362,6 +1346,7 @@ const ImportedModel = React.memo(
           }
         }
       }, [fileType, modelUrl, mtlUrl]);
+
       useEffect(() => {
         setManualStlGeometry(null);
         if (fileType === "stl" && modelUrl) {
@@ -1411,14 +1396,122 @@ const ImportedModel = React.memo(
         forceMaterialResetKey,
       ]);
 
+      // Central Animation Setup useEffect
+      useEffect(() => {
+        const modelRoot = internalGroupRef.current;
+        let clips = [];
+        if (modelUrl) {
+          // Only proceed if modelUrl is present (implies a model is being loaded or is loaded)
+          if (fileType === "glb" || fileType === "gltf")
+            clips = manualGltfAnimations || [];
+          else if (fileType === "fbx") clips = manualFbxAnimations || [];
+        }
+
+        // Always stop previous actions and clear refs
+        if (mixerRef.current) {
+          mixerRef.current.stopAllAction();
+        }
+        activeActionRef.current = null;
+        allActiveActionsRef.current = [];
+
+        if (modelRoot && clips.length > 0) {
+          mixerRef.current = new THREE.AnimationMixer(modelRoot);
+
+          if (playAllAnimations) {
+            clips.forEach((clip) => {
+              const action = mixerRef.current.clipAction(clip);
+              action.setLoop(
+                isAnimationLooping ? THREE.LoopRepeat : THREE.LoopOnce,
+                Infinity
+              );
+              action.timeScale = animationPlaybackSpeed;
+              action.time =
+                clip.duration > 0 ? animationTime * clip.duration : 0;
+
+              if (animationPlaybackState === "playing") {
+                action.play();
+              } else if (animationPlaybackState === "paused") {
+                action.play();
+                action.paused = true;
+                if (mixerRef.current && action.time === 0)
+                  mixerRef.current.update(0);
+              } else {
+                // "stopped"
+                action.stop();
+                if (mixerRef.current) mixerRef.current.update(0); // Reset to base pose
+              }
+              allActiveActionsRef.current.push(action);
+            });
+          } else {
+            // Single Animation Mode
+            if (
+              selectedAnimationClipIndex >= 0 &&
+              selectedAnimationClipIndex < clips.length
+            ) {
+              const clip = clips[selectedAnimationClipIndex];
+              const action = mixerRef.current.clipAction(clip);
+              action.setLoop(
+                isAnimationLooping ? THREE.LoopRepeat : THREE.LoopOnce,
+                Infinity
+              );
+              action.timeScale = animationPlaybackSpeed;
+              action.time =
+                clip.duration > 0 ? animationTime * clip.duration : 0;
+
+              if (animationPlaybackState === "playing") {
+                action.play();
+              } else if (animationPlaybackState === "paused") {
+                action.play();
+                action.paused = true;
+                if (mixerRef.current && action.time === 0)
+                  mixerRef.current.update(0);
+              } else {
+                // "stopped"
+                action.stop();
+                if (mixerRef.current) mixerRef.current.update(0); // Reset to base pose
+              }
+              activeActionRef.current = action;
+            }
+          }
+        } else {
+          mixerRef.current = null;
+        }
+
+        return () => {
+          if (mixerRef.current) {
+            mixerRef.current.stopAllAction();
+          }
+        };
+      }, [
+        modelUrl, // Re-run when model identity changes
+        fileType, // For safety, though modelUrl should cover new file loads
+        manualGltfAnimations, // When animations become available for GLTF
+        manualFbxAnimations, // When animations become available for FBX
+        playAllAnimations,
+        selectedAnimationClipIndex,
+        animationPlaybackState,
+        isAnimationLooping,
+        animationPlaybackSpeed,
+        animationTime,
+        mixerRef, // Ref, but useful to include if external logic might modify it
+        activeActionRef, // Ref
+        // internalGroupRef.current is implicitly handled by modelUrl changing
+      ]);
+
       useFrame((_, delta) => {
         const modelRootNode = internalGroupRef.current;
         if (!modelRootNode) return;
-        if (mixerRef.current && animationPlaybackState === "playing") {
-          mixerRef.current.update(delta * animationPlaybackSpeed);
+
+        if (mixerRef.current && animationPlaybackState !== "stopped") {
+          mixerRef.current.update(
+            delta *
+              (animationPlaybackState === "playing"
+                ? animationPlaybackSpeed
+                : 0)
+          );
         } else if (
           isAnimating &&
-          !(mixerRef.current && animationPlaybackState === "playing") &&
+          !(mixerRef.current && animationPlaybackState !== "stopped") && // Don't apply float if mixer is active
           !isAutoRotating
         ) {
           const preset = animationPresets[animationPresetKey];
@@ -1432,71 +1525,36 @@ const ImportedModel = React.memo(
               (preset.floatAmplitude || 0);
           }
         }
-        if (isAutoRotating && animationPlaybackState !== "playing") {
-          modelRootNode.rotation.y += delta * autoRotateSpeed * 0.5;
+
+        if (
+          isAutoRotating &&
+          !(
+            mixerRef.current &&
+            animationPlaybackState !== "stopped" &&
+            !playAllAnimations &&
+            activeActionRef.current?.isRunning()
+          )
+        ) {
+          // Only auto-rotate if mixer is not actively playing a single animation
+          // Or if playAllAnimations is true (auto-rotation can co-exist)
+          if (
+            playAllAnimations ||
+            !(
+              activeActionRef.current?.isRunning() &&
+              animationPlaybackState === "playing"
+            )
+          ) {
+            modelRootNode.rotation.y += delta * autoRotateSpeed * 0.5;
+          }
         }
       });
-      useEffect(() => {
-        const modelRoot = internalGroupRef.current;
-        let clips = [];
-        if (fileType === "glb" || fileType === "gltf")
-          clips = manualGltfAnimations || [];
-        else if (fileType === "fbx") clips = manualFbxAnimations || [];
-        if (mixerRef.current) mixerRef.current.stopAllAction();
-        if (activeActionRef.current) activeActionRef.current.stop();
-        if (modelRoot && clips.length > 0) {
-          mixerRef.current = new THREE.AnimationMixer(modelRoot);
-          if (
-            selectedAnimationClipIndex >= 0 &&
-            selectedAnimationClipIndex < clips.length
-          ) {
-            const clip = clips[selectedAnimationClipIndex];
-            activeActionRef.current = mixerRef.current.clipAction(clip);
-            activeActionRef.current.setLoop(
-              isAnimationLooping ? THREE.LoopRepeat : THREE.LoopOnce,
-              Infinity
-            );
-            activeActionRef.current.timeScale = animationPlaybackSpeed;
-            activeActionRef.current.time =
-              clip.duration > 0 ? animationTime * clip.duration : 0;
-            if (animationPlaybackState === "playing")
-              activeActionRef.current.play();
-            else if (animationPlaybackState === "paused") {
-              activeActionRef.current.play();
-              activeActionRef.current.paused = true;
-              if (mixerRef.current) mixerRef.current.update(0);
-            } else activeActionRef.current.stop();
-          } else {
-            activeActionRef.current = null;
-          }
-        } else {
-          mixerRef.current = null;
-          activeActionRef.current = null;
-        }
-        return () => {
-          if (mixerRef.current) mixerRef.current.stopAllAction();
-        };
-      }, [
-        fileType,
-        manualGltfScene,
-        manualFbxScene,
-        manualGltfAnimations,
-        manualFbxAnimations,
-        selectedAnimationClipIndex,
-        animationPlaybackState,
-        isAnimationLooping,
-        animationPlaybackSpeed,
-        animationTime,
-        mixerRef,
-        activeActionRef,
-      ]);
 
       if (fileType === "stl") {
         if (manualStlGeometry)
           return (
             <group ref={internalGroupRef}>
               <mesh geometry={manualStlGeometry} castShadow receiveShadow>
-                <meshStandardMaterial color='#CCCCCC' attach='material' />
+                {/* Material will be applied by applyMaterialsOnly */}
               </mesh>
             </group>
           );
@@ -1510,6 +1568,7 @@ const ImportedModel = React.memo(
           </group>
         );
       }
+
       let objectToRender = null;
       if ((fileType === "glb" || fileType === "gltf") && manualGltfScene)
         objectToRender = manualGltfScene;
@@ -1517,7 +1576,9 @@ const ImportedModel = React.memo(
         objectToRender = manualFbxScene;
       else if (fileType === "obj" && manualObjScene)
         objectToRender = manualObjScene;
-      if (objectToRender)
+
+      if (objectToRender && modelInitiallyProcessed)
+        // Ensure model is scaled/centered before rendering
         return (
           <primitive
             object={objectToRender}
@@ -1526,11 +1587,12 @@ const ImportedModel = React.memo(
             receiveShadow
           />
         );
+
       return (
         <group ref={internalGroupRef}>
           <Center>
             <Text color='white' fontSize={0.2}>
-              Loading ({fileType})...
+              Loading ({fileType.toUpperCase()})...
             </Text>
           </Center>
         </group>
@@ -1560,16 +1622,14 @@ const TextOverlay = React.memo(
           roughness: saneNumber(materialProps?.roughness, 0.5),
           envMap: scene.environment,
           envMapIntensity: saneNumber(materialProps?.envMapIntensity, 1.0),
-          side: THREE.FrontSide,
+          side: THREE.FrontSide, // Text usually doesn't need DoubleSide
         }),
       [color, materialProps, scene.environment]
     );
     if (!isVisible || !text || !fontUrl) return null;
     return (
       <group position={[0, textYOffset, 0]}>
-        {" "}
         <Center>
-          {" "}
           <Text3D
             font={fontUrl}
             size={saneNumber(size, 0.5)}
@@ -1582,10 +1642,9 @@ const TextOverlay = React.memo(
             castShadow
             receiveShadow
           >
-            {" "}
-            {text}{" "}
-          </Text3D>{" "}
-        </Center>{" "}
+            {text}
+          </Text3D>
+        </Center>
       </group>
     );
   }
@@ -1616,51 +1675,56 @@ const SceneContentInternal = React.memo(
     animationPlaybackSpeed,
     animationTime,
     forceMaterialResetKey,
+    playAllAnimations, // New prop
   }) => {
     const { scene, gl, controls } = useThree();
+
     useEffect(() => {
       if (onSceneRefForExport && controls)
         onSceneRefForExport(scene, gl, controls);
     }, [scene, gl, controls, onSceneRefForExport]);
+
     useEffect(() => {
       if (settings.background === "customImage" && customBgImageUrl) {
-        if (scene.background) scene.background = null;
+        if (scene.background) scene.background = null; // Let Environment handle it
         if (scene.fog) scene.fog = null;
       } else if (settings.background === "solidColor") {
         scene.background = new THREE.Color(settings.solidBackgroundColor);
         if (scene.fog) scene.fog = null;
       } else {
-        if (scene.background) scene.background = null;
+        if (scene.background) scene.background = null; // Let Environment handle it or default
         let fogColor = new THREE.Color(0x101012);
         let fogNear = 12;
         let fogFar = 40;
         switch (settings.background) {
           case "modernGradient":
-            fogColor = new THREE.Color(0x2c5d72);
+            fogColor = new THREE.Color(0x2c5d72); // Darker blue/teal
             break;
           case "darkSpace":
-            fogColor = new THREE.Color(0x050508);
+            fogColor = new THREE.Color(0x050508); // Very dark
             fogNear = 10;
             fogFar = 35;
             break;
           case "softLight":
-            fogColor = new THREE.Color(0xd0d8e0);
+            fogColor = new THREE.Color(0xd0d8e0); // Light grayish blue
             fogNear = 7;
             fogFar = 28;
             break;
           case "studioLight":
-            fogColor = new THREE.Color(0xe4e4e7);
+            fogColor = new THREE.Color(0xe4e4e7); // Brighter neutral
             fogNear = 10;
             fogFar = 35;
             break;
-          default:
-            fogColor = new THREE.Color(0x18181b);
+          default: // studioDark
+            fogColor = new THREE.Color(0x18181b); // Dark gray
         }
         if (scene.fog) {
           scene.fog.color.set(fogColor);
           scene.fog.near = fogNear;
           scene.fog.far = fogFar;
-        } else scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
+        } else {
+          scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
+        }
       }
     }, [
       settings.background,
@@ -1668,22 +1732,26 @@ const SceneContentInternal = React.memo(
       customBgImageUrl,
       scene,
     ]);
+
     const internalMeshRef = useRef();
     useEffect(() => {
       onMeshReady(internalMeshRef.current || null);
     }, [
-      internalMeshRef.current,
-      onMeshReady,
-      isImportedModelDisplayed,
+      // internalMeshRef.current, // This can cause loops if ref object itself changes
+      isImportedModelDisplayed, // Key dependencies that indicate the mesh *content* has changed
       currentShape,
       importedModelUrl,
+      onMeshReady,
     ]);
+
     const [textYOffset, setTextYOffset] = useState(1.0);
     useEffect(() => {
       const meshToMeasure = internalMeshRef.current;
       if (meshToMeasure) {
+        // Wait for model to be fully processed and scaled
         requestAnimationFrame(() => {
           if (meshToMeasure.parent) {
+            // Ensure it's part of the scene graph for accurate box calc
             const box = new THREE.Box3().setFromObject(meshToMeasure);
             if (!box.isEmpty()) {
               const modelHeight = box.max.y - box.min.y;
@@ -1691,49 +1759,57 @@ const SceneContentInternal = React.memo(
               setTextYOffset(
                 modelCenterY +
                   modelHeight / 2 +
-                  saneNumber(settings.textSize, 0.5) * 0.5 +
-                  0.3
+                  saneNumber(settings.textSize, 0.5) * 0.5 + // Half of text height approx
+                  0.3 // Additional gap
               );
-            } else
+            } else {
               setTextYOffset(
                 1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3
-              );
-          } else
+              ); // Fallback if box is empty
+            }
+          } else {
             setTextYOffset(
               1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3
-            );
+            ); // Fallback if not in parent yet
+          }
         });
-      } else
-        setTextYOffset(1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3);
+      } else {
+        setTextYOffset(1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3); // Default if no mesh
+      }
     }, [
-      internalMeshRef.current,
+      internalMeshRef.current, // Re-evaluate if the ref itself points to a new object
       settings.textSize,
       isImportedModelDisplayed,
       currentShape,
       importedModelUrl,
-      current3DText,
+      current3DText, // Recalculate if text content changes (might affect bounding box logic implicitly)
       isTextVisible,
     ]);
+
     const [isUserInteractingOrbit, setIsUserInteractingOrbit] = useState(false);
     const autoRotatePauseTimeoutRef = useRef(null);
+
     const handleOrbitStart = useCallback(() => {
       setIsUserInteractingOrbit(true);
       if (autoRotatePauseTimeoutRef.current)
         clearTimeout(autoRotatePauseTimeoutRef.current);
     }, []);
+
     const handleOrbitEnd = useCallback(() => {
       if (autoRotatePauseTimeoutRef.current)
         clearTimeout(autoRotatePauseTimeoutRef.current);
       autoRotatePauseTimeoutRef.current = setTimeout(() => {
         setIsUserInteractingOrbit(false);
-      }, 1500);
+      }, 1500); // Resume auto-rotate after 1.5 seconds of inactivity
     }, []);
+
     useEffect(() => {
       return () => {
         if (autoRotatePauseTimeoutRef.current)
           clearTimeout(autoRotatePauseTimeoutRef.current);
       };
     }, []);
+
     const effectiveAutoRotate = settings.autoRotate && !isUserInteractingOrbit;
 
     return (
@@ -1770,19 +1846,20 @@ const SceneContentInternal = React.memo(
           }
           color={settings.fillLight.color}
         />
+
         <Suspense fallback={null}>
-          {" "}
           {settings.background === "customImage" && customBgImageUrl ? (
             <Environment background files={customBgImageUrl} />
           ) : settings.background !== "solidColor" &&
             settings.background !== "modernGradient" &&
             settings.background !== "darkSpace" ? (
+            // For studioDark, studioLight, softLight - use an HDR for reflections and optional background
             <Environment
-              files='/brown_photostudio_02_4k.hdr'
+              files='/brown_photostudio_02_4k.hdr' // A generic studio HDR
               background={
                 settings.background === "studioLight" ||
                 settings.background === "softLight"
-              }
+              } // Only set as BG if it's a light studio
               environmentIntensity={
                 settings.background === "studioLight" ||
                 settings.background === "softLight"
@@ -1790,16 +1867,18 @@ const SceneContentInternal = React.memo(
                   : 0.7
               }
             />
-          ) : null}{" "}
+          ) : null}
           {(settings.background === "modernGradient" ||
             settings.background === "darkSpace") && (
+            // For gradient/dark space, still use HDR for reflections but not as background
             <Environment
               files='/brown_photostudio_02_4k.hdr'
               background={false}
               environmentIntensity={0.5}
             />
-          )}{" "}
+          )}
         </Suspense>
+
         {settings.groundPlaneType === "grid" && (
           <Grid
             infiniteGrid
@@ -1810,17 +1889,16 @@ const SceneContentInternal = React.memo(
             sectionColor={new THREE.Color(0x6f6f6f)}
             cellColor={new THREE.Color(0x444444)}
             fadeDistance={50}
-            position={[0, -0.01, 0]}
+            position={[0, -0.01, 0]} // Small offset to avoid z-fighting if model base is exactly at 0
           />
         )}
         {settings.groundPlaneType === "reflectiveFloor" && (
           <Plane
             args={[100, 100]}
             rotation={[-Math.PI / 2, 0, 0]}
-            position={[0, -0.02, 0]}
+            position={[0, -0.02, 0]} // Slightly lower for reflector
             receiveShadow
           >
-            {" "}
             <MeshReflectorMaterial
               blur={[300, 100]}
               resolution={1024}
@@ -1832,10 +1910,11 @@ const SceneContentInternal = React.memo(
               maxDepthThreshold={1.4}
               color='#444444'
               metalness={0.6}
-              mirror={0.6}
-            />{" "}
+              mirror={0.6} // Adjust for desired reflectivity
+            />
           </Plane>
         )}
+
         {!isImportedModelDisplayed ? (
           <Suspense fallback={null}>
             <ProceduralShape
@@ -1870,9 +1949,11 @@ const SceneContentInternal = React.memo(
               forceMaterialResetKey={forceMaterialResetKey}
               isAutoRotating={effectiveAutoRotate}
               autoRotateSpeed={settings.autoRotateSpeed}
+              playAllAnimations={playAllAnimations} // Pass down
             />
           </Suspense>
         ) : null}
+
         <TextOverlay
           text={current3DText}
           fontUrl={settings.textFontUrl}
@@ -1881,8 +1962,9 @@ const SceneContentInternal = React.memo(
           depth={settings.textDepth}
           isVisible={isTextVisible}
           textYOffset={textYOffset}
-          materialProps={{ metalness: 0.4, roughness: 0.6 }}
+          materialProps={{ metalness: 0.4, roughness: 0.6 }} // Example, can be configurable
         />
+
         <DreiOrbitControls
           makeDefault
           enableDamping
@@ -1890,18 +1972,18 @@ const SceneContentInternal = React.memo(
           rotateSpeed={0.7}
           zoomSpeed={0.8}
           panSpeed={0.7}
-          screenSpacePanning={false} // Keep false for more traditional orbiting
-          minDistance={0.5} // Allow a bit closer zoom
+          screenSpacePanning={false}
+          minDistance={0.5}
           maxDistance={30}
-          minPolarAngle={0.05} // Allow looking almost straight down from top (small positive value to avoid issues at 0)
-          maxPolarAngle={Math.PI - 0.05} // Allow looking almost straight up from bottom (small offset from Math.PI)
-          target={[0, 0.1, 0]} // Lowered target Y for better low-angle orbiting if model base is near Y=0
+          minPolarAngle={0.05}
+          maxPolarAngle={Math.PI - 0.05}
+          target={[0, 0.1, 0]} // Adjust target if models are generally higher/lower
           onStart={handleOrbitStart}
           onEnd={handleOrbitEnd}
         />
+
         {(settings.n8ao?.enabled || settings.bloom?.enabled) && (
           <EffectComposer enableNormalPass>
-            {" "}
             {settings.n8ao?.enabled && (
               <N8AO
                 aoRadius={saneNumber(settings.n8ao.aoRadius, 0.5)}
@@ -1912,7 +1994,7 @@ const SceneContentInternal = React.memo(
                 halfRes={settings.n8ao.halfRes}
                 color={new THREE.Color(settings.n8ao.color)}
               />
-            )}{" "}
+            )}
             {settings.bloom?.enabled && (
               <Bloom
                 intensity={saneNumber(settings.bloom.intensity, 1.0)}
@@ -1924,9 +2006,9 @@ const SceneContentInternal = React.memo(
                   settings.bloom.luminanceSmoothing,
                   0.025
                 )}
-                kernelSize={settings.bloom.kernelSize}
+                kernelSize={settings.bloom.kernelSize} // This should be from postprocessing.KernelSize
               />
-            )}{" "}
+            )}
           </EffectComposer>
         )}
       </>
@@ -1938,50 +2020,64 @@ SceneContentInternal.displayName = "SceneContentInternal";
 const ModelViewer3D = () => {
   const [isMounted, setIsMounted] = useState(false);
   const fileInputRef = useRef(null);
-  const textureFileInputRefs = useRef({});
+  const textureFileInputRefs = useRef({}); // For individual texture slots
   const viewerCardRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [importedModel, setImportedModel] = useState(null);
+
+  const [importedModel, setImportedModel] = useState(null); // { url, type, mtlUrl }
   const [isImportedModelDisplayed, setIsImportedModelDisplayed] =
     useState(false);
   const [importedModelName, setImportedModelName] = useState("Imported Model");
+
   const [currentCategory, setCurrentCategory] = useState(CATEGORIES_DATA[0].id);
   const [currentShape, setCurrentShape] = useState(
     SHAPES_BY_CATEGORY_DATA[CATEGORIES_DATA[0].id][0].id
   );
-  const [isAnimating, setIsAnimating] = useState(true);
-  const [animationPreset, setAnimationPreset] = useState("gentle");
+
+  const [isAnimating, setIsAnimating] = useState(true); // For procedural shape float
+  const [animationPreset, setAnimationPreset] = useState("gentle"); // For procedural
+
   const [settings, setSettings] = useState(
     JSON.parse(JSON.stringify(initialSettings))
   );
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
+
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+
   const [customBgImageUrl, setCustomBgImageUrl] = useState(null);
+
   const [textInput, setTextInput] = useState("Hello 3D");
-  const [current3DText, setCurrent3DText] = useState("");
+  const [current3DText, setCurrent3DText] = useState(""); // Initially empty, set on button click
   const [isTextVisible, setIsTextVisible] = useState(false);
+
+  // Refs for export and screenshots
   const meshToExportOrScreenshotRef = useRef(null);
   const r3fSceneForExportRef = useRef(null);
   const r3fGLContextRef = useRef(null);
-  const orbitControlsRef = useRef(null);
+  const orbitControlsRef = useRef(null); // Ref to DreiOrbitControls instance
+
+  // Animation specific state for imported models
   const animationClipsRef = useRef([]);
-  const activeActionRef = useRef(null);
+  const activeActionRef = useRef(null); // For single animation
   const mixerRef = useRef(null);
   const [selectedAnimationClipIndex, setSelectedAnimationClipIndex] =
     useState(-1);
   const [animationPlaybackState, setAnimationPlaybackState] =
-    useState("stopped");
-  const [animationTime, setAnimationTime] = useState(0);
-  const [animationDuration, setAnimationDuration] = useState(0);
+    useState("stopped"); // "playing", "paused", "stopped"
+  const [animationTime, setAnimationTime] = useState(0); // Normalized 0-1
+  const [animationDuration, setAnimationDuration] = useState(0); // Actual duration of selected clip
   const [isAnimationLooping, setIsAnimationLooping] = useState(true);
   const [animationPlaybackSpeed, setAnimationPlaybackSpeed] = useState(1.0);
   const [forceMaterialResetKey, setForceMaterialResetKey] = useState(0);
+  const [playAllAnimations, setPlayAllAnimations] = useState(false); // New state for "Play All"
 
+  // History Undo/Redo
   const historyStackRef = useRef([]);
   const historyPointerRef = useRef(-1);
   const isUndoingRedoingRef = useRef(false);
   const MAX_HISTORY = 50;
+
   const captureAppState = useCallback(
     () =>
       JSON.parse(
@@ -1990,17 +2086,18 @@ const ModelViewer3D = () => {
           currentCategory,
           currentShape,
           animationPreset,
-          isAnimating,
+          isAnimating, // Procedural float animation state
           importedModelName,
           isImportedModelDisplayed,
           importedModelUrl: importedModel?.url,
           importedModelType: importedModel?.type,
           importedModelMtlUrl: importedModel?.mtlUrl,
           selectedAnimationClipIndex,
-          animationPlaybackState,
+          animationPlaybackState, // Imported model animation state
           animationTime,
           isAnimationLooping,
           animationPlaybackSpeed,
+          playAllAnimations, // NEW
           customBgImageUrl,
           current3DText,
           isTextVisible,
@@ -2021,24 +2118,29 @@ const ModelViewer3D = () => {
       animationTime,
       isAnimationLooping,
       animationPlaybackSpeed,
+      playAllAnimations, // NEW
       customBgImageUrl,
       current3DText,
       isTextVisible,
       forceMaterialResetKey,
     ]
   );
+
   const applyState = useCallback(
     (stateToApply) => {
       isUndoingRedoingRef.current = true;
+
       setSettings(stateToApply.settings);
       setCurrentCategory(stateToApply.currentCategory);
       setCurrentShape(stateToApply.currentShape);
       setAnimationPreset(stateToApply.animationPreset);
       setIsAnimating(stateToApply.isAnimating);
       setImportedModelName(stateToApply.importedModelName);
+
       if (
         stateToApply.importedModelUrl &&
-        stateToApply.importedModelUrl !== importedModel?.url
+        (stateToApply.importedModelUrl !== importedModel?.url ||
+          stateToApply.importedModelType !== importedModel?.type) // Check type too
       ) {
         setImportedModel({
           url: stateToApply.importedModelUrl,
@@ -2049,82 +2151,105 @@ const ModelViewer3D = () => {
         setImportedModel(null);
       }
       setIsImportedModelDisplayed(stateToApply.isImportedModelDisplayed);
+
       setSelectedAnimationClipIndex(stateToApply.selectedAnimationClipIndex);
       setAnimationPlaybackState(stateToApply.animationPlaybackState);
       setAnimationTime(stateToApply.animationTime);
       setIsAnimationLooping(stateToApply.isAnimationLooping);
       setAnimationPlaybackSpeed(stateToApply.animationPlaybackSpeed);
+      setPlayAllAnimations(stateToApply.playAllAnimations); // NEW
+
       setCustomBgImageUrl(stateToApply.customBgImageUrl);
       setCurrent3DText(stateToApply.current3DText);
       setIsTextVisible(stateToApply.isTextVisible);
-      setTextInput(stateToApply.current3DText);
+      setTextInput(stateToApply.current3DText || "Hello 3D"); // Update input field
+
       if (stateToApply.forceMaterialResetKey !== undefined)
         setForceMaterialResetKey(stateToApply.forceMaterialResetKey);
+
+      // Use requestAnimationFrame to ensure state updates propagate before clearing flag
       requestAnimationFrame(() => {
         isUndoingRedoingRef.current = false;
       });
     },
-    [importedModel]
+    [importedModel] // importedModel is a dependency if its structure affects how state is applied
   );
+
   const pushHistory = useCallback(
     (actionName = "action") => {
       if (isUndoingRedoingRef.current) return;
       const currentState = captureAppState();
       const previousState = historyStackRef.current[historyPointerRef.current];
+
       if (
         previousState &&
         JSON.stringify(currentState) === JSON.stringify(previousState)
       )
-        return;
+        return; // No change
+
       const stack = historyStackRef.current.slice(
         0,
         historyPointerRef.current + 1
       );
       stack.push(currentState);
-      if (stack.length > MAX_HISTORY) stack.shift();
+      if (stack.length > MAX_HISTORY) stack.shift(); // Keep history bounded
       historyStackRef.current = stack;
       historyPointerRef.current = stack.length - 1;
+      // console.log(`History pushed: ${actionName}`, historyPointerRef.current + 1, '/', stack.length);
     },
-    [captureAppState]
+    [captureAppState] // captureAppState itself is memoized
   );
+
   const handleUndo = useCallback(() => {
     if (historyPointerRef.current > 0) {
       historyPointerRef.current--;
       applyState(historyStackRef.current[historyPointerRef.current]);
-      sonnerToast.info("Undo");
-    } else sonnerToast.warning("Nothing more to undo.");
-  }, [applyState]);
+      sonnerToast.info("Undo Applied");
+    } else {
+      sonnerToast.warning("Nothing more to undo.");
+    }
+  }, [applyState]); // applyState is memoized
+
   const handleRedo = useCallback(() => {
     if (historyPointerRef.current < historyStackRef.current.length - 1) {
       historyPointerRef.current++;
       applyState(historyStackRef.current[historyPointerRef.current]);
-      sonnerToast.info("Redo");
-    } else sonnerToast.warning("Nothing more to redo.");
-  }, [applyState]);
+      sonnerToast.info("Redo Applied");
+    } else {
+      sonnerToast.warning("Nothing more to redo.");
+    }
+  }, [applyState]); // applyState is memoized
 
   useEffect(() => {
     setIsMounted(true);
-  }, []);
-  useEffect(() => {
-    if (isMounted) {
-      const t = setTimeout(() => pushHistory("initial load"), 200);
-      return () => clearTimeout(t);
-    }
-  }, [isMounted, pushHistory]);
+    // Push initial state after a short delay to allow everything to settle
+    const timer = setTimeout(() => {
+      pushHistory("initial load");
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []); // Empty dependency array means this runs once on mount
+
+  // Debounced history push for general state changes
   const debouncedPushHistoryRef = useRef(null);
   useEffect(() => {
-    if (!isMounted) return;
-    if (debouncedPushHistoryRef.current)
+    if (!isMounted || isUndoingRedoingRef.current) return; // Don't push history during mount or undo/redo
+
+    if (debouncedPushHistoryRef.current) {
       clearTimeout(debouncedPushHistoryRef.current);
+    }
     debouncedPushHistoryRef.current = setTimeout(() => {
-      if (isMounted && !isUndoingRedoingRef.current)
+      if (isMounted && !isUndoingRedoingRef.current) {
+        // Double check mounted and not undoing
         pushHistory("state changed");
-    }, 750);
+      }
+    }, 750); // Debounce time
+
     return () => {
-      if (debouncedPushHistoryRef.current)
+      if (debouncedPushHistoryRef.current) {
         clearTimeout(debouncedPushHistoryRef.current);
+      }
     };
-  }, [captureAppState, pushHistory, isMounted]);
+  }, [captureAppState, isMounted]); // Re-evaluate whenever captureAppState would produce a new value or mount status changes
 
   const toggleFullscreen = useCallback(async () => {
     if (!viewerCardRef.current) return;
@@ -2144,12 +2269,13 @@ const ModelViewer3D = () => {
       }
     }
   }, []);
+
   useEffect(() => {
     const fsChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", fsChange);
-    document.addEventListener("webkitfullscreenchange", fsChange);
-    document.addEventListener("mozfullscreenchange", fsChange);
-    document.addEventListener("MSFullscreenChange", fsChange);
+    document.addEventListener("webkitfullscreenchange", fsChange); // Safari
+    document.addEventListener("mozfullscreenchange", fsChange); // Firefox
+    document.addEventListener("MSFullscreenChange", fsChange); // IE/Edge
     return () => {
       document.removeEventListener("fullscreenchange", fsChange);
       document.removeEventListener("webkitfullscreenchange", fsChange);
@@ -2161,11 +2287,12 @@ const ModelViewer3D = () => {
   const handleMeshReadyForParent = useCallback((mesh) => {
     meshToExportOrScreenshotRef.current = mesh;
   }, []);
+
   const handleSceneRefForExportCallback = useCallback(
     (scene, gl, controlsInstance) => {
       r3fSceneForExportRef.current = scene;
       r3fGLContextRef.current = gl;
-      orbitControlsRef.current = controlsInstance;
+      // orbitControlsRef.current = controlsInstance; // This is passed from useThree, not needed here
     },
     []
   );
@@ -2173,9 +2300,9 @@ const ModelViewer3D = () => {
   const handleModelLoadedForScene = useCallback((loadedObject, loadedAnims) => {
     animationClipsRef.current = loadedAnims || [];
     if (loadedObject && animationClipsRef.current.length > 0) {
-      setSelectedAnimationClipIndex(0);
+      setSelectedAnimationClipIndex(0); // Default to first animation
       setAnimationDuration(animationClipsRef.current[0].duration);
-      setAnimationPlaybackState("playing");
+      setAnimationPlaybackState("playing"); // Auto-play first animation
       setAnimationTime(0);
     } else {
       setSelectedAnimationClipIndex(-1);
@@ -2187,31 +2314,53 @@ const ModelViewer3D = () => {
 
   const handleResetOrbitControlsView = useCallback(() => {
     if (orbitControlsRef.current?.reset) {
+      // orbitControlsRef is now populated by Canvas onCreated
       orbitControlsRef.current.reset();
       sonnerToast.info("View Reset");
-    } else sonnerToast.warning("OrbitControls not available to reset.");
-    pushHistory("reset view");
-  }, [pushHistory]);
-  const handleToggleGlobalAnimation = useCallback(
-    () =>
-      setIsAnimating((p) => {
-        sonnerToast.info(`Float Animation ${!p ? "Resumed" : "Paused"}`);
-        return !p;
-      }),
-    []
-  );
-  const handleSettingsChange = (key, value, subKey = null) =>
-    setSettings((s) => {
-      const n = { ...s };
-      if (subKey) n[key] = { ...s[key], [subKey]: value };
-      else n[key] = value;
-      return n;
+      pushHistory("reset view");
+    } else {
+      // Fallback if orbitControlsRef.current is not yet set or DreiOrbitControls doesn't expose reset
+      // This is less common now with direct ref passing.
+      // Attempt to get from r3f context if needed.
+      // For now, assume orbitControlsRef.current is correctly populated.
+      sonnerToast.warning("OrbitControls not available to reset.");
+    }
+  }, [pushHistory]); // orbitControlsRef.current might not be stable here if trying to use a ref from useThree
+
+  const handleToggleGlobalAnimation = useCallback(() => {
+    // This is for procedural shape float
+    setIsAnimating((p) => {
+      sonnerToast.info(`Float Animation ${!p ? "Resumed" : "Paused"}`);
+      return !p;
     });
+    // pushHistory is handled by the debounced effect
+  }, []);
+
+  const handleSettingsChange = (key, value, subKey = null) => {
+    setSettings((s) => {
+      const newSettings = { ...s };
+      if (subKey) {
+        newSettings[key] = { ...(s[key] || {}), [subKey]: value };
+      } else {
+        newSettings[key] = value;
+      }
+      return newSettings;
+    });
+    // pushHistory is handled by the debounced effect
+  };
   const resetCustomMaterialProperties = () => {
-    const cpk = settings.materialType;
-    if (cpk && cpk !== "auto" && baseMaterialPresets[cpk]) {
-      const pd = baseMaterialPresets[cpk];
-      const rtu = {};
+    const activeMatType =
+      settings.materialType === "auto"
+        ? isImportedModelDisplayed
+          ? "ceramic"
+          : SHAPES_BY_CATEGORY_DATA[currentCategory]?.find(
+              (s) => s.id === currentShape
+            )?.autoMaterial || "ceramic"
+        : settings.materialType;
+
+    if (baseMaterialPresets[activeMatType]) {
+      const presetDefaults = baseMaterialPresets[activeMatType];
+      const resetTextures = {};
       [
         "mapUrl",
         "normalMapUrl",
@@ -2219,46 +2368,59 @@ const ModelViewer3D = () => {
         "metalnessMapUrl",
         "aoMapUrl",
         "emissiveMapUrl",
-      ].forEach((k) => (rtu[k] = null));
+      ].forEach((k) => (resetTextures[k] = null));
+
       setSettings((s) => ({
         ...s,
         customMaterialProperties: {
-          roughness: pd.roughness ?? null,
-          metalness: pd.metalness ?? null,
-          ior: pd.ior ?? null,
-          transmission: pd.transmission ?? null,
-          thickness: pd.thickness ?? null,
-          emissiveIntensity: pd.emissiveIntensity ?? null,
-          envMapIntensity: pd.envMapIntensity ?? 1.0,
-          ...rtu,
+          ...resetTextures, // Clear all texture URLs first
+          roughness: presetDefaults.roughness ?? null,
+          metalness: presetDefaults.metalness ?? null,
+          ior: presetDefaults.ior ?? null,
+          transmission: presetDefaults.transmission ?? null,
+          thickness: presetDefaults.thickness ?? null,
+          emissiveIntensity: presetDefaults.emissiveIntensity ?? null,
+          envMapIntensity: presetDefaults.envMapIntensity ?? 1.0,
         },
       }));
-      sonnerToast.info("Material Props Reset");
+      sonnerToast.info(
+        `Material properties reset to '${activeMatType}' defaults.`
+      );
+    } else {
+      sonnerToast.warn("Could not determine preset to reset to.");
     }
+    // pushHistory is handled by the debounced effect
   };
-  const handleCategorySelect = useCallback(
-    (id) => {
-      setIsImportedModelDisplayed(false);
-      setImportedModel(null);
-      setCurrentCategory(id);
-      setCurrentShape(SHAPES_BY_CATEGORY_DATA[id][0].id);
-      pushHistory("category select");
-    },
-    [pushHistory]
-  );
-  const handleShapeSelect = useCallback(
-    (id) => {
-      setIsImportedModelDisplayed(false);
-      setImportedModel(null);
-      setCurrentShape(id);
-      pushHistory("shape select");
-    },
-    [pushHistory]
-  );
+
+  const handleCategorySelect = useCallback((id) => {
+    setIsImportedModelDisplayed(false);
+    setImportedModel(null); // Clear imported model details
+    setCurrentCategory(id);
+    setCurrentShape(SHAPES_BY_CATEGORY_DATA[id][0].id);
+    // Reset animation states for imported models as we are switching away
+    animationClipsRef.current = [];
+    setSelectedAnimationClipIndex(-1);
+    setAnimationPlaybackState("stopped");
+    // pushHistory is handled by the debounced effect
+  }, []);
+
+  const handleShapeSelect = useCallback((id) => {
+    setIsImportedModelDisplayed(false);
+    setImportedModel(null);
+    setCurrentShape(id);
+    animationClipsRef.current = [];
+    setSelectedAnimationClipIndex(-1);
+    setAnimationPlaybackState("stopped");
+    // pushHistory is handled by the debounced effect
+  }, []);
+
   const handleRandomize = useCallback(() => {
+    isUndoingRedoingRef.current = true; // Prevent pushHistory during multi-set
+
     setIsImportedModelDisplayed(false);
     setImportedModel(null);
     setCustomBgImageUrl(null);
+
     const randCat =
       CATEGORIES_DATA[Math.floor(Math.random() * CATEGORIES_DATA.length)];
     const randShapeList = SHAPES_BY_CATEGORY_DATA[randCat.id];
@@ -2284,9 +2446,11 @@ const ModelViewer3D = () => {
       "neon",
     ];
     const randMat = matKeys[Math.floor(Math.random() * matKeys.length)];
+
     setCurrentCategory(randCat.id);
     setCurrentShape(randShape.id);
-    setAnimationPreset(randPresetKey);
+    setAnimationPreset(randPresetKey); // For procedural float
+
     const newKeyLight = {
       enabled: true,
       intensity: saneNumber(Math.random() * (1.5 - 0.3) + 0.3, 0.7),
@@ -2302,6 +2466,7 @@ const ModelViewer3D = () => {
       intensity: saneNumber(Math.random() * (0.5 - 0.1) + 0.1, 0.25),
       color: `hsl(${Math.floor(Math.random() * 360)}, 50%, 70%)`,
     };
+
     const randomText = ["Hello!", "3D Fun", "Awesome", "Shapes", "Text"][
       Math.floor(Math.random() * 5)
     ];
@@ -2309,18 +2474,20 @@ const ModelViewer3D = () => {
     setCurrent3DText(randomText);
     setTextInput(randomText);
     setIsTextVisible(Math.random() > 0.5);
+    setPlayAllAnimations(false); // Default to single animation for randomized state
+
     setSettings((prev) => ({
       ...prev,
       materialType: randMat,
       shapeColor: randColor,
       background: randBgKey,
       extrudeDepth: saneNumber(Math.random() * (1.0 - 0.1) + 0.1, 0.4),
-      animationSpeed: saneNumber(Math.random() * (2.0 - 0.5) + 0.5, 1.0),
+      animationSpeed: saneNumber(Math.random() * (2.0 - 0.5) + 0.5, 1.0), // Procedural float speed
       keyLight: newKeyLight,
       fillLight: newFillLight,
       ambientLight: newAmbientLight,
       customMaterialProperties: JSON.parse(
-        JSON.stringify(initialSettings.customMaterialProperties)
+        JSON.stringify(initialSettings.customMaterialProperties) // Reset custom props
       ),
       textColor: randomTextColor,
       textSize: saneNumber(Math.random() * (0.8 - 0.3) + 0.3, 0.5),
@@ -2342,58 +2509,102 @@ const ModelViewer3D = () => {
         intensity: saneNumber(Math.random() * 2, 1),
       },
     }));
+
+    // Reset imported model animation state
+    animationClipsRef.current = [];
+    setSelectedAnimationClipIndex(-1);
+    setAnimationPlaybackState("stopped");
+    setAnimationTime(0);
+    setAnimationDuration(0);
+
     sonnerToast.success("Scene Randomized!");
-    pushHistory("randomize scene");
-  }, [pushHistory]);
+    requestAnimationFrame(() => {
+      isUndoingRedoingRef.current = false;
+      pushHistory("randomize scene");
+    });
+  }, []);
+
   const handleResetImportedAppearance = useCallback(() => {
     if (!isImportedModelDisplayed || !importedModel) return;
     setSettings((s) => ({
       ...s,
-      materialType: "auto",
+      materialType: "auto", // This will trigger default behavior for imported models
       customMaterialProperties: {
-        ...initialSettings.customMaterialProperties,
-        envMapIntensity: s.customMaterialProperties.envMapIntensity,
+        ...initialSettings.customMaterialProperties, // Reset all custom props
+        envMapIntensity: s.customMaterialProperties.envMapIntensity, // Keep current envMapIntensity
       },
     }));
-    setForceMaterialResetKey((prev) => prev + 1);
+    setForceMaterialResetKey((prev) => prev + 1); // Trigger re-application of materials
     sonnerToast.info("Imported model appearance reset.");
-    pushHistory("reset imported model appearance");
-  }, [isImportedModelDisplayed, importedModel, pushHistory]);
+    // pushHistory is handled by the debounced effect
+  }, [isImportedModelDisplayed, importedModel]);
 
-  const currentShapeRef = useRef(currentShape);
+  const currentShapeRef = useRef(currentShape); // For export filename if procedural
   useEffect(() => {
     currentShapeRef.current = currentShape;
   }, [currentShape]);
-  const currentImportedModelNameRef = useRef(importedModelName);
+
+  const currentImportedModelNameRef = useRef(importedModelName); // For export filename
   useEffect(() => {
     currentImportedModelNameRef.current = importedModelName;
   }, [importedModelName]);
 
   const handleExportGLB = useCallback(async () => {
     if (isExporting) return;
+    if (!meshToExportOrScreenshotRef.current && !isTextVisible) {
+      sonnerToast.warning("Nothing to export.");
+      return;
+    }
+
+    setIsExporting(true);
+    setExportProgress(0);
+    const toastId = sonnerToast.loading("Exporting GLB...");
+
     const sceneToExport = new THREE.Scene();
     let hasContent = false;
+
     if (meshToExportOrScreenshotRef.current) {
-      const clone = meshToExportOrScreenshotRef.current.clone(true);
+      const clone = meshToExportOrScreenshotRef.current.clone(true); // Deep clone
+      // Ensure materials on the clone are standard if they were custom Drei/R3F components
+      clone.traverse((child) => {
+        if (child.isMesh && child.material) {
+          if (Array.isArray(child.material)) {
+            child.material = child.material.map((m) =>
+              m.isMaterial
+                ? m
+                : new THREE.MeshStandardMaterial({ color: "gray" })
+            );
+          } else if (!child.material.isMaterial) {
+            child.material = new THREE.MeshStandardMaterial({ color: "gray" });
+          }
+        }
+      });
       sceneToExport.add(clone);
       hasContent = true;
     }
+
     if (isTextVisible && current3DText && settings.textFontUrl) {
-      let font = helvetikerFontForExport;
-      if (!font || settings.textFontUrl !== DEFAULT_FONT_PATH) {
+      let fontToUse = helvetikerFontForExport; // Use preloaded default if possible
+      if (!fontToUse || settings.textFontUrl !== DEFAULT_FONT_PATH) {
         try {
-          font = await new FontLoader().loadAsync(settings.textFontUrl);
-          if (settings.textFontUrl === DEFAULT_FONT_PATH)
-            helvetikerFontForExport = font;
+          fontToUse = await new FontLoader().loadAsync(settings.textFontUrl);
+          if (
+            settings.textFontUrl === DEFAULT_FONT_PATH &&
+            !helvetikerFontForExport
+          ) {
+            helvetikerFontForExport = fontToUse; // Cache if it's the default loaded for the first time
+          }
         } catch (e) {
-          sonnerToast.error("Font load failed for export");
+          console.error("Font load failed for export:", e);
+          sonnerToast.error("Font load failed for export", { id: toastId });
           setIsExporting(false);
           return;
         }
       }
-      if (font) {
-        const geom = new TextGeometry(current3DText, {
-          font,
+
+      if (fontToUse) {
+        const textGeom = new TextGeometry(current3DText, {
+          font: fontToUse,
           size: saneNumber(settings.textSize, 0.5),
           height: saneNumber(settings.textDepth, 0.05),
           curveSegments: 12,
@@ -2401,87 +2612,117 @@ const ModelViewer3D = () => {
           bevelThickness: saneNumber(0.02 * (settings.textSize / 0.5), 0.01),
           bevelSize: saneNumber(0.01 * (settings.textSize / 0.5), 0.005),
         });
-        geom.center();
-        const { constructor: MC, args: ma } = createR3FMaterialProps(
+        textGeom.center(); // Center the geometry
+
+        const { constructor: MatCtor, args: matArgs } = createR3FMaterialProps(
           settings.textColor,
-          "ceramic",
+          "ceramic", // Use a basic material type for text export
           {},
-          r3fSceneForExportRef.current?.environment
+          r3fSceneForExportRef.current?.environment // Use scene env map if available
         );
-        const tm = new MC(ma);
-        const tMesh = new THREE.Mesh(geom, tm);
-        let yOff = 0;
+        const textMaterial = new MatCtor(matArgs);
+        const textMesh = new THREE.Mesh(textGeom, textMaterial);
+
+        // Calculate Y offset for text based on main model's bounding box
+        let textExportYOffset = 0;
         if (meshToExportOrScreenshotRef.current) {
-          const box = new THREE.Box3().setFromObject(
+          const modelBox = new THREE.Box3().setFromObject(
             meshToExportOrScreenshotRef.current
           );
-          if (!box.isEmpty()) {
-            yOff =
-              box.getCenter(new THREE.Vector3()).y +
-              (box.max.y - box.min.y) / 2 +
-              saneNumber(settings.textSize, 0.5) / 2 +
+          if (!modelBox.isEmpty()) {
+            const modelHeight = modelBox.max.y - modelBox.min.y;
+            const modelCenterY = modelBox.getCenter(new THREE.Vector3()).y;
+            textExportYOffset =
+              modelCenterY +
+              modelHeight / 2 +
+              saneNumber(settings.textSize, 0.5) * 0.5 +
               0.3;
-          } else yOff = saneNumber(settings.textSize, 0.5) / 2 + 0.3;
-        } else yOff = saneNumber(settings.textSize, 0.5) / 2;
-        tMesh.position.y = yOff;
-        sceneToExport.add(tMesh);
+          } else {
+            textExportYOffset =
+              1.5 + saneNumber(settings.textSize, 0.5) * 0.5 + 0.3; // Fallback
+          }
+        } else {
+          textExportYOffset = saneNumber(settings.textSize, 0.5) * 0.5 + 0.3; // Only text
+        }
+        textMesh.position.y = textExportYOffset;
+        sceneToExport.add(textMesh);
         hasContent = true;
-      } else {
-        setIsExporting(false);
-        return;
       }
     }
+
     if (!hasContent) {
-      sonnerToast.warning("Nothing to export");
+      sonnerToast.warning("Nothing to export.", { id: toastId });
+      setIsExporting(false);
       return;
     }
-    setIsExporting(true);
-    setExportProgress(0);
-    const toastId = sonnerToast.loading("Exporting GLB...");
+
     try {
-      await new Promise((r) => setTimeout(r, 200));
-      setExportProgress(50);
+      await new Promise((resolve) => setTimeout(resolve, 100)); // Brief pause for UI
+      setExportProgress(30);
+
       const exporter = new GLTFExporter();
+      const exportOptions = {
+        binary: true, // GLB
+        embedImages: true, // If any textures are embedded
+        animations:
+          isImportedModelDisplayed &&
+          importedModel &&
+          animationClipsRef.current.length > 0
+            ? animationClipsRef.current // Export all animations of the imported model
+            : [],
+      };
+
       exporter.parse(
         sceneToExport,
         (gltf) => {
           const blob = new Blob([gltf], { type: "application/octet-stream" });
-          const l = document.createElement("a");
-          l.href = URL.createObjectURL(blob);
-          l.download = `shape-${
-            isImportedModelDisplayed
-              ? (currentImportedModelNameRef.current || "imported")
-                  .replace(/[^a-z0-9]/gi, "_")
-                  .toLowerCase()
-              : currentShapeRef.current || "model"
-          }${isTextVisible && current3DText ? "-with-text" : ""}.glb`;
-          l.click();
-          URL.revokeObjectURL(l.href);
+          const link = document.createElement("a");
+          link.href = URL.createObjectURL(blob);
+          const baseName = isImportedModelDisplayed
+            ? (currentImportedModelNameRef.current || "imported_model")
+                .replace(/[^a-z0-9]/gi, "_")
+                .toLowerCase()
+            : currentShapeRef.current || "procedural_shape";
+          const textSuffix = isTextVisible && current3DText ? "_with_text" : "";
+          link.download = `shape_studio_${baseName}${textSuffix}.glb`;
+          link.click();
+          URL.revokeObjectURL(link.href);
+
           setExportProgress(100);
-          sonnerToast.success("GLB Exported", { id: toastId });
+          sonnerToast.success("GLB Exported Successfully!", { id: toastId });
           setIsExporting(false);
         },
-        (err) => {
-          console.error(err);
-          sonnerToast.error("GLB Export Failed", { id: toastId });
+        (error) => {
+          console.error("GLTFExporter error:", error);
+          sonnerToast.error("GLB Export Failed", {
+            id: toastId,
+            description: error.message || "Unknown exporter error",
+          });
           setIsExporting(false);
         },
-        {
-          binary: true,
-          embedImages: true,
-          animations:
-            isImportedModelDisplayed &&
-            importedModel &&
-            animationClipsRef.current.length > 0
-              ? animationClipsRef.current
-              : [],
-        }
+        exportOptions
       );
     } catch (e) {
-      sonnerToast.error("Export Error", { id: toastId });
+      console.error("Export process error:", e);
+      sonnerToast.error("Export Error", {
+        id: toastId,
+        description: e.message || "An unexpected error occurred.",
+      });
       setIsExporting(false);
     }
-  }, [isExporting, isTextVisible, current3DText, settings, importedModel]);
+  }, [
+    isExporting,
+    isTextVisible,
+    current3DText,
+    settings.textColor,
+    settings.textSize,
+    settings.textDepth,
+    settings.textFontUrl,
+    isImportedModelDisplayed,
+    importedModel, // For animations
+    // meshToExportOrScreenshotRef.current, r3fSceneForExportRef.current - refs are tricky in deps
+  ]);
+
   const handleSimulatedExportOBJ = useCallback(() => {
     if (isExporting) return;
     setIsExporting(true);
@@ -2500,25 +2741,25 @@ const ModelViewer3D = () => {
       });
       if (currentProgress >= 100) {
         clearInterval(i);
-        const l = document.createElement("a");
+        const link = document.createElement("a");
         const baseName = isImportedModelDisplayed
-          ? (currentImportedModelNameRef.current || "imported")
+          ? (currentImportedModelNameRef.current || "imported_model")
               .replace(/[^a-z0-9]/gi, "_")
               .toLowerCase()
-          : currentShapeRef.current || "model";
+          : currentShapeRef.current || "procedural_shape";
         const textSuffix = isTextVisible && current3DText ? "-with-text" : "";
-        l.download = `shape-${baseName}${textSuffix}.obj`;
-        l.href =
+        link.download = `shape_studio_${baseName}${textSuffix}.obj`;
+        link.href =
           "data:text/plain;charset=utf-8," +
           encodeURIComponent(
-            "# OBJ file simulated\n# Actual OBJ Exporter needed for full geometry"
+            "# OBJ file simulated\n# Actual OBJ Exporter needed for full geometry and materials.\n# This is a placeholder file."
           );
-        document.body.appendChild(l);
-        l.click();
-        document.body.removeChild(l);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
         sonnerToast.success("OBJ Export (Simulated) Ready", {
           id: exportToastId,
-          description: "Simulated OBJ downloaded.",
+          description: "Simulated OBJ file downloaded.",
         });
         setTimeout(() => {
           setIsExporting(false);
@@ -2526,7 +2767,8 @@ const ModelViewer3D = () => {
         }, 500);
       }
     }, 150);
-  }, [isExporting, isImportedModelDisplayed, isTextVisible, current3DText]);
+  }, [isExporting, isImportedModelDisplayed, current3DText, isTextVisible]);
+
   const handleTakeScreenshot = useCallback(() => {
     if (!r3fGLContextRef.current) {
       sonnerToast.error("Screenshot Failed", {
@@ -2538,7 +2780,12 @@ const ModelViewer3D = () => {
     const screenshotToastId = sonnerToast.loading("Taking Screenshot...", {
       description: "Capturing image...",
     });
+    // Ensure canvas is rendered before capturing
     requestAnimationFrame(() => {
+      gl.render(
+        r3fSceneForExportRef.current,
+        r3fSceneForExportRef.current.camera
+      ); // Force a render
       try {
         const canvas = gl.domElement;
         const link = document.createElement("a");
@@ -2548,7 +2795,7 @@ const ModelViewer3D = () => {
               .toLowerCase()
           : currentShapeRef.current || "view";
         const textSuffix = isTextVisible && current3DText ? "-with-text" : "";
-        link.download = `screenshot-${baseName}${textSuffix}.png`;
+        link.download = `screenshot_shape_studio_${baseName}${textSuffix}.png`;
         link.href = canvas.toDataURL("image/png");
         document.body.appendChild(link);
         link.click();
@@ -2560,7 +2807,7 @@ const ModelViewer3D = () => {
       } catch (e) {
         sonnerToast.error("Screenshot Failed", {
           id: screenshotToastId,
-          description: e.message || "Could not save.",
+          description: e.message || "Could not save image.",
         });
       }
     });
@@ -2573,30 +2820,39 @@ const ModelViewer3D = () => {
       setImportedModelName(nameOnly);
       setImportedModel({ url: fileUrl, type: fileType, mtlUrl: mtlFileUrl });
       setIsImportedModelDisplayed(true);
+
+      // Reset animation state for the new model
       animationClipsRef.current = [];
       setSelectedAnimationClipIndex(-1);
       setAnimationPlaybackState("stopped");
       setAnimationTime(0);
       setAnimationDuration(0);
+      setPlayAllAnimations(false); // Default to single animation mode for new imports
+
       if (mixerRef.current) {
         mixerRef.current.stopAllAction();
-        mixerRef.current = null;
+        // mixerRef.current = null; // Let ImportedModel handle mixer creation
       }
-      if (activeActionRef.current) activeActionRef.current = null;
-      setForceMaterialResetKey((prev) => prev + 1);
-      pushHistory(`import ${fileType}`);
+      if (activeActionRef.current) {
+        // activeActionRef.current = null; // Let ImportedModel handle action creation
+      }
+      setForceMaterialResetKey((prev) => prev + 1); // Trigger material re-evaluation
+      // pushHistory is handled by the debounced effect
     },
-    [pushHistory]
+    [] // No dependencies, this is a utility function
   );
+
   const handleFiles = useCallback(
     async (files) => {
       if (!files || files.length === 0) return;
       const importToastId = sonnerToast.loading("Processing File(s)...", {
-        duration: Infinity,
+        duration: Infinity, // Keep toast until success/error
       });
+
       let modelFile = null;
       let mtlFile = null;
       let modelFileType = "";
+
       const modelFileExtensions = [".glb", ".gltf", ".fbx", ".stl", ".obj"];
       for (const ext of modelFileExtensions) {
         modelFile = Array.from(files).find((f) =>
@@ -2607,24 +2863,27 @@ const ModelViewer3D = () => {
           break;
         }
       }
-      if (!modelFile) {
-        modelFile = Array.from(files).find((f) =>
-          f.name.toLowerCase().endsWith(".3ds")
-        );
-        if (modelFile) modelFileType = "3ds";
-      }
+
       if (modelFileType === "obj") {
         mtlFile = Array.from(files).find((f) =>
           f.name.toLowerCase().endsWith(".mtl")
         );
       }
+
       if (modelFile) {
-        let modelUrlToUse;
-        const mtlUrlToUse = mtlFile ? URL.createObjectURL(mtlFile) : null;
+        // Revoke old blob URLs if they exist
         if (importedModel?.url?.startsWith("blob:"))
           URL.revokeObjectURL(importedModel.url);
         if (importedModel?.mtlUrl?.startsWith("blob:"))
           URL.revokeObjectURL(importedModel.mtlUrl);
+
+        let modelUrlToUse;
+        const mtlUrlToUse = mtlFile ? URL.createObjectURL(mtlFile) : null;
+
+        // GLTF/GLB benefit from Data URLs if small enough, but object URLs are fine too.
+        // For simplicity and consistency with other loaders that might not handle Data URLs for resources,
+        // let's use Object URLs for all non-DataURL types.
+        // Except GLB/GLTF for direct loader.load(dataUrl) which can be more self-contained.
         if (modelFileType === "glb" || modelFileType === "gltf") {
           try {
             const reader = new FileReader();
@@ -2633,6 +2892,7 @@ const ModelViewer3D = () => {
               reader.onerror = reject;
               reader.readAsDataURL(modelFile);
             });
+            // Ensure correct MIME type for GLB data URLs
             if (
               modelFileType === "glb" &&
               modelUrlToUse.startsWith("data:application/octet-stream")
@@ -2643,168 +2903,204 @@ const ModelViewer3D = () => {
               );
             }
           } catch (error) {
+            console.error("File to Data URL conversion error:", error);
             sonnerToast.error("File Processing Error", {
               id: importToastId,
-              description: `Failed to convert ${modelFileType.toUpperCase()} to Data URL.`,
+              description: `Failed to convert ${modelFileType.toUpperCase()} to Data URL. Try a different file or format.`,
             });
-            if (fileInputRef.current) fileInputRef.current.value = null;
+            if (fileInputRef.current) fileInputRef.current.value = null; // Reset file input
             return;
           }
         } else {
           modelUrlToUse = URL.createObjectURL(modelFile);
         }
+
         processAndSetImportedModel(
           modelUrlToUse,
           modelFileType,
           mtlUrlToUse,
           modelFile.name
         );
-        sonnerToast.success("Model Ready", {
+        sonnerToast.success("Model Ready for Display", {
           id: importToastId,
-          description: `${modelFile.name} prepared.`,
+          description: `${modelFile.name} has been prepared.`,
         });
       } else {
-        sonnerToast.error("No Compatible Model", {
+        sonnerToast.error("No Compatible Model File Found", {
           id: importToastId,
-          description: "Please select a supported file type.",
+          description: "Please select a GLB, GLTF, FBX, STL, or OBJ file.",
         });
       }
-      if (fileInputRef.current) fileInputRef.current.value = null;
+      if (fileInputRef.current) fileInputRef.current.value = null; // Reset file input
     },
-    [processAndSetImportedModel, importedModel]
+    [processAndSetImportedModel, importedModel] // importedModel for revoking old URLs
   );
+
   const triggerImport = useCallback(() => {
     if (fileInputRef.current) fileInputRef.current.click();
   }, []);
+
   const handleFileDropOnViewer = useCallback(
     (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (event.dataTransfer.files?.length > 0)
+      if (event.dataTransfer.files?.length > 0) {
         handleFiles(Array.from(event.dataTransfer.files));
+      }
     },
     [handleFiles]
   );
 
   const handlePlayPauseAnimation = () => {
-    if (
-      !activeActionRef.current ||
-      animationClipsRef.current.length === 0 ||
-      selectedAnimationClipIndex < 0
-    ) {
-      sonnerToast.warning("No Animation Selected");
+    if (animationClipsRef.current.length === 0) {
+      sonnerToast.warning("No animations loaded for this model.");
       return;
     }
+    if (!playAllAnimations && selectedAnimationClipIndex < 0) {
+      sonnerToast.warning("No animation clip selected to play/pause.");
+      return;
+    }
+
     setAnimationPlaybackState((prev) =>
       prev === "playing" ? "paused" : "playing"
     );
-    pushHistory("toggle anim play/pause");
+    // pushHistory is handled by the debounced effect
   };
+
   const handleStopAnimation = () => {
+    if (animationClipsRef.current.length === 0) {
+      sonnerToast.warning("No animations loaded to stop.");
+      return;
+    }
     if (
-      !activeActionRef.current ||
-      animationClipsRef.current.length === 0 ||
-      selectedAnimationClipIndex < 0
+      !playAllAnimations &&
+      selectedAnimationClipIndex < 0 &&
+      animationPlaybackState === "stopped"
     ) {
-      sonnerToast.warning("No Animation Selected");
+      // Already stopped or nothing to stop for single mode
       return;
     }
     setAnimationPlaybackState("stopped");
-    setAnimationTime(0);
-    pushHistory("stop anim");
+    setAnimationTime(0); // Reset time to beginning
+    // pushHistory is handled by the debounced effect
   };
+
   const handleAnimationClipChange = (indexStr) => {
     const index = parseInt(indexStr, 10);
     if (index >= 0 && index < animationClipsRef.current.length) {
       setSelectedAnimationClipIndex(index);
       setAnimationDuration(animationClipsRef.current[index].duration);
-      setAnimationTime(0);
-      setAnimationPlaybackState("playing");
+      // Optionally auto-play or keep current state. Let's keep current state.
+      // If was stopped, stay stopped. If playing/paused, apply to new clip.
+      setAnimationTime(0); // Reset time for new clip
       sonnerToast.info(
-        `Animation: ${
+        `Switched to Animation: ${
           animationClipsRef.current[index].name || `Clip ${index + 1}`
         }`
       );
     } else {
+      // This case should ideally not happen if UI is bound correctly
       setSelectedAnimationClipIndex(-1);
       setAnimationDuration(0);
-      setAnimationPlaybackState("stopped");
     }
-    pushHistory("change anim clip");
+    // pushHistory is handled by the debounced effect
   };
+
   const handleAnimationTimeChange = (value) => {
+    // value is [normalizedTime]
     setAnimationTime(value[0]);
+    // No pushHistory here, too frequent. Changes are captured by global state push.
   };
+
   const handleAnimationLoopToggle = (checked) => {
     setIsAnimationLooping(checked);
-    pushHistory("toggle anim loop");
+    // pushHistory is handled by the debounced effect
   };
+
   const handleAnimationSpeedChange = (value) => {
+    // value is [speed]
     setAnimationPlaybackSpeed(value[0]);
-    pushHistory("change anim speed");
+    // pushHistory is handled by the debounced effect
   };
 
   const handleCustomBgImageUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
+      if (customBgImageUrl?.startsWith("blob:"))
+        URL.revokeObjectURL(customBgImageUrl); // Revoke old if exists
       const reader = new FileReader();
       reader.onload = (e) => {
-        setCustomBgImageUrl(e.target.result);
+        setCustomBgImageUrl(e.target.result); // This will be a data URL
         setSettings((s) => ({ ...s, background: "customImage" }));
-        sonnerToast.success("Custom background set.");
-        pushHistory("set custom bg");
+        sonnerToast.success("Custom background image set.");
+        // pushHistory is handled by the debounced effect
       };
       reader.onerror = () => sonnerToast.error("File Read Error");
       reader.readAsDataURL(file);
     }
-    if (event.target) event.target.value = null;
+    if (event.target) event.target.value = null; // Reset file input
   };
+
   const handleClearCustomBgImage = () => {
+    if (customBgImageUrl?.startsWith("blob:"))
+      URL.revokeObjectURL(customBgImageUrl);
     setCustomBgImageUrl(null);
-    if (settings.background === "customImage")
-      handleSettingsChange("background", "studioDark");
-    sonnerToast.info("Custom background cleared.");
-    pushHistory("clear custom bg");
+    if (settings.background === "customImage") {
+      handleSettingsChange("background", "studioDark"); // Revert to a default
+    }
+    sonnerToast.info("Custom background image cleared.");
+    // pushHistory is handled by the debounced effect
   };
+
   const handleTextureUpload = (mapType, event) => {
     const file = event.target.files[0];
     if (file) {
+      const urlKey = `${mapType}Url`;
+      const oldUrl = settings.customMaterialProperties[urlKey];
+      if (oldUrl?.startsWith("blob:")) URL.revokeObjectURL(oldUrl); // Revoke old if exists
+
       const reader = new FileReader();
       reader.onload = (e) => {
         setSettings((s) => ({
           ...s,
           customMaterialProperties: {
             ...s.customMaterialProperties,
-            [`${mapType}Url`]: e.target.result,
+            [urlKey]: e.target.result, // This will be a data URL
           },
         }));
         sonnerToast.success(`${mapType.replace("Map", "")} texture set.`);
-        pushHistory(`set ${mapType}`);
+        // pushHistory is handled by the debounced effect
       };
       reader.onerror = () => sonnerToast.error("File Read Error");
       reader.readAsDataURL(file);
     }
-    if (event.target) event.target.value = null;
+    if (event.target) event.target.value = null; // Reset file input
   };
+
   const handleClearTexture = (mapType) => {
+    const urlKey = `${mapType}Url`;
+    const oldUrl = settings.customMaterialProperties[urlKey];
+    if (oldUrl?.startsWith("blob:")) URL.revokeObjectURL(oldUrl);
+
     setSettings((s) => ({
       ...s,
       customMaterialProperties: {
         ...s.customMaterialProperties,
-        [`${mapType}Url`]: null,
+        [urlKey]: null,
       },
     }));
     sonnerToast.info(`${mapType.replace("Map", "")} texture cleared.`);
-    pushHistory(`clear ${mapType}`);
+    // pushHistory is handled by the debounced effect
   };
+
   const handleSet3DText = () => {
     const trimmed = textInput.trim();
     setCurrent3DText(trimmed);
-    setIsTextVisible(trimmed !== "");
+    setIsTextVisible(trimmed !== ""); // Show if text is not empty
     sonnerToast.info(
       trimmed !== "" ? `3D Text Updated: "${trimmed}"` : "3D Text Cleared"
     );
-    pushHistory("set 3d text");
+    // pushHistory is handled by the debounced effect
   };
 
   const { active: isLoadingModel, progress: modelLoadProgress } = useProgress();
@@ -2812,43 +3108,52 @@ const ModelViewer3D = () => {
   if (!isMounted) {
     return (
       <div className='min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-100 p-4'>
-        {" "}
-        <Loader2 className='h-12 w-12 animate-spin text-purple-400 mb-4' />{" "}
-        <p className='text-lg font-medium'>Initializing 3D Studio...</p>{" "}
+        <Loader2 className='h-12 w-12 animate-spin text-purple-400 mb-4' />
+        <p className='text-lg font-medium'>Initializing 3D Studio...</p>
       </div>
     );
   }
+
   let canvasBgColor = "transparent";
   if (settings.background === "solidColor") {
     canvasBgColor = settings.solidBackgroundColor;
   } else if (settings.background !== "customImage" || !customBgImageUrl) {
+    // For non-custom image backgrounds, derive a solid fallback for the canvas element itself
+    // The Environment component will handle the visual background/skybox
     if (settings.background === "darkSpace") canvasBgColor = "#0a0a10";
     else if (settings.background === "studioDark") canvasBgColor = "#18181b";
     else if (settings.background === "softLight") canvasBgColor = "#e0e8f0";
     else if (settings.background === "studioLight") canvasBgColor = "#f4f4f5";
     else if (settings.background === "modernGradient")
-      canvasBgColor = "#1e3b49";
+      canvasBgColor = "#1e3b49"; // A base color for the gradient
   }
+  const canvasKey = `canvas-gl-alpha-${(
+    canvasBgColor === "transparent"
+  ).toString()}`;
   const canUndo = historyPointerRef.current > 0;
   const canRedo =
     historyPointerRef.current < historyStackRef.current.length - 1;
 
   let currentActiveMaterialType = settings.materialType;
-  if (isImportedModelDisplayed && settings.materialType === "auto") {
-    const anyCustomTexMap = Object.keys(settings.customMaterialProperties)
-      .filter((k) => k.endsWith("Url") && k !== "envMapIntensityUrl")
-      .some(
-        (key) =>
-          typeof settings.customMaterialProperties[key] === "string" &&
-          settings.customMaterialProperties[key].trim() !== ""
-      );
-    if (!anyCustomTexMap) currentActiveMaterialType = "auto";
-    else currentActiveMaterialType = "ceramic";
-  } else if (!isImportedModelDisplayed && settings.materialType === "auto") {
-    currentActiveMaterialType =
-      SHAPES_BY_CATEGORY_DATA[currentCategory]?.find(
-        (s) => s.id === currentShape
-      )?.autoMaterial || "ceramic";
+  if (settings.materialType === "auto") {
+    if (isImportedModelDisplayed) {
+      // For imported models, 'auto' usually means let the model's materials show,
+      // unless user provides custom textures, then we might switch to a 'ceramic' base.
+      const anyCustomTex = Object.keys(settings.customMaterialProperties)
+        .filter((k) => k.endsWith("Url") && k !== "envMapIntensityUrl") // Exclude envMapIntensity
+        .some(
+          (key) =>
+            typeof settings.customMaterialProperties[key] === "string" &&
+            settings.customMaterialProperties[key].trim() !== ""
+        );
+      currentActiveMaterialType = anyCustomTex ? "ceramic" : "auto"; // If custom tex, provide a base, else 'auto' means model's own.
+    } else {
+      // For procedural shapes
+      currentActiveMaterialType =
+        SHAPES_BY_CATEGORY_DATA[currentCategory]?.find(
+          (s) => s.id === currentShape
+        )?.autoMaterial || "ceramic";
+    }
   }
 
   const textureSlots = [
@@ -2887,7 +3192,6 @@ const ModelViewer3D = () => {
               <div className='lg:col-span-3 space-y-4 sm:space-y-5 order-last lg:order-first'>
                 {!isImportedModelDisplayed && (
                   <>
-                    {" "}
                     <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
                       <CardHeader>
                         <CardTitle className='text-slate-100'>
@@ -2912,11 +3216,10 @@ const ModelViewer3D = () => {
                               )}
                               onClick={() => handleCategorySelect(category.id)}
                             >
-                              {" "}
                               <span className='text-2xl sm:text-3xl'>
                                 {category.icon}
-                              </span>{" "}
-                              <span>{category.name}</span>{" "}
+                              </span>
+                              <span>{category.name}</span>
                             </Button>
                           ))}
                         </div>
@@ -2946,11 +3249,8 @@ const ModelViewer3D = () => {
                                   )}
                                   onClick={() => handleShapeSelect(shape.id)}
                                 >
-                                  {" "}
-                                  <span className='text-xl'>
-                                    {shape.icon}
-                                  </span>{" "}
-                                  {shape.name}{" "}
+                                  <span className='text-xl'>{shape.icon}</span>
+                                  {shape.name}
                                 </Button>
                               )
                             )}
@@ -2972,7 +3272,7 @@ const ModelViewer3D = () => {
                         className='text-sm text-slate-300 truncate font-medium'
                         title={importedModelName}
                       >
-                        {importedModelName}
+                        {importedModelName} (.{importedModel.type})
                       </p>
                     </CardContent>
                     <CardFooter className='flex flex-col space-y-2'>
@@ -2981,10 +3281,16 @@ const ModelViewer3D = () => {
                         size='sm'
                         className='w-full'
                         onClick={() => {
-                          if (importedModel?.url?.startsWith("blob:"))
-                            URL.revokeObjectURL(importedModel.url);
-                          if (importedModel?.mtlUrl?.startsWith("blob:"))
+                          if (
+                            importedModel?.url?.startsWith("blob:") ||
+                            importedModel?.url?.startsWith("data:")
+                          ) {
+                            if (importedModel?.url?.startsWith("blob:"))
+                              URL.revokeObjectURL(importedModel.url);
+                          }
+                          if (importedModel?.mtlUrl?.startsWith("blob:")) {
                             URL.revokeObjectURL(importedModel.mtlUrl);
+                          }
                           setImportedModel(null);
                           setIsImportedModelDisplayed(false);
                           setImportedModelName("Imported Model");
@@ -2998,29 +3304,25 @@ const ModelViewer3D = () => {
                           setAnimationPlaybackState("stopped");
                           setAnimationTime(0);
                           setAnimationDuration(0);
+                          setPlayAllAnimations(false);
                           if (mixerRef.current) {
                             mixerRef.current.stopAllAction();
-                            mixerRef.current = null;
                           }
-                          if (activeActionRef.current)
-                            activeActionRef.current = null;
                           sonnerToast.info("Imported Model Cleared");
                           pushHistory("clear imported model");
                         }}
                       >
-                        {" "}
-                        <XCircle size={16} className='mr-2' /> Clear Imported{" "}
-                      </Button>{" "}
+                        <XCircle size={16} className='mr-2' /> Clear Imported
+                      </Button>
                       <Button
                         variant='outline'
                         size='sm'
                         className='w-full border-orange-500 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300'
                         onClick={handleResetImportedAppearance}
                       >
-                        {" "}
                         <RotateCcw size={16} className='mr-2' /> Reset
-                        Appearance{" "}
-                      </Button>{" "}
+                        Appearance
+                      </Button>
                     </CardFooter>
                   </Card>
                 )}
@@ -3043,23 +3345,30 @@ const ModelViewer3D = () => {
                       className='w-full bg-teal-600 hover:bg-teal-700'
                     >
                       <Type size={16} className='mr-2' />
-                      Set 3D Text
+                      Set/Update 3D Text
                     </Button>
                     <div className='flex items-center space-x-2 pt-1'>
                       <Switch
                         id='text-visibility-switch'
-                        checked={isTextVisible}
-                        onCheckedChange={setIsTextVisible}
+                        checked={isTextVisible && current3DText !== ""}
+                        onCheckedChange={(checked) =>
+                          setIsTextVisible(checked && current3DText !== "")
+                        }
+                        disabled={current3DText === ""}
                       />
                       <Label
                         htmlFor='text-visibility-switch'
-                        className='text-sm text-slate-300'
+                        className={cn(
+                          "text-sm text-slate-300",
+                          current3DText === "" && "text-slate-500"
+                        )}
                       >
-                        Show 3D Text
+                        Show 3D Text {current3DText === "" && "(No text set)"}
                       </Label>
                     </div>
                   </CardContent>
                 </Card>
+
                 <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
                   <CardHeader>
                     <CardTitle className='text-slate-100'>
@@ -3067,24 +3376,71 @@ const ModelViewer3D = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className='space-y-4'>
-                    {" "}
+                    {/* NEW: Play All Animations Toggle - Placed First */}
+                    {isImportedModelDisplayed &&
+                      animationClipsRef.current.length > 1 && (
+                        <div className='flex items-center justify-between pt-1'>
+                          <Label
+                            htmlFor='playAllAnimsGlobalSwitch'
+                            className='text-sm text-slate-300 flex items-center'
+                          >
+                            <LayersIcon
+                              size={14}
+                              className='mr-1.5 text-orange-400'
+                            />
+                            Play All Model Animations
+                          </Label>
+                          <Switch
+                            id='playAllAnimsGlobalSwitch'
+                            checked={playAllAnimations}
+                            onCheckedChange={(checked) => {
+                              setPlayAllAnimations(checked);
+                              pushHistory(
+                                checked
+                                  ? "enable play all animations"
+                                  : "disable play all animations"
+                              );
+                            }}
+                          />
+                        </div>
+                      )}
+                    {/* END NEW */}
+
                     <Button
                       onClick={handleToggleGlobalAnimation}
                       variant={isAnimating ? "destructive" : "default"}
                       className='w-full bg-green-600 hover:bg-green-700 data-[state=destructive]:bg-red-600 data-[state=destructive]:hover:bg-red-700'
                       data-state={isAnimating ? "destructive" : "default"}
+                      title={
+                        isImportedModelDisplayed &&
+                        animationClipsRef.current.length > 0 &&
+                        animationPlaybackState !== "stopped"
+                          ? "Float animation paused while model animation is active"
+                          : isAnimating
+                          ? "Pause procedural float animation"
+                          : "Play procedural float animation"
+                      }
+                      disabled={
+                        isImportedModelDisplayed &&
+                        animationClipsRef.current.length > 0 &&
+                        animationPlaybackState !== "stopped"
+                      }
                     >
-                      {" "}
                       {isAnimating ? (
                         <Pause size={16} className='mr-2' />
                       ) : (
                         <Play size={16} className='mr-2' />
-                      )}{" "}
-                      {isAnimating ? "Pause Float" : "Play Float"}{" "}
-                    </Button>{" "}
+                      )}
+                      {isAnimating ? "Pause Float" : "Play Float"}
+                    </Button>
                     <Select
                       value={animationPreset}
                       onValueChange={setAnimationPreset}
+                      disabled={
+                        isImportedModelDisplayed &&
+                        animationClipsRef.current.length > 0 &&
+                        animationPlaybackState !== "stopped"
+                      }
                     >
                       <SelectTrigger className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'>
                         <SelectValue placeholder='Select float style' />
@@ -3101,9 +3457,8 @@ const ModelViewer3D = () => {
                           </SelectItem>
                         ))}
                       </SelectContent>
-                    </Select>{" "}
+                    </Select>
                     <div className='grid grid-cols-2 gap-3'>
-                      {" "}
                       <Button
                         variant='outline'
                         onClick={handleResetOrbitControlsView}
@@ -3111,7 +3466,7 @@ const ModelViewer3D = () => {
                       >
                         <RotateCcw size={14} className='mr-2' />
                         Reset View
-                      </Button>{" "}
+                      </Button>
                       <Button
                         variant='default'
                         onClick={handleRandomize}
@@ -3119,10 +3474,9 @@ const ModelViewer3D = () => {
                       >
                         <Shuffle size={14} className='mr-2' />
                         Randomize
-                      </Button>{" "}
-                    </div>{" "}
+                      </Button>
+                    </div>
                     <div className='grid grid-cols-2 gap-3 pt-2'>
-                      {" "}
                       <Button
                         variant='outline'
                         onClick={handleUndo}
@@ -3131,7 +3485,7 @@ const ModelViewer3D = () => {
                       >
                         <Undo size={14} className='mr-2' />
                         Undo
-                      </Button>{" "}
+                      </Button>
                       <Button
                         variant='outline'
                         onClick={handleRedo}
@@ -3140,8 +3494,8 @@ const ModelViewer3D = () => {
                       >
                         <Redo size={14} className='mr-2' />
                         Redo
-                      </Button>{" "}
-                    </div>{" "}
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
                 <Card className='bg-slate-800/70 border-slate-700 shadow-xl'>
@@ -3161,7 +3515,10 @@ const ModelViewer3D = () => {
                     </Button>
                     <Button
                       onClick={handleExportGLB}
-                      disabled={isExporting}
+                      disabled={
+                        isExporting ||
+                        (!meshToExportOrScreenshotRef.current && !isTextVisible)
+                      }
                       className='w-full bg-blue-600 hover:bg-blue-700'
                     >
                       <Download size={16} className='mr-2' />
@@ -3173,7 +3530,10 @@ const ModelViewer3D = () => {
                     </Button>
                     <Button
                       onClick={handleSimulatedExportOBJ}
-                      disabled={isExporting}
+                      disabled={
+                        isExporting ||
+                        (!meshToExportOrScreenshotRef.current && !isTextVisible)
+                      }
                       className='w-full bg-teal-600 hover:bg-teal-700'
                     >
                       <Download size={16} className='mr-2' />
@@ -3247,14 +3607,14 @@ const ModelViewer3D = () => {
                       <SheetContent
                         side='right'
                         className='bg-slate-800/95 border-l border-slate-700 text-slate-100 p-0 w-full sm:max-w-sm md:max-w-md backdrop-blur-sm'
+                        onCloseAutoFocus={(e) => e.preventDefault()}
                       >
                         <SheetHeader className='p-4 border-b border-slate-700'>
                           <SheetTitle className='text-xl text-slate-100'>
                             Viewer & Model Settings
                           </SheetTitle>
                           <SheetDescription className='text-slate-400 text-xs'>
-                            Fine-tune the appearance, lighting, and animation
-                            playback.
+                            Fine-tune appearance, lighting, and animations.
                           </SheetDescription>
                         </SheetHeader>
                         <ScrollArea className='h-[calc(100vh-128px)]'>
@@ -3265,26 +3625,9 @@ const ModelViewer3D = () => {
                                   size={16}
                                   className='mr-2 text-purple-400'
                                 />
-                                {(isImportedModelDisplayed &&
-                                  (importedModel?.type === "stl" ||
-                                    (importedModel?.type === "obj" &&
-                                      !importedModel?.mtlUrl &&
-                                      !Object.values(
-                                        settings.customMaterialProperties
-                                      ).some(
-                                        (v) =>
-                                          typeof v === "string" &&
-                                          v.trim() !== "" &&
-                                          v !==
-                                            initialSettings
-                                              .customMaterialProperties
-                                              .envMapIntensity
-                                      )))) ||
-                                !isImportedModelDisplayed
-                                  ? isImportedModelDisplayed
-                                    ? `Material for ${importedModelName}`
-                                    : "Procedural Shape Material"
-                                  : `Override Material for ${importedModelName}`}
+                                {isImportedModelDisplayed
+                                  ? `Material for ${importedModelName}`
+                                  : "Procedural Shape Material"}
                               </h3>
                               <div className='space-y-1.5'>
                                 <Label
@@ -3296,13 +3639,13 @@ const ModelViewer3D = () => {
                                 <Select
                                   value={settings.materialType}
                                   onValueChange={(value) => {
+                                    const oldType = settings.materialType;
                                     handleSettingsChange("materialType", value);
-                                    if (value !== settings.materialType) {
+                                    if (value !== oldType) {
                                       resetCustomMaterialProperties();
                                     }
                                   }}
                                 >
-                                  {" "}
                                   <SelectTrigger
                                     id='materialTypePanelSheet'
                                     className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
@@ -3330,13 +3673,21 @@ const ModelViewer3D = () => {
                                     ))}
                                   </SelectContent>
                                 </Select>
+                                {settings.materialType === "auto" &&
+                                  isImportedModelDisplayed && (
+                                    <p className='text-xs text-slate-400 italic mt-1'>
+                                      "Auto" uses the model's embedded
+                                      materials. Select another type to
+                                      override.
+                                    </p>
+                                  )}
                               </div>
                               <div className='space-y-1.5'>
                                 <Label
                                   htmlFor='shapeColorPanelSheet'
                                   className='text-sm text-slate-300'
                                 >
-                                  Base Color (Used if no Color Texture)
+                                  Base Color (If no Color Texture)
                                 </Label>
                                 <Input
                                   id='shapeColorPanelSheet'
@@ -3351,7 +3702,21 @@ const ModelViewer3D = () => {
                                   className='w-full p-1 h-9 bg-slate-700 border-slate-600 cursor-pointer focus-visible:ring-purple-500'
                                 />
                               </div>
-                              {currentActiveMaterialType !== "auto" && (
+
+                              {!(
+                                settings.materialType === "auto" &&
+                                isImportedModelDisplayed &&
+                                !Object.values(
+                                  settings.customMaterialProperties
+                                )
+                                  .filter(
+                                    (v) =>
+                                      typeof v === "string" &&
+                                      v.includes("Url") &&
+                                      v !== "envMapIntensityUrl"
+                                  )
+                                  .some((v) => v && v.trim() !== "")
+                              ) && (
                                 <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30'>
                                   <div className='flex justify-between items-center'>
                                     <h4 className='text-xs font-semibold text-purple-300'>
@@ -3679,7 +4044,6 @@ const ModelViewer3D = () => {
                                       className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                     />
                                   </div>
-
                                   <Separator className='my-2 bg-slate-500/50' />
                                   <h5 className='text-xs font-medium text-purple-300 pt-1 flex items-center'>
                                     <ImageUp size={14} className='mr-1.5' />
@@ -3747,17 +4111,17 @@ const ModelViewer3D = () => {
                                   </div>
                                 </div>
                               )}
+
                               {!isImportedModelDisplayed && (
                                 <>
-                                  {" "}
-                                  <Separator className='my-3 bg-slate-600' />{" "}
+                                  <Separator className='my-3 bg-slate-600' />
                                   <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
                                     <LayersIcon
                                       size={16}
                                       className='mr-2 text-purple-400'
                                     />
                                     Procedural Shape Geometry
-                                  </h3>{" "}
+                                  </h3>
                                   <div className='space-y-1.5'>
                                     <div className='flex justify-between items-center'>
                                       <Label
@@ -3784,7 +4148,7 @@ const ModelViewer3D = () => {
                                       }
                                       className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                     />
-                                  </div>{" "}
+                                  </div>
                                   <div className='space-y-1.5'>
                                     <Label
                                       htmlFor='qualityPanelSheet'
@@ -3798,7 +4162,6 @@ const ModelViewer3D = () => {
                                         handleSettingsChange("quality", value)
                                       }
                                     >
-                                      {" "}
                                       <SelectTrigger
                                         id='qualityPanelSheet'
                                         className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
@@ -3821,6 +4184,7 @@ const ModelViewer3D = () => {
                                 </>
                               )}
                             </section>
+
                             <Separator className='my-3 bg-slate-600' />
                             <section className='space-y-4'>
                               <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
@@ -3904,7 +4268,7 @@ const ModelViewer3D = () => {
                                     htmlFor='textFontPanelSheet'
                                     className='text-sm text-slate-300'
                                   >
-                                    Font URL (JSON)
+                                    Font URL (JSON Typeface)
                                   </Label>
                                   <Input
                                     id='textFontPanelSheet'
@@ -3916,11 +4280,12 @@ const ModelViewer3D = () => {
                                         e.target.value
                                       )
                                     }
-                                    placeholder='/fonts/font.json'
+                                    placeholder='/fonts/helvetiker_regular.typeface.json'
                                     className='w-full bg-slate-700 border-slate-600 text-slate-100 text-xs'
                                   />
                                   <p className='text-xs text-slate-400'>
-                                    Place font in `public` folder.
+                                    Default: Helvetiker. Place custom fonts in
+                                    `public/fonts/`.
                                   </p>
                                 </div>
                               </div>
@@ -3959,18 +4324,23 @@ const ModelViewer3D = () => {
                                     )
                                   }
                                   className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                  disabled={
+                                    isImportedModelDisplayed &&
+                                    animationClipsRef.current.length > 0 &&
+                                    animationPlaybackState !== "stopped"
+                                  }
                                 />
                               </div>
                               <div className='flex items-center justify-between'>
                                 <Label
-                                  htmlFor='autoRotateSwitch'
+                                  htmlFor='autoRotateSwitchPanel'
                                   className='text-sm text-slate-300 flex items-center'
                                 >
-                                  <Orbit size={14} className='mr-1.5' />
+                                  <Orbit size={14} className='mr-1.5' />{" "}
                                   Auto-Rotate Model
                                 </Label>
                                 <Switch
-                                  id='autoRotateSwitch'
+                                  id='autoRotateSwitchPanel'
                                   checked={settings.autoRotate}
                                   onCheckedChange={(val) =>
                                     handleSettingsChange("autoRotate", val)
@@ -3981,7 +4351,7 @@ const ModelViewer3D = () => {
                                 <div className='space-y-1.5 pl-2'>
                                   <div className='flex justify-between items-center'>
                                     <Label
-                                      htmlFor='autoRotateSpeedSheet'
+                                      htmlFor='autoRotateSpeedSheetPanel'
                                       className='text-xs text-slate-300'
                                     >
                                       Rotation Speed
@@ -3991,7 +4361,7 @@ const ModelViewer3D = () => {
                                     </span>
                                   </div>
                                   <Slider
-                                    id='autoRotateSpeedSheet'
+                                    id='autoRotateSpeedSheetPanel'
                                     min={0.1}
                                     max={2}
                                     step={0.1}
@@ -4005,7 +4375,7 @@ const ModelViewer3D = () => {
                               )}
                               <div className='space-y-1.5'>
                                 <Label
-                                  htmlFor='groundPlaneSheet'
+                                  htmlFor='groundPlaneSheetPanel'
                                   className='text-sm text-slate-300'
                                 >
                                   Ground Plane
@@ -4017,7 +4387,7 @@ const ModelViewer3D = () => {
                                   }
                                 >
                                   <SelectTrigger
-                                    id='groundPlaneSheet'
+                                    id='groundPlaneSheetPanel'
                                     className='w-full bg-slate-700'
                                   >
                                     <SelectValue />
@@ -4035,10 +4405,10 @@ const ModelViewer3D = () => {
                               </div>
                               <div className='space-y-1.5'>
                                 <Label
-                                  htmlFor='backgroundPanelSheet'
+                                  htmlFor='backgroundPanelSheetPanel'
                                   className='text-sm text-slate-300'
                                 >
-                                  Background / Env
+                                  Background / Environment
                                 </Label>
                                 <Select
                                   value={settings.background}
@@ -4047,7 +4417,7 @@ const ModelViewer3D = () => {
                                   }
                                 >
                                   <SelectTrigger
-                                    id='backgroundPanelSheet'
+                                    id='backgroundPanelSheetPanel'
                                     className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'
                                   >
                                     <SelectValue placeholder='Select background' />
@@ -4069,13 +4439,13 @@ const ModelViewer3D = () => {
                                 {settings.background === "solidColor" && (
                                   <div className='mt-2 space-y-1.5 p-3 border border-slate-600 rounded-md bg-slate-700/30'>
                                     <Label
-                                      htmlFor='solidBgColorSheet'
+                                      htmlFor='solidBgColorSheetPanel'
                                       className='text-sm'
                                     >
                                       Background Color
                                     </Label>
                                     <Input
-                                      id='solidBgColorSheet'
+                                      id='solidBgColorSheetPanel'
                                       type='color'
                                       value={settings.solidBackgroundColor}
                                       onChange={(e) =>
@@ -4091,31 +4461,34 @@ const ModelViewer3D = () => {
                                 {settings.background === "customImage" && (
                                   <div className='mt-2 space-y-1.5 p-3 border border-slate-600 rounded-md bg-slate-700/30'>
                                     <Label
-                                      htmlFor='customBgImagePanelSheet'
+                                      htmlFor='customBgImagePanelSheetPanel'
                                       className='text-sm text-slate-300'
                                     >
-                                      Upload BG (JPG,PNG,WEBP)
+                                      Upload BG (HDR, JPG, PNG)
                                     </Label>
                                     <Input
-                                      id='customBgImagePanelSheet'
+                                      id='customBgImagePanelSheetPanel'
                                       type='file'
-                                      accept='image/jpeg,image/png,image/webp'
+                                      accept='image/*,.hdr'
                                       onChange={handleCustomBgImageUpload}
                                       className='w-full text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700 cursor-pointer bg-slate-700 border-slate-600 text-slate-100'
                                     />
-                                    <Button
-                                      variant='ghost'
-                                      size='xs'
-                                      onClick={handleClearCustomBgImage}
-                                      className='text-red-400 hover:text-red-300 hover:bg-transparent mt-1 w-full justify-start px-1'
-                                    >
-                                      <Trash2 size={12} className='mr-1' />
-                                      Clear Image
-                                    </Button>
+                                    {customBgImageUrl && (
+                                      <Button
+                                        variant='ghost'
+                                        size='xs'
+                                        onClick={handleClearCustomBgImage}
+                                        className='text-red-400 hover:text-red-300 hover:bg-transparent mt-1 w-full justify-start px-1'
+                                      >
+                                        <Trash2 size={12} className='mr-1' />
+                                        Clear Custom Background
+                                      </Button>
+                                    )}
                                   </div>
                                 )}
                               </div>
                             </section>
+
                             <Separator className='my-3 bg-slate-600' />
                             <section className='space-y-4'>
                               <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
@@ -4215,6 +4588,7 @@ const ModelViewer3D = () => {
                                 }
                               )}
                             </section>
+
                             <Separator className='my-3 bg-slate-600' />
                             <section className='space-y-4'>
                               <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
@@ -4227,13 +4601,13 @@ const ModelViewer3D = () => {
                               <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30'>
                                 <div className='flex items-center justify-between'>
                                   <Label
-                                    htmlFor='n8aoEnableSheet'
+                                    htmlFor='n8aoEnableSheetPanel'
                                     className='text-sm text-slate-200'
                                   >
-                                    N8AO
+                                    N8AO (Ambient Occlusion)
                                   </Label>
                                   <Switch
-                                    id='n8aoEnableSheet'
+                                    id='n8aoEnableSheetPanel'
                                     checked={settings.n8ao.enabled}
                                     onCheckedChange={(checked) =>
                                       handleSettingsChange(
@@ -4245,19 +4619,76 @@ const ModelViewer3D = () => {
                                   />
                                 </div>
                                 {settings.n8ao.enabled && (
-                                  <>{/* N8AO Full Controls Here */}</>
+                                  <>
+                                    <div className='space-y-1.5'>
+                                      <div className='flex justify-between items-center'>
+                                        <Label
+                                          htmlFor='n8aoIntensitySheetPanel'
+                                          className='text-xs text-slate-300'
+                                        >
+                                          Intensity
+                                        </Label>
+                                        <span className='text-xs text-slate-400'>
+                                          {settings.n8ao.intensity.toFixed(2)}
+                                        </span>
+                                      </div>
+                                      <Slider
+                                        id='n8aoIntensitySheetPanel'
+                                        min={0.1}
+                                        max={5}
+                                        step={0.1}
+                                        value={[settings.n8ao.intensity]}
+                                        onValueChange={([v]) =>
+                                          handleSettingsChange(
+                                            "n8ao",
+                                            v,
+                                            "intensity"
+                                          )
+                                        }
+                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                      />
+                                    </div>
+                                    <div className='space-y-1.5'>
+                                      <div className='flex justify-between items-center'>
+                                        <Label
+                                          htmlFor='n8aoRadiusSheetPanel'
+                                          className='text-xs text-slate-300'
+                                        >
+                                          Radius
+                                        </Label>
+                                        <span className='text-xs text-slate-400'>
+                                          {settings.n8ao.aoRadius.toFixed(2)}
+                                        </span>
+                                      </div>
+                                      <Slider
+                                        id='n8aoRadiusSheetPanel'
+                                        min={0.01}
+                                        max={2}
+                                        step={0.01}
+                                        value={[settings.n8ao.aoRadius]}
+                                        onValueChange={([v]) =>
+                                          handleSettingsChange(
+                                            "n8ao",
+                                            v,
+                                            "aoRadius"
+                                          )
+                                        }
+                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                      />
+                                    </div>
+                                  </>
                                 )}
                               </div>
                               <div className='p-3 border border-slate-600 rounded-md space-y-3 bg-slate-700/30 mt-4'>
                                 <div className='flex items-center justify-between'>
                                   <Label
-                                    htmlFor='bloomEnableSheet'
+                                    htmlFor='bloomEnableSheetPanel'
                                     className='text-sm text-slate-200'
                                   >
                                     Bloom
                                   </Label>
                                   <Switch
-                                    id='bloomEnableSheet'
+                                    id='bloomEnableSheetPanel'
                                     checked={settings.bloom.enabled}
                                     onCheckedChange={(checked) =>
                                       handleSettingsChange(
@@ -4269,10 +4700,72 @@ const ModelViewer3D = () => {
                                   />
                                 </div>
                                 {settings.bloom.enabled && (
-                                  <>{/* Bloom Full Controls Here */}</>
+                                  <>
+                                    <div className='space-y-1.5'>
+                                      <div className='flex justify-between items-center'>
+                                        <Label
+                                          htmlFor='bloomIntensitySheetPanel'
+                                          className='text-xs text-slate-300'
+                                        >
+                                          Intensity
+                                        </Label>
+                                        <span className='text-xs text-slate-400'>
+                                          {settings.bloom.intensity.toFixed(2)}
+                                        </span>
+                                      </div>
+                                      <Slider
+                                        id='bloomIntensitySheetPanel'
+                                        min={0.1}
+                                        max={3}
+                                        step={0.1}
+                                        value={[settings.bloom.intensity]}
+                                        onValueChange={([v]) =>
+                                          handleSettingsChange(
+                                            "bloom",
+                                            v,
+                                            "intensity"
+                                          )
+                                        }
+                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                      />
+                                    </div>
+                                    <div className='space-y-1.5'>
+                                      <div className='flex justify-between items-center'>
+                                        <Label
+                                          htmlFor='bloomThresholdSheetPanel'
+                                          className='text-xs text-slate-300'
+                                        >
+                                          Luminance Threshold
+                                        </Label>
+                                        <span className='text-xs text-slate-400'>
+                                          {settings.bloom.luminanceThreshold.toFixed(
+                                            2
+                                          )}
+                                        </span>
+                                      </div>
+                                      <Slider
+                                        id='bloomThresholdSheetPanel'
+                                        min={0}
+                                        max={1}
+                                        step={0.01}
+                                        value={[
+                                          settings.bloom.luminanceThreshold,
+                                        ]}
+                                        onValueChange={([v]) =>
+                                          handleSettingsChange(
+                                            "bloom",
+                                            v,
+                                            "luminanceThreshold"
+                                          )
+                                        }
+                                        className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                      />
+                                    </div>
+                                  </>
                                 )}
                               </div>
                             </section>
+
                             {isImportedModelDisplayed &&
                               animationClipsRef.current.length > 0 && (
                                 <>
@@ -4292,10 +4785,11 @@ const ModelViewer3D = () => {
                                           handleAnimationClipChange
                                         }
                                         disabled={
-                                          animationClipsRef.current.length === 0
+                                          animationClipsRef.current.length ===
+                                            0 || playAllAnimations
                                         }
                                       >
-                                        <SelectTrigger className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500'>
+                                        <SelectTrigger className='w-full bg-slate-700 border-slate-600 text-slate-100 focus:ring-purple-500 disabled:opacity-50'>
                                           <SelectValue placeholder='Select animation clip' />
                                         </SelectTrigger>
                                         <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
@@ -4317,13 +4811,16 @@ const ModelViewer3D = () => {
                                         <Button
                                           onClick={handlePlayPauseAnimation}
                                           disabled={
-                                            selectedAnimationClipIndex < 0
+                                            animationClipsRef.current.length ===
+                                              0 ||
+                                            (!playAllAnimations &&
+                                              selectedAnimationClipIndex < 0)
                                           }
                                           className={cn(
-                                            "bg-green-600 hover:bg-green-700",
-                                            animationPlaybackState ===
-                                              "playing" &&
-                                              "bg-yellow-500 hover:bg-yellow-600"
+                                            animationPlaybackState === "playing"
+                                              ? "bg-yellow-500 hover:bg-yellow-600"
+                                              : "bg-green-600 hover:bg-green-700",
+                                            "disabled:bg-slate-500"
                                           )}
                                         >
                                           {animationPlaybackState ===
@@ -4336,10 +4833,14 @@ const ModelViewer3D = () => {
                                         <Button
                                           onClick={handleStopAnimation}
                                           disabled={
-                                            selectedAnimationClipIndex < 0 ||
-                                            animationPlaybackState === "stopped"
+                                            animationClipsRef.current.length ===
+                                              0 ||
+                                            animationPlaybackState ===
+                                              "stopped" ||
+                                            (!playAllAnimations &&
+                                              selectedAnimationClipIndex < 0)
                                           }
-                                          className='bg-red-600 hover:bg-red-700'
+                                          className='bg-red-600 hover:bg-red-700 disabled:bg-slate-500'
                                         >
                                           <StopCircle size={16} />
                                         </Button>
@@ -4357,12 +4858,17 @@ const ModelViewer3D = () => {
                                                 )
                                               }
                                               disabled={
-                                                selectedAnimationClipIndex < 0
+                                                animationClipsRef.current
+                                                  .length === 0 ||
+                                                (!playAllAnimations &&
+                                                  selectedAnimationClipIndex <
+                                                    0)
                                               }
                                               className={cn(
                                                 isAnimationLooping
                                                   ? "bg-purple-500 hover:bg-purple-600 text-white"
-                                                  : "border-slate-600 text-slate-300 hover:bg-slate-700/50"
+                                                  : "border-slate-600 text-slate-300 hover:bg-slate-700/50",
+                                                "disabled:border-slate-600 disabled:text-slate-500 disabled:bg-transparent disabled:hover:bg-transparent"
                                               )}
                                             >
                                               <Repeat size={16} />
@@ -4379,17 +4885,35 @@ const ModelViewer3D = () => {
                                       </div>
                                       <div className='space-y-1.5'>
                                         <Label
-                                          htmlFor='animTimePanelSheet'
-                                          className='text-sm text-slate-300'
+                                          htmlFor='animTimePanelSheetPanel'
+                                          className={cn(
+                                            "text-sm text-slate-300",
+                                            playAllAnimations &&
+                                              animationClipsRef.current.length >
+                                                0 &&
+                                              "italic"
+                                          )}
                                         >
                                           Time:{" "}
-                                          {(
-                                            animationTime * animationDuration
-                                          ).toFixed(2)}
-                                          s / {animationDuration.toFixed(2)}s
+                                          {playAllAnimations &&
+                                          animationClipsRef.current.length > 0
+                                            ? `(Normalized Time: ${animationTime.toFixed(
+                                                3
+                                              )})`
+                                            : selectedAnimationClipIndex >= 0 &&
+                                              animationDuration > 0
+                                            ? `${(
+                                                animationTime *
+                                                animationDuration
+                                              ).toFixed(
+                                                2
+                                              )}s / ${animationDuration.toFixed(
+                                                2
+                                              )}s`
+                                            : `(No clip selected or zero duration)`}
                                         </Label>
                                         <Slider
-                                          id='animTimePanelSheet'
+                                          id='animTimePanelSheetPanel'
                                           min={0}
                                           max={1}
                                           step={0.001}
@@ -4398,22 +4922,25 @@ const ModelViewer3D = () => {
                                             handleAnimationTimeChange
                                           }
                                           disabled={
-                                            selectedAnimationClipIndex < 0 ||
-                                            animationDuration === 0
+                                            animationClipsRef.current.length ===
+                                              0 ||
+                                            (!playAllAnimations &&
+                                              (selectedAnimationClipIndex < 0 ||
+                                                animationDuration === 0))
                                           }
-                                          className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                          className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4 disabled:opacity-50'
                                         />
                                       </div>
                                       <div className='space-y-1.5'>
                                         <Label
-                                          htmlFor='animSpeedPanelSliderSheet'
+                                          htmlFor='animSpeedPanelSliderSheetPanel'
                                           className='text-sm text-slate-300'
                                         >
                                           Speed:{" "}
                                           {animationPlaybackSpeed.toFixed(1)}x
                                         </Label>
                                         <Slider
-                                          id='animSpeedPanelSliderSheet'
+                                          id='animSpeedPanelSliderSheetPanel'
                                           min={0.1}
                                           max={3}
                                           step={0.1}
@@ -4422,9 +4949,12 @@ const ModelViewer3D = () => {
                                             handleAnimationSpeedChange
                                           }
                                           disabled={
-                                            selectedAnimationClipIndex < 0
+                                            animationClipsRef.current.length ===
+                                              0 ||
+                                            (!playAllAnimations &&
+                                              selectedAnimationClipIndex < 0)
                                           }
-                                          className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                          className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4 disabled:opacity-50'
                                         />
                                       </div>
                                     </div>
@@ -4466,25 +4996,29 @@ const ModelViewer3D = () => {
                         }}
                         gl={{
                           antialias: true,
-                          alpha: canvasBgColor === "transparent",
+                          alpha: canvasBgColor === "transparent", // This remains correct
                           preserveDrawingBuffer: true,
                           outputColorSpace: THREE.SRGBColorSpace,
                           toneMapping: THREE.ACESFilmicToneMapping,
                         }}
-                        style={{ background: canvasBgColor }}
-                        onCreated={({ gl, scene: cs, controls: ctrl }) => {
+                        style={{ background: canvasBgColor }} // This remains correct
+                        onCreated={({
+                          gl,
+                          scene: canvasScene,
+                          camera,
+                          controls,
+                        }) => {
                           gl.toneMappingExposure = 1.0;
-                          if (r3fSceneForExportRef)
-                            r3fSceneForExportRef.current = cs;
-                          if (orbitControlsRef) orbitControlsRef.current = ctrl;
+                          r3fSceneForExportRef.current = canvasScene;
+                          r3fGLContextRef.current = gl;
+                          if (
+                            controls &&
+                            typeof controls.reset === "function"
+                          ) {
+                            orbitControlsRef.current = controls;
+                          }
                         }}
-                        key={
-                          isFullscreen.toString() +
-                          settings.background +
-                          customBgImageUrl +
-                          settings.solidBackgroundColor +
-                          settings.groundPlaneType
-                        }
+                        key={canvasKey} // MODIFIED LINE
                       >
                         <Suspense
                           fallback={
@@ -4492,11 +5026,19 @@ const ModelViewer3D = () => {
                               containerStyles={{
                                 background: "rgba(20,20,30,0.8)",
                               }}
-                              dataStyles={{ color: "#f0f0f0" }}
+                              dataStyles={{
+                                color: "#f0f0f0",
+                                fontSize: "14px",
+                              }}
+                              barStyles={{
+                                height: "6px",
+                                backgroundColor: "#a78bfa",
+                              }}
                             />
                           }
                         >
                           <SceneContentInternal
+                            // ... all other props remain the same
                             settings={settings}
                             currentShape={currentShape}
                             animationPresetKey={animationPreset}
@@ -4523,7 +5065,7 @@ const ModelViewer3D = () => {
                             animationPlaybackSpeed={animationPlaybackSpeed}
                             animationTime={animationTime}
                             forceMaterialResetKey={forceMaterialResetKey}
-                            orbitControlsRefExt={orbitControlsRef}
+                            playAllAnimations={playAllAnimations}
                           />
                         </Suspense>
                       </Canvas>
@@ -4531,7 +5073,7 @@ const ModelViewer3D = () => {
                         <div className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800/80 p-4 rounded-lg text-center shadow-xl backdrop-blur-sm z-10'>
                           <Loader2 className='h-8 w-8 animate-spin text-purple-400 mx-auto mb-2' />
                           <p className='text-sm'>
-                            Loading... {Math.round(modelLoadProgress)}%
+                            Loading Model... {Math.round(modelLoadProgress)}%
                           </p>
                         </div>
                       )}
@@ -4552,7 +5094,7 @@ const ModelViewer3D = () => {
                                 className='w-full h-2.5'
                               />
                               <p className='text-xs text-slate-500'>
-                                Please wait...
+                                Please wait, this may take a moment...
                               </p>
                             </CardContent>
                           </Card>
