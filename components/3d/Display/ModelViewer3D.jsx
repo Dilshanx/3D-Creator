@@ -29,6 +29,8 @@ import {
   Loader as DreiLoader,
   useProgress,
   Text,
+  Plane,
+  MeshReflectorMaterial,
 } from "@react-three/drei";
 import { EffectComposer, N8AO, Bloom } from "@react-three/postprocessing";
 import { KernelSize } from "postprocessing";
@@ -58,6 +60,10 @@ import {
   SunMedium,
   Zap,
   Sparkles,
+  Grid as GridIcon,
+  Disc3,
+  Square,
+  Orbit,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -112,7 +118,6 @@ const saneNumber = (value, defaultValue = 0) => {
   return isNaN(num) || !isFinite(num) ? defaultValue : num;
 };
 
-// --- Shape Creation Functions ---
 const createCatShape = (size = 1) => {
   const s = saneNumber(size, 1);
   const shape = new THREE.Shape();
@@ -568,8 +573,15 @@ const BACKGROUND_OPTIONS_DATA = {
   softLight: "Soft Light",
   studioDark: "Studio Dark",
   studioLight: "Studio Light",
+  solidColor: "Solid Color",
   customImage: "Custom Image",
 };
+const GROUND_PLANE_OPTIONS_DATA = {
+  none: "None",
+  grid: "Grid",
+  reflectiveFloor: "Reflective Floor",
+};
+
 const initialSettings = {
   materialType: "auto",
   shapeColor: "#a78bfa",
@@ -577,6 +589,7 @@ const initialSettings = {
   extrudeDepth: 0.4,
   quality: "medium",
   background: "studioDark",
+  solidBackgroundColor: "#333333",
   keyLight: { enabled: true, intensity: 0.7, color: "#ffffff" },
   fillLight: { enabled: true, intensity: 0.4, color: "#a0c0ff" },
   ambientLight: { enabled: true, intensity: 0.25, color: "#ffffff" },
@@ -616,6 +629,9 @@ const initialSettings = {
     luminanceSmoothing: 0.025,
     kernelSize: KernelSize.LARGE,
   },
+  autoRotate: false,
+  autoRotateSpeed: 0.5,
+  groundPlaneType: "grid",
 };
 
 let helvetikerFontForExport = null;
@@ -627,15 +643,10 @@ if (typeof window !== "undefined") {
     DEFAULT_FONT_PATH,
     (font) => {
       helvetikerFontForExport = font;
-      console.log("Default font for GLB export pre-loaded on client.");
+      console.log("Default font pre-loaded.");
     },
     undefined,
-    (err) => {
-      console.error(
-        "Failed to pre-load default font for GLB export on client:",
-        err
-      );
-    }
+    (err) => console.error("Failed to pre-load default font:", err)
   );
 }
 
@@ -671,16 +682,13 @@ function createR3FMaterialProps(
     customProps.envMapIntensity !== undefined
       ? customProps.envMapIntensity
       : preset.envMapIntensity ?? 1.0;
-
   let materialEffectiveBaseColor = colorInput;
   if (
     customProps.mapUrl &&
     typeof customProps.mapUrl === "string" &&
     customProps.mapUrl.trim() !== ""
-  ) {
+  )
     materialEffectiveBaseColor = new THREE.Color(0xffffff);
-  }
-
   if (finalProps.useEmissive) {
     const hasEmissiveMap =
       customProps.emissiveMapUrl &&
@@ -692,7 +700,6 @@ function createR3FMaterialProps(
     if (!hasEmissiveMap && finalProps.emissive)
       finalProps.emissive.multiplyScalar(0.8);
   }
-
   const materialConstructor =
     materialType === "glass" || materialType === "crystal"
       ? THREE.MeshPhysicalMaterial
@@ -731,9 +738,8 @@ function createR3FMaterialProps(
       customProps[urlKey] &&
       typeof customProps[urlKey] === "string" &&
       customProps[urlKey].trim() !== ""
-    ) {
+    )
       textureUrls[urlKey] = customProps[urlKey];
-    }
   });
   return {
     constructor: materialConstructor,
@@ -776,7 +782,6 @@ const AppliedMaterial = React.memo(
       (loaded) => setInternallyLoadedTextures(loaded),
       []
     );
-
     const texturesToApply = useMemo(() => {
       const newTextures = {};
       if (hasValidUrls && internallyLoadedTextures) {
@@ -788,7 +793,6 @@ const AppliedMaterial = React.memo(
       }
       return newTextures;
     }, [validUrls, internallyLoadedTextures, hasValidUrls]);
-
     useEffect(() => {
       if (texturesToApply.map?.isTexture)
         texturesToApply.map.colorSpace = THREE.SRGBColorSpace;
@@ -801,16 +805,15 @@ const AppliedMaterial = React.memo(
         }
       });
     }, [texturesToApply]);
-
     const safeMaterialArgs = materialProps?.args || {
       color: new THREE.Color("magenta"),
     };
     const MaterialConstructor =
       materialProps?.constructor || THREE.MeshStandardMaterial;
     const allArgs = { ...safeMaterialArgs, ...texturesToApply };
-
     return (
       <>
+        {" "}
         {hasValidUrls && (
           <Suspense fallback={null}>
             {" "}
@@ -820,12 +823,12 @@ const AppliedMaterial = React.memo(
               onLoaded={handleTexturesLoaded}
             />{" "}
           </Suspense>
-        )}
+        )}{" "}
         {MaterialConstructor === THREE.MeshPhysicalMaterial ? (
           <meshPhysicalMaterial {...allArgs} />
         ) : (
           <meshStandardMaterial {...allArgs} />
-        )}
+        )}{" "}
       </>
     );
   }
@@ -834,11 +837,21 @@ AppliedMaterial.displayName = "AppliedMaterial";
 
 const ProceduralShape = React.memo(
   React.forwardRef(
-    ({ shapeId, settings, size, animationPresetKey, isAnimating }, ref) => {
+    (
+      {
+        shapeId,
+        settings,
+        size,
+        animationPresetKey,
+        isAnimating,
+        isAutoRotating,
+        autoRotateSpeed,
+      },
+      ref
+    ) => {
       const { scene } = useThree();
       const internalMeshRef = useRef();
       React.useImperativeHandle(ref, () => internalMeshRef.current);
-
       const geometry = useMemo(() => {
         const shapeConfigs = {
           cat: { creator: createCatShape },
@@ -888,7 +901,6 @@ const ProceduralShape = React.memo(
         geom.center();
         return geom;
       }, [shapeId, settings.extrudeDepth, settings.quality, size]);
-
       const { materialDef, textureUrlsToLoad } = useMemo(() => {
         let autoMaterialType = "ceramic";
         for (const catId in SHAPES_BY_CATEGORY_DATA) {
@@ -924,52 +936,56 @@ const ProceduralShape = React.memo(
         shapeId,
         scene.environment,
       ]);
-
       const animationState = useRef({
         rotation: new THREE.Euler(),
         targetRotation: new THREE.Euler(),
         floatY: 0,
         startTime: Date.now(),
       });
-      useFrame((state, delta) => {
-        if (internalMeshRef.current && isAnimating) {
-          const animSettings = settings;
-          const preset = animationPresets[animationPresetKey];
-          if (preset) {
-            const effDelta = delta * animSettings.animationSpeed;
-            animationState.current.targetRotation.x +=
-              (preset.rotationSpeed?.[0] || 0) * 60 * effDelta;
-            animationState.current.targetRotation.y +=
-              (preset.rotationSpeed?.[1] || 0) * 60 * effDelta;
-            animationState.current.targetRotation.z +=
-              (preset.rotationSpeed?.[2] || 0) * 60 * effDelta;
-            internalMeshRef.current.rotation.x = THREE.MathUtils.lerp(
-              internalMeshRef.current.rotation.x,
-              animationState.current.targetRotation.x,
-              0.1
-            );
-            internalMeshRef.current.rotation.y = THREE.MathUtils.lerp(
-              internalMeshRef.current.rotation.y,
-              animationState.current.targetRotation.y,
-              0.1
-            );
-            internalMeshRef.current.rotation.z = THREE.MathUtils.lerp(
-              internalMeshRef.current.rotation.z,
-              animationState.current.targetRotation.z,
-              0.1
-            );
-            const floatTime =
-              (Date.now() - animationState.current.startTime) *
-              0.001 *
-              animSettings.animationSpeed;
-            animationState.current.floatY =
-              Math.sin(floatTime * (preset.floatSpeed || 0) * 100) *
-              (preset.floatAmplitude || 0);
-            internalMeshRef.current.position.y = animationState.current.floatY;
+      useFrame((_, delta) => {
+        if (internalMeshRef.current) {
+          if (isAnimating && !isAutoRotating) {
+            const animSettings = settings;
+            const preset = animationPresets[animationPresetKey];
+            if (preset) {
+              const effDelta = delta * animSettings.animationSpeed;
+              animationState.current.targetRotation.x +=
+                (preset.rotationSpeed?.[0] || 0) * 60 * effDelta;
+              animationState.current.targetRotation.y +=
+                (preset.rotationSpeed?.[1] || 0) * 60 * effDelta;
+              animationState.current.targetRotation.z +=
+                (preset.rotationSpeed?.[2] || 0) * 60 * effDelta;
+              internalMeshRef.current.rotation.x = THREE.MathUtils.lerp(
+                internalMeshRef.current.rotation.x,
+                animationState.current.targetRotation.x,
+                0.1
+              );
+              internalMeshRef.current.rotation.y = THREE.MathUtils.lerp(
+                internalMeshRef.current.rotation.y,
+                animationState.current.targetRotation.y,
+                0.1
+              );
+              internalMeshRef.current.rotation.z = THREE.MathUtils.lerp(
+                internalMeshRef.current.rotation.z,
+                animationState.current.targetRotation.z,
+                0.1
+              );
+              const floatTime =
+                (Date.now() - animationState.current.startTime) *
+                0.001 *
+                animSettings.animationSpeed;
+              animationState.current.floatY =
+                Math.sin(floatTime * (preset.floatSpeed || 0) * 100) *
+                (preset.floatAmplitude || 0);
+              internalMeshRef.current.position.y =
+                animationState.current.floatY;
+            }
+          }
+          if (isAutoRotating) {
+            internalMeshRef.current.rotation.y += delta * autoRotateSpeed * 0.5;
           }
         }
       });
-
       return (
         <Center ref={internalMeshRef} castShadow receiveShadow>
           <mesh geometry={geometry} castShadow receiveShadow>
@@ -1008,6 +1024,8 @@ const ImportedModel = React.memo(
         animationPlaybackSpeed,
         animationTime,
         forceMaterialResetKey,
+        isAutoRotating,
+        autoRotateSpeed,
       },
       ref
     ) => {
@@ -1022,13 +1040,103 @@ const ImportedModel = React.memo(
       const [manualObjScene, setManualObjScene] = useState(null);
       const [manualStlGeometry, setManualStlGeometry] = useState(null);
 
-      const dracoPath = "/draco/gltf/";
-      const animationState = useRef({ startTime: Date.now() });
+      const [modelInitiallyProcessed, setModelInitiallyProcessed] =
+        useState(false);
+      const lastProcessedModelID = useRef(null);
 
-      const processLoadedObject = useCallback(
+      const dracoPath = "/draco/gltf/";
+      const modelAnimationState = useRef({ startTime: Date.now() });
+
+      useEffect(() => {
+        let targetObject = null;
+        let currentModelID = modelUrl;
+
+        if ((fileType === "glb" || fileType === "gltf") && manualGltfScene)
+          targetObject = manualGltfScene;
+        else if (fileType === "fbx" && manualFbxScene)
+          targetObject = manualFbxScene;
+        else if (fileType === "obj" && manualObjScene)
+          targetObject = manualObjScene;
+        else if (
+          fileType === "stl" &&
+          manualStlGeometry &&
+          internalGroupRef.current
+        ) {
+          if (
+            internalGroupRef.current.children[0]?.geometry === manualStlGeometry
+          ) {
+            targetObject = internalGroupRef.current;
+          }
+        }
+
+        if (
+          targetObject &&
+          (currentModelID !== lastProcessedModelID.current ||
+            !modelInitiallyProcessed)
+        ) {
+          console.log(
+            "[ImportedModel InitialProcessEffect] New/updated model, scaling/centering:",
+            targetObject.name || fileType
+          );
+          let boxSource = targetObject;
+          if (fileType === "stl" && targetObject.children[0]?.isMesh)
+            boxSource = targetObject.children[0];
+          let box = new THREE.Box3().setFromObject(boxSource);
+          if (box.isEmpty()) {
+            boxSource.traverse((child) => {
+              if (child.isMesh) {
+                const cb = new THREE.Box3().setFromObject(child);
+                if (!cb.isEmpty()) {
+                  if (box.isEmpty()) box.copy(cb);
+                  else box.expandByObject(child);
+                }
+              }
+            });
+            if (box.isEmpty()) {
+              targetObject.scale.setScalar(1);
+              targetObject.position.set(0, 0, 0);
+            }
+          }
+          if (!box.isEmpty()) {
+            const sVec = box.getSize(new THREE.Vector3());
+            const mDim = Math.max(
+              saneNumber(sVec.x, 1),
+              saneNumber(sVec.y, 1),
+              saneNumber(sVec.z, 1)
+            );
+            const sFac = mDim > 0 ? 3 / mDim : 1;
+            targetObject.scale.setScalar(saneNumber(sFac, 1));
+            const scBox = new THREE.Box3().setFromObject(targetObject);
+            const scCtr = scBox.getCenter(new THREE.Vector3());
+            if (!isNaN(scCtr.x)) targetObject.position.sub(scCtr);
+            else targetObject.position.set(0, 0, 0);
+            console.log(
+              `[ImportedModel InitialProcessEffect] Centered/scaled. Pos:`,
+              targetObject.position.toArray().map((c) => c.toFixed(2)),
+              `Scale:`,
+              targetObject.scale.toArray().map((c) => c.toFixed(2))
+            );
+          }
+          lastProcessedModelID.current = currentModelID;
+          setModelInitiallyProcessed(true);
+        } else if (!targetObject) {
+          setModelInitiallyProcessed(false);
+          lastProcessedModelID.current = null;
+        }
+      }, [
+        manualGltfScene,
+        manualFbxScene,
+        manualObjScene,
+        manualStlGeometry,
+        fileType,
+        modelUrl,
+        modelInitiallyProcessed,
+      ]);
+
+      const applyMaterialsOnly = useCallback(
         (object, animations) => {
           console.log(
-            "[ImportedModel processLoadedObject] Starting for:",
+            "[ImportedModel applyMaterialsOnly] Applying materials for:",
             object?.name,
             "Type:",
             fileType,
@@ -1037,56 +1145,8 @@ const ImportedModel = React.memo(
           );
           const targetObject = object || internalGroupRef.current;
           if (!targetObject) {
-            console.warn(
-              "[ImportedModel processLoadedObject] targetObject is null, cannot process."
-            );
             onModelLoad(null, animations || []);
             return;
-          }
-
-          let box = new THREE.Box3().setFromObject(targetObject);
-          if (box.isEmpty()) {
-            targetObject.traverse((child) => {
-              if (child.isMesh) {
-                const childBox = new THREE.Box3().setFromObject(child);
-                if (!childBox.isEmpty()) {
-                  if (box.isEmpty()) box.copy(childBox);
-                  else box.expandByObject(child);
-                }
-              }
-            });
-            if (box.isEmpty()) {
-              console.warn(
-                "[ImportedModel processLoadedObject] Bounding box empty. Defaulting scale/pos."
-              );
-              targetObject.scale.setScalar(1);
-              targetObject.position.set(0, 0, 0);
-            }
-          }
-
-          if (!box.isEmpty()) {
-            const sizeVec = box.getSize(new THREE.Vector3());
-            const maxDim = Math.max(
-              saneNumber(sizeVec.x, 1),
-              saneNumber(sizeVec.y, 1),
-              saneNumber(sizeVec.z, 1)
-            );
-            const scaleFactor = maxDim > 0 ? 3 / maxDim : 1;
-            targetObject.scale.setScalar(saneNumber(scaleFactor, 1));
-            const scaledBox = new THREE.Box3().setFromObject(targetObject);
-            const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
-            if (
-              !isNaN(scaledCenter.x) &&
-              !isNaN(scaledCenter.y) &&
-              !isNaN(scaledCenter.z)
-            ) {
-              targetObject.position.sub(scaledCenter);
-            } else {
-              console.warn(
-                "[ImportedModel processLoadedObject] Scaled center is NaN. Setting position to 0,0,0."
-              );
-              targetObject.position.set(0, 0, 0);
-            }
           }
 
           const customMaterialProps = settings.customMaterialProperties || {};
@@ -1115,15 +1175,10 @@ const ImportedModel = React.memo(
               (fileType === "obj" && mtlUrl)) &&
               userSelectedSpecificMaterialType);
 
-          console.log(
-            `[ImportedModel processLoadedObject] FileType: ${fileType}, MTL: ${!!mtlUrl}, AnyCustomTexMap: ${!!anyCustomTexMap}, UserSelectedSpecificMatType: ${userSelectedSpecificMaterialType}, ApplyOurMat: ${applyOurMaterial}`
-          );
-
           if (applyOurMaterial) {
             let materialTypeForLogic = settings.materialType;
             if (settings.materialType === "auto")
               materialTypeForLogic = "ceramic";
-
             const {
               constructor: MatCtor,
               args: baseMatArgs,
@@ -1142,13 +1197,10 @@ const ImportedModel = React.memo(
               targetObject.traverse((child) => {
                 if (child.isMesh) meshesToProcess.push(child);
               });
-
             if (meshesToProcess.length === 0)
               console.warn(
-                "[ImportedModel processLoadedObject] No meshes found to apply material:",
-                targetObject
+                "[ImportedModel applyMaterialsOnly] No meshes found."
               );
-
             meshesToProcess.forEach(async (mesh) => {
               mesh.castShadow = true;
               mesh.receiveShadow = true;
@@ -1327,35 +1379,32 @@ const ImportedModel = React.memo(
       }, [fileType, modelUrl]);
 
       useEffect(() => {
-        let objectForProcessing = null;
-        let animationsForProcessing = [];
+        let targetObject = null;
+        let animations = [];
         if ((fileType === "glb" || fileType === "gltf") && manualGltfScene) {
-          objectForProcessing = manualGltfScene;
-          animationsForProcessing = manualGltfAnimations;
+          targetObject = manualGltfScene;
+          animations = manualGltfAnimations;
         } else if (fileType === "fbx" && manualFbxScene) {
-          objectForProcessing = manualFbxScene;
-          animationsForProcessing = manualFbxAnimations;
+          targetObject = manualFbxScene;
+          animations = manualFbxAnimations;
         } else if (fileType === "obj" && manualObjScene) {
-          objectForProcessing = manualObjScene;
-          animationsForProcessing = [];
+          targetObject = manualObjScene;
         } else if (
           fileType === "stl" &&
           manualStlGeometry &&
           internalGroupRef.current
         ) {
-          objectForProcessing = internalGroupRef.current;
-          animationsForProcessing = [];
+          targetObject = internalGroupRef.current;
         }
-
-        if (objectForProcessing) {
-          processLoadedObject(objectForProcessing, animationsForProcessing);
-        }
+        if (targetObject && modelInitiallyProcessed)
+          applyMaterialsOnly(targetObject, animations);
       }, [
+        modelInitiallyProcessed,
+        applyMaterialsOnly,
         manualGltfScene,
         manualFbxScene,
         manualObjScene,
         manualStlGeometry,
-        processLoadedObject,
         fileType,
         manualGltfAnimations,
         manualFbxAnimations,
@@ -1363,40 +1412,38 @@ const ImportedModel = React.memo(
       ]);
 
       useFrame((_, delta) => {
+        const modelRootNode = internalGroupRef.current;
+        if (!modelRootNode) return;
         if (mixerRef.current && animationPlaybackState === "playing") {
           mixerRef.current.update(delta * animationPlaybackSpeed);
         } else if (
-          internalGroupRef.current &&
           isAnimating &&
-          !mixerRef.current
+          !(mixerRef.current && animationPlaybackState === "playing") &&
+          !isAutoRotating
         ) {
           const preset = animationPresets[animationPresetKey];
           if (preset) {
             const time =
-              (Date.now() - animationState.current.startTime) *
+              (Date.now() - modelAnimationState.current.startTime) *
               0.001 *
               settings.animationSpeed;
-            internalGroupRef.current.position.y =
+            modelRootNode.position.y =
               Math.sin(time * (preset.floatSpeed || 0) * 100) *
               (preset.floatAmplitude || 0);
           }
         }
+        if (isAutoRotating && animationPlaybackState !== "playing") {
+          modelRootNode.rotation.y += delta * autoRotateSpeed * 0.5;
+        }
       });
-
       useEffect(() => {
         const modelRoot = internalGroupRef.current;
         let clips = [];
         if (fileType === "glb" || fileType === "gltf")
           clips = manualGltfAnimations || [];
         else if (fileType === "fbx") clips = manualFbxAnimations || [];
-
-        if (mixerRef.current) {
-          mixerRef.current.stopAllAction();
-        }
-        if (activeActionRef.current) {
-          activeActionRef.current.stop();
-        }
-
+        if (mixerRef.current) mixerRef.current.stopAllAction();
+        if (activeActionRef.current) activeActionRef.current.stop();
         if (modelRoot && clips.length > 0) {
           mixerRef.current = new THREE.AnimationMixer(modelRoot);
           if (
@@ -1412,7 +1459,6 @@ const ImportedModel = React.memo(
             activeActionRef.current.timeScale = animationPlaybackSpeed;
             activeActionRef.current.time =
               clip.duration > 0 ? animationTime * clip.duration : 0;
-
             if (animationPlaybackState === "playing")
               activeActionRef.current.play();
             else if (animationPlaybackState === "paused") {
@@ -1446,7 +1492,7 @@ const ImportedModel = React.memo(
       ]);
 
       if (fileType === "stl") {
-        if (manualStlGeometry) {
+        if (manualStlGeometry)
           return (
             <group ref={internalGroupRef}>
               <mesh geometry={manualStlGeometry} castShadow receiveShadow>
@@ -1454,7 +1500,6 @@ const ImportedModel = React.memo(
               </mesh>
             </group>
           );
-        }
         return (
           <group ref={internalGroupRef}>
             <Center>
@@ -1465,7 +1510,6 @@ const ImportedModel = React.memo(
           </group>
         );
       }
-
       let objectToRender = null;
       if ((fileType === "glb" || fileType === "gltf") && manualGltfScene)
         objectToRender = manualGltfScene;
@@ -1473,7 +1517,6 @@ const ImportedModel = React.memo(
         objectToRender = manualFbxScene;
       else if (fileType === "obj" && manualObjScene)
         objectToRender = manualObjScene;
-
       if (objectToRender)
         return (
           <primitive
@@ -1576,12 +1619,18 @@ const SceneContentInternal = React.memo(
   }) => {
     const { scene, gl, controls } = useThree();
     useEffect(() => {
-      if (onSceneRefForExport) onSceneRefForExport(scene, gl, controls);
+      if (onSceneRefForExport && controls)
+        onSceneRefForExport(scene, gl, controls);
     }, [scene, gl, controls, onSceneRefForExport]);
     useEffect(() => {
       if (settings.background === "customImage" && customBgImageUrl) {
+        if (scene.background) scene.background = null;
+        if (scene.fog) scene.fog = null;
+      } else if (settings.background === "solidColor") {
+        scene.background = new THREE.Color(settings.solidBackgroundColor);
         if (scene.fog) scene.fog = null;
       } else {
+        if (scene.background) scene.background = null;
         let fogColor = new THREE.Color(0x101012);
         let fogNear = 12;
         let fogFar = 40;
@@ -1613,7 +1662,12 @@ const SceneContentInternal = React.memo(
           scene.fog.far = fogFar;
         } else scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
       }
-    }, [settings.background, customBgImageUrl, scene]);
+    }, [
+      settings.background,
+      settings.solidBackgroundColor,
+      customBgImageUrl,
+      scene,
+    ]);
     const internalMeshRef = useRef();
     useEffect(() => {
       onMeshReady(internalMeshRef.current || null);
@@ -1660,6 +1714,27 @@ const SceneContentInternal = React.memo(
       current3DText,
       isTextVisible,
     ]);
+    const [isUserInteractingOrbit, setIsUserInteractingOrbit] = useState(false);
+    const autoRotatePauseTimeoutRef = useRef(null);
+    const handleOrbitStart = useCallback(() => {
+      setIsUserInteractingOrbit(true);
+      if (autoRotatePauseTimeoutRef.current)
+        clearTimeout(autoRotatePauseTimeoutRef.current);
+    }, []);
+    const handleOrbitEnd = useCallback(() => {
+      if (autoRotatePauseTimeoutRef.current)
+        clearTimeout(autoRotatePauseTimeoutRef.current);
+      autoRotatePauseTimeoutRef.current = setTimeout(() => {
+        setIsUserInteractingOrbit(false);
+      }, 1500);
+    }, []);
+    useEffect(() => {
+      return () => {
+        if (autoRotatePauseTimeoutRef.current)
+          clearTimeout(autoRotatePauseTimeoutRef.current);
+      };
+    }, []);
+    const effectiveAutoRotate = settings.autoRotate && !isUserInteractingOrbit;
 
     return (
       <>
@@ -1699,7 +1774,8 @@ const SceneContentInternal = React.memo(
           {" "}
           {settings.background === "customImage" && customBgImageUrl ? (
             <Environment background files={customBgImageUrl} />
-          ) : settings.background !== "modernGradient" &&
+          ) : settings.background !== "solidColor" &&
+            settings.background !== "modernGradient" &&
             settings.background !== "darkSpace" ? (
             <Environment
               files='/brown_photostudio_02_4k.hdr'
@@ -1724,16 +1800,42 @@ const SceneContentInternal = React.memo(
             />
           )}{" "}
         </Suspense>
-        <Grid
-          infiniteGrid
-          cellSize={0.5}
-          cellThickness={0.5}
-          sectionSize={2.5}
-          sectionThickness={1}
-          sectionColor={new THREE.Color(0x6f6f6f)}
-          cellColor={new THREE.Color(0x444444)}
-          fadeDistance={50}
-        />
+        {settings.groundPlaneType === "grid" && (
+          <Grid
+            infiniteGrid
+            cellSize={0.5}
+            cellThickness={0.5}
+            sectionSize={2.5}
+            sectionThickness={1}
+            sectionColor={new THREE.Color(0x6f6f6f)}
+            cellColor={new THREE.Color(0x444444)}
+            fadeDistance={50}
+            position={[0, -0.01, 0]}
+          />
+        )}
+        {settings.groundPlaneType === "reflectiveFloor" && (
+          <Plane
+            args={[100, 100]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[0, -0.02, 0]}
+            receiveShadow
+          >
+            {" "}
+            <MeshReflectorMaterial
+              blur={[300, 100]}
+              resolution={1024}
+              mixBlur={1}
+              mixStrength={1.2}
+              roughness={1}
+              depthScale={1.1}
+              minDepthThreshold={0.4}
+              maxDepthThreshold={1.4}
+              color='#444444'
+              metalness={0.6}
+              mirror={0.6}
+            />{" "}
+          </Plane>
+        )}
         {!isImportedModelDisplayed ? (
           <Suspense fallback={null}>
             <ProceduralShape
@@ -1743,6 +1845,8 @@ const SceneContentInternal = React.memo(
               size={1.5}
               animationPresetKey={animationPresetKey}
               isAnimating={isAnimating}
+              isAutoRotating={effectiveAutoRotate}
+              autoRotateSpeed={settings.autoRotateSpeed}
             />
           </Suspense>
         ) : importedModelUrl ? (
@@ -1764,6 +1868,8 @@ const SceneContentInternal = React.memo(
               animationPlaybackSpeed={animationPlaybackSpeed}
               animationTime={animationTime}
               forceMaterialResetKey={forceMaterialResetKey}
+              isAutoRotating={effectiveAutoRotate}
+              autoRotateSpeed={settings.autoRotateSpeed}
             />
           </Suspense>
         ) : null}
@@ -1784,12 +1890,14 @@ const SceneContentInternal = React.memo(
           rotateSpeed={0.7}
           zoomSpeed={0.8}
           panSpeed={0.7}
-          screenSpacePanning={false}
-          minDistance={1}
+          screenSpacePanning={false} // Keep false for more traditional orbiting
+          minDistance={0.5} // Allow a bit closer zoom
           maxDistance={30}
-          maxPolarAngle={Math.PI / 1.65}
-          minPolarAngle={Math.PI / 4}
-          target={[0, 0.3, 0]}
+          minPolarAngle={0.05} // Allow looking almost straight down from top (small positive value to avoid issues at 0)
+          maxPolarAngle={Math.PI - 0.05} // Allow looking almost straight up from bottom (small offset from Math.PI)
+          target={[0, 0.1, 0]} // Lowered target Y for better low-angle orbiting if model base is near Y=0
+          onStart={handleOrbitStart}
+          onEnd={handleOrbitEnd}
         />
         {(settings.n8ao?.enabled || settings.bloom?.enabled) && (
           <EffectComposer enableNormalPass>
@@ -1833,43 +1941,33 @@ const ModelViewer3D = () => {
   const textureFileInputRefs = useRef({});
   const viewerCardRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-
   const [importedModel, setImportedModel] = useState(null);
   const [isImportedModelDisplayed, setIsImportedModelDisplayed] =
     useState(false);
   const [importedModelName, setImportedModelName] = useState("Imported Model");
-
   const [currentCategory, setCurrentCategory] = useState(CATEGORIES_DATA[0].id);
   const [currentShape, setCurrentShape] = useState(
     SHAPES_BY_CATEGORY_DATA[CATEGORIES_DATA[0].id][0].id
   );
-
   const [isAnimating, setIsAnimating] = useState(true);
   const [animationPreset, setAnimationPreset] = useState("gentle");
-
   const [settings, setSettings] = useState(
     JSON.parse(JSON.stringify(initialSettings))
   );
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
-
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
-
   const [customBgImageUrl, setCustomBgImageUrl] = useState(null);
-
   const [textInput, setTextInput] = useState("Hello 3D");
   const [current3DText, setCurrent3DText] = useState("");
   const [isTextVisible, setIsTextVisible] = useState(false);
-
   const meshToExportOrScreenshotRef = useRef(null);
   const r3fSceneForExportRef = useRef(null);
   const r3fGLContextRef = useRef(null);
   const orbitControlsRef = useRef(null);
-
   const animationClipsRef = useRef([]);
   const activeActionRef = useRef(null);
   const mixerRef = useRef(null);
-
   const [selectedAnimationClipIndex, setSelectedAnimationClipIndex] =
     useState(-1);
   const [animationPlaybackState, setAnimationPlaybackState] =
@@ -1878,7 +1976,7 @@ const ModelViewer3D = () => {
   const [animationDuration, setAnimationDuration] = useState(0);
   const [isAnimationLooping, setIsAnimationLooping] = useState(true);
   const [animationPlaybackSpeed, setAnimationPlaybackSpeed] = useState(1.0);
-  const [forceMaterialResetKey, setForceMaterialResetKey] = useState(0); // New state for material reset
+  const [forceMaterialResetKey, setForceMaterialResetKey] = useState(0);
 
   const historyStackRef = useRef([]);
   const historyPointerRef = useRef(-1);
@@ -1906,7 +2004,7 @@ const ModelViewer3D = () => {
           customBgImageUrl,
           current3DText,
           isTextVisible,
-          forceMaterialResetKey /* Include new state if it needs to be in history */,
+          forceMaterialResetKey,
         })
       ),
     [
@@ -1986,7 +2084,6 @@ const ModelViewer3D = () => {
       if (stack.length > MAX_HISTORY) stack.shift();
       historyStackRef.current = stack;
       historyPointerRef.current = stack.length - 1;
-      console.log("History:", actionName, historyPointerRef.current);
     },
     [captureAppState]
   );
@@ -2064,18 +2161,21 @@ const ModelViewer3D = () => {
   const handleMeshReadyForParent = useCallback((mesh) => {
     meshToExportOrScreenshotRef.current = mesh;
   }, []);
-  const handleSceneRefForExportCallback = useCallback((scene, gl, controls) => {
-    r3fSceneForExportRef.current = scene;
-    r3fGLContextRef.current = gl;
-    orbitControlsRef.current = controls;
-  }, []);
+  const handleSceneRefForExportCallback = useCallback(
+    (scene, gl, controlsInstance) => {
+      r3fSceneForExportRef.current = scene;
+      r3fGLContextRef.current = gl;
+      orbitControlsRef.current = controlsInstance;
+    },
+    []
+  );
 
   const handleModelLoadedForScene = useCallback((loadedObject, loadedAnims) => {
     animationClipsRef.current = loadedAnims || [];
     if (loadedObject && animationClipsRef.current.length > 0) {
       setSelectedAnimationClipIndex(0);
       setAnimationDuration(animationClipsRef.current[0].duration);
-      setAnimationPlaybackState("playing"); // AUTOPLAY
+      setAnimationPlaybackState("playing");
       setAnimationTime(0);
     } else {
       setSelectedAnimationClipIndex(-1);
@@ -2089,7 +2189,7 @@ const ModelViewer3D = () => {
     if (orbitControlsRef.current?.reset) {
       orbitControlsRef.current.reset();
       sonnerToast.info("View Reset");
-    } else sonnerToast.warning("OrbitControls not available.");
+    } else sonnerToast.warning("OrbitControls not available to reset.");
     pushHistory("reset view");
   }, [pushHistory]);
   const handleToggleGlobalAnimation = useCallback(
@@ -2225,6 +2325,11 @@ const ModelViewer3D = () => {
       textColor: randomTextColor,
       textSize: saneNumber(Math.random() * (0.8 - 0.3) + 0.3, 0.5),
       textDepth: saneNumber(Math.random() * (0.2 - 0.02) + 0.02, 0.05),
+      autoRotate: Math.random() > 0.7,
+      autoRotateSpeed: saneNumber(Math.random() * 1.5 + 0.2, 0.5),
+      groundPlaneType: ["none", "grid", "reflectiveFloor"][
+        Math.floor(Math.random() * 3)
+      ],
       n8ao: {
         ...initialSettings.n8ao,
         enabled: Math.random() > 0.5,
@@ -2240,6 +2345,20 @@ const ModelViewer3D = () => {
     sonnerToast.success("Scene Randomized!");
     pushHistory("randomize scene");
   }, [pushHistory]);
+  const handleResetImportedAppearance = useCallback(() => {
+    if (!isImportedModelDisplayed || !importedModel) return;
+    setSettings((s) => ({
+      ...s,
+      materialType: "auto",
+      customMaterialProperties: {
+        ...initialSettings.customMaterialProperties,
+        envMapIntensity: s.customMaterialProperties.envMapIntensity,
+      },
+    }));
+    setForceMaterialResetKey((prev) => prev + 1);
+    sonnerToast.info("Imported model appearance reset.");
+    pushHistory("reset imported model appearance");
+  }, [isImportedModelDisplayed, importedModel, pushHistory]);
 
   const currentShapeRef = useRef(currentShape);
   useEffect(() => {
@@ -2464,6 +2583,7 @@ const ModelViewer3D = () => {
         mixerRef.current = null;
       }
       if (activeActionRef.current) activeActionRef.current = null;
+      setForceMaterialResetKey((prev) => prev + 1);
       pushHistory(`import ${fileType}`);
     },
     [pushHistory]
@@ -2600,7 +2720,7 @@ const ModelViewer3D = () => {
       setAnimationDuration(animationClipsRef.current[index].duration);
       setAnimationTime(0);
       setAnimationPlaybackState("playing");
-      /* AUTOPLAY new clip */ sonnerToast.info(
+      sonnerToast.info(
         `Animation: ${
           animationClipsRef.current[index].name || `Clip ${index + 1}`
         }`
@@ -2699,7 +2819,9 @@ const ModelViewer3D = () => {
     );
   }
   let canvasBgColor = "transparent";
-  if (settings.background !== "customImage" || !customBgImageUrl) {
+  if (settings.background === "solidColor") {
+    canvasBgColor = settings.solidBackgroundColor;
+  } else if (settings.background !== "customImage" || !customBgImageUrl) {
     if (settings.background === "darkSpace") canvasBgColor = "#0a0a10";
     else if (settings.background === "studioDark") canvasBgColor = "#18181b";
     else if (settings.background === "softLight") canvasBgColor = "#e0e8f0";
@@ -2713,22 +2835,15 @@ const ModelViewer3D = () => {
 
   let currentActiveMaterialType = settings.materialType;
   if (isImportedModelDisplayed && settings.materialType === "auto") {
-    // For imported models, 'auto' might mean we don't show fine-tune if no custom textures forcing an override
-    const anyCustomTexMap = [
-      "mapUrl",
-      "normalMapUrl",
-      "roughnessMapUrl",
-      "metalnessMapUrl",
-      "aoMapUrl",
-      "emissiveMapUrl",
-    ].some(
-      (key) =>
-        typeof settings.customMaterialProperties[key] === "string" &&
-        settings.customMaterialProperties[key].trim() !== ""
-    );
-    if (!anyCustomTexMap)
-      currentActiveMaterialType = "auto"; // Keep as auto to hide fine-tune
-    else currentActiveMaterialType = "ceramic"; // Default to ceramic if auto + textures
+    const anyCustomTexMap = Object.keys(settings.customMaterialProperties)
+      .filter((k) => k.endsWith("Url") && k !== "envMapIntensityUrl")
+      .some(
+        (key) =>
+          typeof settings.customMaterialProperties[key] === "string" &&
+          settings.customMaterialProperties[key].trim() !== ""
+      );
+    if (!anyCustomTexMap) currentActiveMaterialType = "auto";
+    else currentActiveMaterialType = "ceramic";
   } else if (!isImportedModelDisplayed && settings.materialType === "auto") {
     currentActiveMaterialType =
       SHAPES_BY_CATEGORY_DATA[currentCategory]?.find(
@@ -2899,21 +3014,8 @@ const ModelViewer3D = () => {
                       <Button
                         variant='outline'
                         size='sm'
-                        className='w-full border-orange-500 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 mt-2'
-                        onClick={() => {
-                          setSettings((s) => ({
-                            ...s,
-                            materialType: "auto",
-                            customMaterialProperties: {
-                              ...initialSettings.customMaterialProperties,
-                              envMapIntensity:
-                                s.customMaterialProperties.envMapIntensity,
-                            },
-                          }));
-                          setForceMaterialResetKey((prev) => prev + 1);
-                          sonnerToast.info("Imported model appearance reset.");
-                          pushHistory("reset imported appearance");
-                        }}
+                        className='w-full border-orange-500 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300'
+                        onClick={handleResetImportedAppearance}
                       >
                         {" "}
                         <RotateCcw size={16} className='mr-2' /> Reset
@@ -3157,7 +3259,6 @@ const ModelViewer3D = () => {
                         </SheetHeader>
                         <ScrollArea className='h-[calc(100vh-128px)]'>
                           <div className='space-y-6 p-4'>
-                            {/* --- Material Settings Section --- */}
                             <section className='space-y-4'>
                               <h3 className='text-sm text-slate-300 font-semibold uppercase tracking-wider border-b border-slate-700 pb-1 mb-3 flex items-center'>
                                 <Palette
@@ -3831,7 +3932,7 @@ const ModelViewer3D = () => {
                                   size={16}
                                   className='mr-2 text-amber-400'
                                 />
-                                Display
+                                Display & Ground
                               </h3>
                               <div className='space-y-1.5'>
                                 <div className='flex justify-between items-center'>
@@ -3859,6 +3960,78 @@ const ModelViewer3D = () => {
                                   }
                                   className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
                                 />
+                              </div>
+                              <div className='flex items-center justify-between'>
+                                <Label
+                                  htmlFor='autoRotateSwitch'
+                                  className='text-sm text-slate-300 flex items-center'
+                                >
+                                  <Orbit size={14} className='mr-1.5' />
+                                  Auto-Rotate Model
+                                </Label>
+                                <Switch
+                                  id='autoRotateSwitch'
+                                  checked={settings.autoRotate}
+                                  onCheckedChange={(val) =>
+                                    handleSettingsChange("autoRotate", val)
+                                  }
+                                />
+                              </div>
+                              {settings.autoRotate && (
+                                <div className='space-y-1.5 pl-2'>
+                                  <div className='flex justify-between items-center'>
+                                    <Label
+                                      htmlFor='autoRotateSpeedSheet'
+                                      className='text-xs text-slate-300'
+                                    >
+                                      Rotation Speed
+                                    </Label>
+                                    <span className='text-xs text-slate-400'>
+                                      {settings.autoRotateSpeed.toFixed(1)}
+                                    </span>
+                                  </div>
+                                  <Slider
+                                    id='autoRotateSpeedSheet'
+                                    min={0.1}
+                                    max={2}
+                                    step={0.1}
+                                    value={[settings.autoRotateSpeed]}
+                                    onValueChange={([v]) =>
+                                      handleSettingsChange("autoRotateSpeed", v)
+                                    }
+                                    className='[&>span:first-child]:h-1 [&>span>span]:bg-purple-500 [&>span>span]:h-2 [&>span>span]:w-4'
+                                  />
+                                </div>
+                              )}
+                              <div className='space-y-1.5'>
+                                <Label
+                                  htmlFor='groundPlaneSheet'
+                                  className='text-sm text-slate-300'
+                                >
+                                  Ground Plane
+                                </Label>
+                                <Select
+                                  value={settings.groundPlaneType}
+                                  onValueChange={(v) =>
+                                    handleSettingsChange("groundPlaneType", v)
+                                  }
+                                >
+                                  <SelectTrigger
+                                    id='groundPlaneSheet'
+                                    className='w-full bg-slate-700'
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent className='bg-slate-700'>
+                                    {Object.entries(
+                                      GROUND_PLANE_OPTIONS_DATA
+                                    ).map(([k, n]) => (
+                                      <SelectItem key={k} value={k}>
+                                        {n}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </div>
                               <div className='space-y-1.5'>
                                 <Label
@@ -3893,6 +4066,28 @@ const ModelViewer3D = () => {
                                     ))}
                                   </SelectContent>
                                 </Select>
+                                {settings.background === "solidColor" && (
+                                  <div className='mt-2 space-y-1.5 p-3 border border-slate-600 rounded-md bg-slate-700/30'>
+                                    <Label
+                                      htmlFor='solidBgColorSheet'
+                                      className='text-sm'
+                                    >
+                                      Background Color
+                                    </Label>
+                                    <Input
+                                      id='solidBgColorSheet'
+                                      type='color'
+                                      value={settings.solidBackgroundColor}
+                                      onChange={(e) =>
+                                        handleSettingsChange(
+                                          "solidBackgroundColor",
+                                          e.target.value
+                                        )
+                                      }
+                                      className='w-full h-9 p-1 bg-slate-700'
+                                    />
+                                  </div>
+                                )}
                                 {settings.background === "customImage" && (
                                   <div className='mt-2 space-y-1.5 p-3 border border-slate-600 rounded-md bg-slate-700/30'>
                                     <Label
@@ -4286,7 +4481,9 @@ const ModelViewer3D = () => {
                         key={
                           isFullscreen.toString() +
                           settings.background +
-                          customBgImageUrl
+                          customBgImageUrl +
+                          settings.solidBackgroundColor +
+                          settings.groundPlaneType
                         }
                       >
                         <Suspense
@@ -4326,6 +4523,7 @@ const ModelViewer3D = () => {
                             animationPlaybackSpeed={animationPlaybackSpeed}
                             animationTime={animationTime}
                             forceMaterialResetKey={forceMaterialResetKey}
+                            orbitControlsRefExt={orbitControlsRef}
                           />
                         </Suspense>
                       </Canvas>
