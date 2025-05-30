@@ -1014,6 +1014,663 @@ const ProceduralShape = React.memo(
 );
 ProceduralShape.displayName = "ProceduralShape";
 
+// const ImportedModel = React.memo(
+//   React.forwardRef(
+//     (
+//       {
+//         modelUrl,
+//         fileType,
+//         mtlUrl,
+//         settings,
+//         onModelLoad,
+//         isAnimating,
+//         animationPresetKey,
+//         activeActionRef,
+//         mixerRef,
+//         selectedAnimationClipIndex,
+//         animationPlaybackState,
+//         isAnimationLooping,
+//         animationPlaybackSpeed,
+//         animationTime,
+//         forceMaterialResetKey,
+//         isAutoRotating,
+//         autoRotateSpeed,
+//         playAllAnimations,
+//       },
+//       ref
+//     ) => {
+//       const internalGroupRef = useRef();
+//       const { scene: r3fScene } = useThree();
+//       React.useImperativeHandle(ref, () => internalGroupRef.current);
+//       const [manualGltfScene, setManualGltfScene] = useState(null);
+//       const [manualGltfAnimations, setManualGltfAnimations] = useState([]);
+//       const [manualFbxScene, setManualFbxScene] = useState(null);
+//       const [manualFbxAnimations, setManualFbxAnimations] = useState([]);
+//       const [manualObjScene, setManualObjScene] = useState(null);
+//       const [manualStlGeometry, setManualStlGeometry] = useState(null);
+//       const [modelInitiallyProcessed, setModelInitiallyProcessed] =
+//         useState(false);
+//       const lastProcessedModelID = useRef(null);
+//       const dracoPath = "/draco/gltf/";
+//       const modelAnimationState = useRef({ startTime: Date.now() });
+//       const allActiveActionsRef = useRef([]);
+
+//       const textureUrlsToLoadFromSettings = useMemo(() => {
+//         const customProps = settings.customMaterialProperties || {};
+//         const urls = {};
+//         const textureMapTypes = [
+//           "map",
+//           "normalMap",
+//           "roughnessMap",
+//           "metalnessMap",
+//           "aoMap",
+//           "emissiveMap",
+//         ];
+//         textureMapTypes.forEach((mapType) => {
+//           const urlKey = `${mapType}Url`;
+//           if (
+//             customProps[urlKey] &&
+//             typeof customProps[urlKey] === "string" &&
+//             customProps[urlKey].trim() !== ""
+//           ) {
+//             urls[urlKey] = customProps[urlKey];
+//           }
+//         });
+//         return urls;
+//       }, [settings.customMaterialProperties]);
+//       const r3fManagedTextures = useTexture(textureUrlsToLoadFromSettings);
+
+//       useEffect(() => {
+//         let targetObject = null;
+//         let currentModelID = modelUrl;
+//         if ((fileType === "glb" || fileType === "gltf") && manualGltfScene)
+//           targetObject = manualGltfScene;
+//         else if (fileType === "fbx" && manualFbxScene)
+//           targetObject = manualFbxScene;
+//         else if (fileType === "obj" && manualObjScene)
+//           targetObject = manualObjScene;
+//         else if (
+//           fileType === "stl" &&
+//           manualStlGeometry &&
+//           internalGroupRef.current?.children[0]?.geometry === manualStlGeometry
+//         ) {
+//           targetObject = internalGroupRef.current;
+//         }
+//         if (
+//           targetObject &&
+//           (currentModelID !== lastProcessedModelID.current ||
+//             !modelInitiallyProcessed)
+//         ) {
+//           let boxSource = targetObject;
+//           if (fileType === "stl" && targetObject.children[0]?.isMesh)
+//             boxSource = targetObject.children[0];
+//           let box = new THREE.Box3().setFromObject(boxSource);
+//           if (box.isEmpty()) {
+//             boxSource.traverse((child) => {
+//               if (child.isMesh) {
+//                 const childBox = new THREE.Box3().setFromObject(child);
+//                 if (!childBox.isEmpty()) {
+//                   if (box.isEmpty()) box.copy(childBox);
+//                   else box.expandByObject(child);
+//                 }
+//               }
+//             });
+//             if (box.isEmpty()) {
+//               targetObject.scale.setScalar(1);
+//               targetObject.position.set(0, 0, 0);
+//             }
+//           }
+//           if (!box.isEmpty()) {
+//             const sizeVec = box.getSize(new THREE.Vector3());
+//             const maxDim = Math.max(
+//               saneNumber(sizeVec.x, 1),
+//               saneNumber(sizeVec.y, 1),
+//               saneNumber(sizeVec.z, 1)
+//             );
+//             const scaleFactor = maxDim > 0 ? 3 / maxDim : 1;
+//             targetObject.scale.setScalar(saneNumber(scaleFactor, 1));
+//             const scaledBox = new THREE.Box3().setFromObject(targetObject);
+//             const center = scaledBox.getCenter(new THREE.Vector3());
+//             if (!isNaN(center.x)) targetObject.position.sub(center);
+//             else targetObject.position.set(0, 0, 0);
+//           }
+//           lastProcessedModelID.current = currentModelID;
+//           setModelInitiallyProcessed(true);
+//         } else if (!targetObject) {
+//           setModelInitiallyProcessed(false);
+//           lastProcessedModelID.current = null;
+//         }
+//       }, [
+//         manualGltfScene,
+//         manualFbxScene,
+//         manualObjScene,
+//         manualStlGeometry,
+//         fileType,
+//         modelUrl,
+//         modelInitiallyProcessed,
+//       ]);
+
+//       const applyMaterialsOnly = useCallback(
+//         (objectToTraverse, animations, availableTextures) => {
+//           if (!objectToTraverse) {
+//             onModelLoad(null, animations || []);
+//             return;
+//           }
+//           const customMaterialProps = settings.customMaterialProperties || {};
+//           const anyCustomTexMap =
+//             Object.keys(textureUrlsToLoadFromSettings).length > 0;
+//           const userSelectedSpecificMaterialType =
+//             settings.materialType !== "auto";
+//           const shouldApplyOurMaterial =
+//             fileType === "stl" ||
+//             (fileType === "obj" && !mtlUrl) ||
+//             anyCustomTexMap ||
+//             ((fileType === "gltf" ||
+//               fileType === "glb" ||
+//               fileType === "fbx" ||
+//               (fileType === "obj" && mtlUrl)) &&
+//               userSelectedSpecificMaterialType);
+//           if (shouldApplyOurMaterial) {
+//             let materialTypeForLogic = settings.materialType;
+//             if (
+//               settings.materialType === "auto" &&
+//               (anyCustomTexMap ||
+//                 fileType === "stl" ||
+//                 (fileType === "obj" && !mtlUrl))
+//             )
+//               materialTypeForLogic = "ceramic";
+//             else if (settings.materialType === "auto")
+//               materialTypeForLogic = "ceramic";
+//             const { constructor: MatCtor, args: baseMatArgs } =
+//               createR3FMaterialProps(
+//                 settings.shapeColor,
+//                 materialTypeForLogic,
+//                 customMaterialProps,
+//                 r3fScene.environment
+//               );
+//             const meshesToProcess = [];
+//             if (objectToTraverse.isMesh) meshesToProcess.push(objectToTraverse);
+//             else
+//               objectToTraverse.traverse((child) => {
+//                 if (child.isMesh) meshesToProcess.push(child);
+//               });
+//             meshesToProcess.forEach((mesh) => {
+//               mesh.castShadow = true;
+//               mesh.receiveShadow = true;
+//               const newMaterial = new MatCtor(baseMatArgs);
+//               for (const mapName of [
+//                 "map",
+//                 "normalMap",
+//                 "roughnessMap",
+//                 "metalnessMap",
+//                 "aoMap",
+//                 "emissiveMap",
+//               ]) {
+//                 const urlKey = `${mapName}Url`;
+//                 if (
+//                   availableTextures[urlKey] &&
+//                   availableTextures[urlKey].isTexture
+//                 ) {
+//                   let tex = availableTextures[urlKey];
+//                   if (mapName === "map" || mapName === "emissiveMap")
+//                     tex.colorSpace = THREE.SRGBColorSpace;
+//                   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+//                   newMaterial[mapName] = tex;
+//                 }
+//               }
+//               if (mesh.material?.dispose && mesh.material !== newMaterial)
+//                 mesh.material.dispose();
+//               mesh.material = newMaterial;
+//               newMaterial.needsUpdate = true;
+//             });
+//           } else if (fileType !== "stl") {
+//             objectToTraverse.traverse((child) => {
+//               if (child.isMesh && child.material) {
+//                 const materials = Array.isArray(child.material)
+//                   ? child.material
+//                   : [child.material];
+//                 materials.forEach((mat) => {
+//                   mat.side = THREE.DoubleSide;
+//                   if (!mat.envMap && r3fScene.environment)
+//                     mat.envMap = r3fScene.environment;
+//                   const envIS = customMaterialProps.envMapIntensity;
+//                   mat.envMapIntensity =
+//                     envIS !== null && envIS !== undefined
+//                       ? envIS
+//                       : mat.envMapIntensity ?? 1.0;
+//                   mat.needsUpdate = true;
+//                 });
+//               }
+//             });
+//           }
+//           onModelLoad(objectToTraverse, animations || []);
+//         },
+//         [
+//           r3fScene.environment,
+//           settings.shapeColor,
+//           settings.materialType,
+//           settings.customMaterialProperties,
+//           textureUrlsToLoadFromSettings,
+//           onModelLoad,
+//           fileType,
+//           mtlUrl,
+//         ]
+//       );
+
+//       useEffect(() => {
+//         setManualGltfScene(null);
+//         setManualGltfAnimations([]);
+//         if ((fileType === "glb" || fileType === "gltf") && modelUrl) {
+//           const l = new GLTFLoader();
+//           const d = new DRACOLoader();
+//           d.setDecoderPath(dracoPath);
+//           l.setDRACOLoader(d);
+//           l.load(
+//             modelUrl,
+//             (g) => {
+//               setManualGltfScene(g.scene);
+//               setManualGltfAnimations(g.animations || []);
+//             },
+//             undefined,
+//             (e) => {
+//               console.error("GLTF Load Error:", e);
+//               sonnerToast.error("GLTF Load Error");
+//               onModelLoad(null, []); // Notify parent of load failure
+//             }
+//           );
+//           return () => d.dispose();
+//         }
+//       }, [fileType, modelUrl, dracoPath, onModelLoad]);
+//       useEffect(() => {
+//         setManualFbxScene(null);
+//         setManualFbxAnimations([]);
+//         if (fileType === "fbx" && modelUrl) {
+//           const l = new FBXLoader();
+//           l.load(
+//             modelUrl,
+//             (f) => {
+//               setManualFbxScene(f);
+//               setManualFbxAnimations(f.animations || []);
+//             },
+//             undefined,
+//             (e) => {
+//               console.error("FBX Load Error:", e);
+//               sonnerToast.error("FBX Load Error");
+//               onModelLoad(null, []);
+//             }
+//           );
+//         }
+//       }, [fileType, modelUrl, onModelLoad]);
+//       useEffect(() => {
+//         setManualObjScene(null);
+//         if (fileType === "obj" && modelUrl) {
+//           const oL = new OBJLoader();
+//           if (mtlUrl) {
+//             const mL = new MTLLoader();
+//             mL.setResourcePath(
+//               mtlUrl.substring(0, mtlUrl.lastIndexOf("/") + 1)
+//             );
+//             mL.load(
+//               mtlUrl,
+//               (m) => {
+//                 m.preload();
+//                 oL.setMaterials(m);
+//                 oL.load(
+//                   modelUrl,
+//                   (o) => setManualObjScene(o),
+//                   undefined,
+//                   (e) => {
+//                     console.error("OBJ w/ MTL Error:", e);
+//                     sonnerToast.error("OBJ Load Error");
+//                     onModelLoad(null, []);
+//                   }
+//                 );
+//               },
+//               undefined,
+//               () => {
+//                 sonnerToast.warn(
+//                   "MTL Load Failed. Loading OBJ without materials."
+//                 );
+//                 oL.load(
+//                   modelUrl,
+//                   (o) => setManualObjScene(o),
+//                   undefined,
+//                   (e) => {
+//                     console.error("OBJ Error (after MTL fail):", e);
+//                     sonnerToast.error("OBJ Load Error");
+//                     onModelLoad(null, []);
+//                   }
+//                 );
+//               }
+//             );
+//           } else {
+//             oL.load(
+//               modelUrl,
+//               (o) => setManualObjScene(o),
+//               undefined,
+//               (e) => {
+//                 console.error("OBJ Error:", e);
+//                 sonnerToast.error("OBJ Load Error");
+//                 onModelLoad(null, []);
+//               }
+//             );
+//           }
+//         }
+//       }, [fileType, modelUrl, mtlUrl, onModelLoad]);
+//       useEffect(() => {
+//         setManualStlGeometry(null);
+//         if (fileType === "stl" && modelUrl) {
+//           const l = new STLLoader();
+//           l.load(
+//             modelUrl,
+//             (g) => setManualStlGeometry(g),
+//             undefined,
+//             (e) => {
+//               console.error("STL Error:", e);
+//               sonnerToast.error("STL Load Error");
+//               onModelLoad(null, []);
+//             }
+//           );
+//         }
+//       }, [fileType, modelUrl, onModelLoad]);
+
+//       useLayoutEffect(() => {
+//         let rawModelObject = null;
+//         let animations = [];
+//         if ((fileType === "glb" || fileType === "gltf") && manualGltfScene) {
+//           rawModelObject = manualGltfScene;
+//           animations = manualGltfAnimations;
+//         } else if (fileType === "fbx" && manualFbxScene) {
+//           rawModelObject = manualFbxScene;
+//           animations = manualFbxAnimations;
+//         } else if (fileType === "obj" && manualObjScene) {
+//           rawModelObject = manualObjScene;
+//         }
+//         // For STL, the geometry is handled separately, and material application will occur on the <mesh> using it.
+//         // So, rawModelObject might be null for STL, but we still need to call onModelLoad.
+
+//         const mountedObjectInScene = internalGroupRef.current;
+
+//         if (modelInitiallyProcessed && r3fManagedTextures) {
+//           let objectToApplyMaterialsTo;
+//           if (fileType === "stl" && manualStlGeometry) {
+//             // For STL, the target is the mesh inside the group.
+//             // The group itself (internalGroupRef.current) might not be the direct target for material changes
+//             // if materials are applied directly to the <mesh geometry={manualStlGeometry} ... />
+//             // However, the `applyMaterialsOnly` function expects a root to traverse or a mesh.
+//             // If internalGroupRef.current has the STL mesh as its child, this is fine.
+//             objectToApplyMaterialsTo = mountedObjectInScene; // This will contain the STL mesh as a child
+//           } else if (
+//             rawModelObject &&
+//             mountedObjectInScene &&
+//             (mountedObjectInScene === rawModelObject ||
+//               mountedObjectInScene.children.includes(rawModelObject))
+//           ) {
+//             // For GLTF, FBX, OBJ, the rawModelObject is what we want to process.
+//             // It's either the group itself or a child of it (if we wrap <primitive> in a <group>)
+//             objectToApplyMaterialsTo = rawModelObject; // Prefer the raw model object if available and rendered
+//           } else if (
+//             rawModelObject &&
+//             !mountedObjectInScene &&
+//             fileType !== "stl"
+//           ) {
+//             // This case might happen if the primitive is not yet mounted but the raw data is there.
+//             // It's safer to wait for the primitive to mount.
+//             return;
+//           } else if (!rawModelObject && fileType !== "stl") {
+//             // No raw model data yet for non-STL types
+//             onModelLoad(null, []);
+//             return;
+//           } else if (fileType === "stl" && !manualStlGeometry) {
+//             onModelLoad(null, []);
+//             return;
+//           } else {
+//             // Fallback or unexpected state
+//             // If rawModelObject is null (e.g. STL still loading), onModelLoad should reflect this.
+//             if (fileType === "stl" && !manualStlGeometry) {
+//               onModelLoad(null, []);
+//             } else if (fileType !== "stl" && !rawModelObject) {
+//               onModelLoad(null, []);
+//             }
+//             // If we reach here, it's an ambiguous state or STL is handled by its mesh directly.
+//             // The current onModelLoad(objectToApplyMaterialsTo,...) might be called with undefined if objectToApplyMaterialsTo is not set.
+//             // Let's ensure onModelLoad is called correctly even if there's no specific object to process for materials (e.g. initial load).
+//             // The applyMaterialsOnly function handles null objectToTraverse.
+//             // The key is that onModelLoad is called with the *actual scene object* that contains the model.
+//             // For primitive, it's rawModelObject. For STL, it's the group containing the mesh.
+//             if (
+//               fileType === "stl" &&
+//               manualStlGeometry &&
+//               mountedObjectInScene
+//             ) {
+//               applyMaterialsOnly(
+//                 mountedObjectInScene,
+//                 animations,
+//                 r3fManagedTextures
+//               );
+//             } else if (rawModelObject) {
+//               applyMaterialsOnly(
+//                 rawModelObject,
+//                 animations,
+//                 r3fManagedTextures
+//               );
+//             } else {
+//               onModelLoad(null, animations); // Ensure onModelLoad is called even if no model is ready yet
+//             }
+//             return;
+//           }
+
+//           applyMaterialsOnly(
+//             objectToApplyMaterialsTo,
+//             animations,
+//             r3fManagedTextures
+//           );
+//         } else if (
+//           !modelInitiallyProcessed &&
+//           ((fileType === "stl" && !manualStlGeometry) ||
+//             (fileType !== "stl" && !rawModelObject))
+//         ) {
+//           // If model hasn't been processed and there's no data, signal no model loaded.
+//           onModelLoad(null, []);
+//         }
+//       }, [
+//         modelInitiallyProcessed,
+//         manualGltfScene,
+//         manualFbxScene,
+//         manualObjScene,
+//         manualStlGeometry,
+//         fileType,
+//         manualGltfAnimations,
+//         manualFbxAnimations,
+//         r3fManagedTextures,
+//         applyMaterialsOnly,
+//         forceMaterialResetKey,
+//         onModelLoad, // Added onModelLoad
+//       ]);
+
+//       useEffect(() => {
+//         const modelRoot = internalGroupRef.current;
+//         let clips = [];
+//         if (modelUrl) {
+//           if (fileType === "glb" || fileType === "gltf")
+//             clips = manualGltfAnimations || [];
+//           else if (fileType === "fbx") clips = manualFbxAnimations || [];
+//         }
+//         if (mixerRef.current) {
+//           mixerRef.current.stopAllAction();
+//         }
+//         activeActionRef.current = null;
+//         allActiveActionsRef.current = [];
+//         mixerRef.current = null;
+//         if (modelRoot && clips.length > 0) {
+//           mixerRef.current = new THREE.AnimationMixer(modelRoot);
+//           if (playAllAnimations) {
+//             clips.forEach((clip) => {
+//               const action = mixerRef.current.clipAction(clip);
+//               action.setLoop(
+//                 isAnimationLooping ? THREE.LoopRepeat : THREE.LoopOnce,
+//                 Infinity
+//               );
+//               action.timeScale = animationPlaybackSpeed;
+//               action.time =
+//                 clip.duration > 0 ? animationTime * clip.duration : 0;
+//               if (animationPlaybackState === "playing") action.play();
+//               else if (animationPlaybackState === "paused") {
+//                 action.play();
+//                 action.paused = true;
+//                 if (mixerRef.current && action.time === 0)
+//                   mixerRef.current.update(0);
+//               } else {
+//                 action.stop();
+//                 if (mixerRef.current) mixerRef.current.update(0);
+//               }
+//               allActiveActionsRef.current.push(action);
+//             });
+//           } else {
+//             if (
+//               selectedAnimationClipIndex >= 0 &&
+//               selectedAnimationClipIndex < clips.length
+//             ) {
+//               const clip = clips[selectedAnimationClipIndex];
+//               const action = mixerRef.current.clipAction(clip);
+//               action.setLoop(
+//                 isAnimationLooping ? THREE.LoopRepeat : THREE.LoopOnce,
+//                 Infinity
+//               );
+//               action.timeScale = animationPlaybackSpeed;
+//               action.time =
+//                 clip.duration > 0 ? animationTime * clip.duration : 0;
+//               if (animationPlaybackState === "playing") action.play();
+//               else if (animationPlaybackState === "paused") {
+//                 action.play();
+//                 action.paused = true;
+//                 if (mixerRef.current && action.time === 0)
+//                   mixerRef.current.update(0);
+//               } else {
+//                 action.stop();
+//                 if (mixerRef.current) mixerRef.current.update(0);
+//               }
+//               activeActionRef.current = action;
+//             }
+//           }
+//         }
+//         return () => {
+//           if (mixerRef.current) {
+//             mixerRef.current.stopAllAction();
+//           }
+//         };
+//       }, [
+//         modelUrl, // To re-init mixer on model change
+//         fileType, // To re-init mixer on model change
+//         manualGltfAnimations, // To re-init mixer if animations change
+//         manualFbxAnimations, // To re-init mixer if animations change
+//         playAllAnimations,
+//         selectedAnimationClipIndex,
+//         animationPlaybackState,
+//         isAnimationLooping,
+//         animationPlaybackSpeed,
+//         animationTime,
+//         // modelRoot via internalGroupRef.current, but it's a ref, changes handled by re-render
+//       ]);
+
+//       useFrame((_, delta) => {
+//         const n = internalGroupRef.current;
+//         if (!n) return;
+//         if (mixerRef.current && animationPlaybackState !== "stopped") {
+//           mixerRef.current.update(
+//             delta *
+//               (animationPlaybackState === "playing"
+//                 ? animationPlaybackSpeed
+//                 : 0)
+//           );
+//         } else if (
+//           isAnimating &&
+//           !(mixerRef.current && animationPlaybackState !== "stopped") &&
+//           !isAutoRotating
+//         ) {
+//           const p = animationPresets[animationPresetKey];
+//           if (p) {
+//             const t =
+//               (Date.now() - modelAnimationState.current.startTime) *
+//               0.001 *
+//               settings.animationSpeed;
+//             n.position.y =
+//               Math.sin(t * (p.floatSpeed || 0) * 100) * (p.floatAmplitude || 0);
+//           }
+//         }
+//         if (
+//           isAutoRotating &&
+//           !(
+//             mixerRef.current &&
+//             animationPlaybackState !== "stopped" &&
+//             !playAllAnimations &&
+//             activeActionRef.current?.isRunning()
+//           )
+//         ) {
+//           if (
+//             playAllAnimations ||
+//             !(
+//               activeActionRef.current?.isRunning() &&
+//               animationPlaybackState === "playing"
+//             )
+//           ) {
+//             n.rotation.y += delta * autoRotateSpeed * 0.5;
+//           }
+//         }
+//       });
+
+//       if (fileType === "stl") {
+//         if (manualStlGeometry)
+//           return (
+//             <group ref={internalGroupRef}>
+//               {" "}
+//               {/* STL uses a group to host the mesh */}
+//               <mesh geometry={manualStlGeometry} castShadow receiveShadow />
+//             </group>
+//           );
+//         return (
+//           <group ref={internalGroupRef}>
+//             <Center>
+//               <Text color='white' fontSize={0.2}>
+//                 Loading STL...
+//               </Text>
+//             </Center>
+//           </group>
+//         );
+//       }
+//       let objectToRender = null;
+//       if ((fileType === "glb" || fileType === "gltf") && manualGltfScene)
+//         objectToRender = manualGltfScene;
+//       else if (fileType === "fbx" && manualFbxScene)
+//         objectToRender = manualFbxScene;
+//       else if (fileType === "obj" && manualObjScene)
+//         objectToRender = manualObjScene;
+
+//       if (objectToRender && modelInitiallyProcessed)
+//         return (
+//           <primitive // GLB, GLTF, FBX, OBJ are rendered as primitives
+//             object={objectToRender}
+//             ref={internalGroupRef}
+//             castShadow
+//             receiveShadow
+//           />
+//         );
+
+//       return (
+//         <group ref={internalGroupRef}>
+//           {" "}
+//           {/* Fallback for other types while loading */}
+//           <Center>
+//             <Text color='white' fontSize={0.2}>
+//               Loading ({fileType ? fileType.toUpperCase() : "..."})...
+//             </Text>
+//           </Center>
+//         </group>
+//       );
+//     }
+//   )
+// );
+// ImportedModel.displayName = "ImportedModel";
 const ImportedModel = React.memo(
   React.forwardRef(
     (
@@ -1021,20 +1678,20 @@ const ImportedModel = React.memo(
         modelUrl,
         fileType,
         mtlUrl,
-        settings,
+        settings, // Passed from ModelViewer3D, includes settings.animationSpeed for float
         onModelLoad,
-        isAnimating,
-        animationPresetKey,
-        activeActionRef,
-        mixerRef,
+        isAnimating, // Global float animation toggle
+        animationPresetKey, // For float animation style
+        activeActionRef, // For model's internal animations
+        mixerRef, // For model's internal animations
         selectedAnimationClipIndex,
         animationPlaybackState,
         isAnimationLooping,
         animationPlaybackSpeed,
         animationTime,
         forceMaterialResetKey,
-        isAutoRotating,
-        autoRotateSpeed,
+        isAutoRotating, // Global auto-rotate toggle (already considers orbit interaction)
+        autoRotateSpeed, // Global auto-rotate speed
         playAllAnimations,
       },
       ref
@@ -1052,8 +1709,8 @@ const ImportedModel = React.memo(
         useState(false);
       const lastProcessedModelID = useRef(null);
       const dracoPath = "/draco/gltf/";
-      const modelAnimationState = useRef({ startTime: Date.now() });
-      const allActiveActionsRef = useRef([]);
+      const modelAnimationState = useRef({ startTime: Date.now() }); // For float animation timing
+      // allActiveActionsRef seems unused, can be removed if not needed elsewhere.
 
       const textureUrlsToLoadFromSettings = useMemo(() => {
         const customProps = settings.customMaterialProperties || {};
@@ -1275,12 +1932,13 @@ const ImportedModel = React.memo(
             (e) => {
               console.error("GLTF Load Error:", e);
               sonnerToast.error("GLTF Load Error");
-              onModelLoad(null, []); // Notify parent of load failure
+              onModelLoad(null, []);
             }
           );
           return () => d.dispose();
         }
       }, [fileType, modelUrl, dracoPath, onModelLoad]);
+
       useEffect(() => {
         setManualFbxScene(null);
         setManualFbxAnimations([]);
@@ -1301,6 +1959,7 @@ const ImportedModel = React.memo(
           );
         }
       }, [fileType, modelUrl, onModelLoad]);
+
       useEffect(() => {
         setManualObjScene(null);
         if (fileType === "obj" && modelUrl) {
@@ -1357,6 +2016,7 @@ const ImportedModel = React.memo(
           }
         }
       }, [fileType, modelUrl, mtlUrl, onModelLoad]);
+
       useEffect(() => {
         setManualStlGeometry(null);
         if (fileType === "stl" && modelUrl) {
@@ -1386,58 +2046,33 @@ const ImportedModel = React.memo(
         } else if (fileType === "obj" && manualObjScene) {
           rawModelObject = manualObjScene;
         }
-        // For STL, the geometry is handled separately, and material application will occur on the <mesh> using it.
-        // So, rawModelObject might be null for STL, but we still need to call onModelLoad.
 
         const mountedObjectInScene = internalGroupRef.current;
 
         if (modelInitiallyProcessed && r3fManagedTextures) {
           let objectToApplyMaterialsTo;
-          if (fileType === "stl" && manualStlGeometry) {
-            // For STL, the target is the mesh inside the group.
-            // The group itself (internalGroupRef.current) might not be the direct target for material changes
-            // if materials are applied directly to the <mesh geometry={manualStlGeometry} ... />
-            // However, the `applyMaterialsOnly` function expects a root to traverse or a mesh.
-            // If internalGroupRef.current has the STL mesh as its child, this is fine.
-            objectToApplyMaterialsTo = mountedObjectInScene; // This will contain the STL mesh as a child
+          if (fileType === "stl" && manualStlGeometry && mountedObjectInScene) {
+            objectToApplyMaterialsTo = mountedObjectInScene;
           } else if (
             rawModelObject &&
             mountedObjectInScene &&
             (mountedObjectInScene === rawModelObject ||
               mountedObjectInScene.children.includes(rawModelObject))
           ) {
-            // For GLTF, FBX, OBJ, the rawModelObject is what we want to process.
-            // It's either the group itself or a child of it (if we wrap <primitive> in a <group>)
-            objectToApplyMaterialsTo = rawModelObject; // Prefer the raw model object if available and rendered
+            objectToApplyMaterialsTo = rawModelObject;
           } else if (
             rawModelObject &&
             !mountedObjectInScene &&
             fileType !== "stl"
           ) {
-            // This case might happen if the primitive is not yet mounted but the raw data is there.
-            // It's safer to wait for the primitive to mount.
             return;
           } else if (!rawModelObject && fileType !== "stl") {
-            // No raw model data yet for non-STL types
             onModelLoad(null, []);
             return;
           } else if (fileType === "stl" && !manualStlGeometry) {
             onModelLoad(null, []);
             return;
           } else {
-            // Fallback or unexpected state
-            // If rawModelObject is null (e.g. STL still loading), onModelLoad should reflect this.
-            if (fileType === "stl" && !manualStlGeometry) {
-              onModelLoad(null, []);
-            } else if (fileType !== "stl" && !rawModelObject) {
-              onModelLoad(null, []);
-            }
-            // If we reach here, it's an ambiguous state or STL is handled by its mesh directly.
-            // The current onModelLoad(objectToApplyMaterialsTo,...) might be called with undefined if objectToApplyMaterialsTo is not set.
-            // Let's ensure onModelLoad is called correctly even if there's no specific object to process for materials (e.g. initial load).
-            // The applyMaterialsOnly function handles null objectToTraverse.
-            // The key is that onModelLoad is called with the *actual scene object* that contains the model.
-            // For primitive, it's rawModelObject. For STL, it's the group containing the mesh.
             if (
               fileType === "stl" &&
               manualStlGeometry &&
@@ -1455,7 +2090,7 @@ const ImportedModel = React.memo(
                 r3fManagedTextures
               );
             } else {
-              onModelLoad(null, animations); // Ensure onModelLoad is called even if no model is ready yet
+              onModelLoad(null, animations);
             }
             return;
           }
@@ -1470,7 +2105,6 @@ const ImportedModel = React.memo(
           ((fileType === "stl" && !manualStlGeometry) ||
             (fileType !== "stl" && !rawModelObject))
         ) {
-          // If model hasn't been processed and there's no data, signal no model loaded.
           onModelLoad(null, []);
         }
       }, [
@@ -1485,7 +2119,7 @@ const ImportedModel = React.memo(
         r3fManagedTextures,
         applyMaterialsOnly,
         forceMaterialResetKey,
-        onModelLoad, // Added onModelLoad
+        onModelLoad,
       ]);
 
       useEffect(() => {
@@ -1500,11 +2134,12 @@ const ImportedModel = React.memo(
           mixerRef.current.stopAllAction();
         }
         activeActionRef.current = null;
-        allActiveActionsRef.current = [];
+        // allActiveActionsRef.current = []; // This was likely for a different animation approach
         mixerRef.current = null;
         if (modelRoot && clips.length > 0) {
           mixerRef.current = new THREE.AnimationMixer(modelRoot);
           if (playAllAnimations) {
+            const activeActionsList = []; // Temporary list for this setup
             clips.forEach((clip) => {
               const action = mixerRef.current.clipAction(clip);
               action.setLoop(
@@ -1521,11 +2156,13 @@ const ImportedModel = React.memo(
                 if (mixerRef.current && action.time === 0)
                   mixerRef.current.update(0);
               } else {
+                // stopped
                 action.stop();
-                if (mixerRef.current) mixerRef.current.update(0);
+                if (mixerRef.current) mixerRef.current.update(0); // Ensure it resets to frame 0
               }
-              allActiveActionsRef.current.push(action);
+              activeActionsList.push(action); // Keep track if needed, though not directly used later
             });
+            // activeActionRef.current = null; // When playing all, no single active action
           } else {
             if (
               selectedAnimationClipIndex >= 0 &&
@@ -1547,8 +2184,9 @@ const ImportedModel = React.memo(
                 if (mixerRef.current && action.time === 0)
                   mixerRef.current.update(0);
               } else {
+                // stopped
                 action.stop();
-                if (mixerRef.current) mixerRef.current.update(0);
+                if (mixerRef.current) mixerRef.current.update(0); // Ensure it resets to frame 0
               }
               activeActionRef.current = action;
             }
@@ -1560,22 +2198,23 @@ const ImportedModel = React.memo(
           }
         };
       }, [
-        modelUrl, // To re-init mixer on model change
-        fileType, // To re-init mixer on model change
-        manualGltfAnimations, // To re-init mixer if animations change
-        manualFbxAnimations, // To re-init mixer if animations change
+        modelUrl,
+        fileType,
+        manualGltfAnimations,
+        manualFbxAnimations,
         playAllAnimations,
         selectedAnimationClipIndex,
         animationPlaybackState,
         isAnimationLooping,
         animationPlaybackSpeed,
         animationTime,
-        // modelRoot via internalGroupRef.current, but it's a ref, changes handled by re-render
       ]);
 
       useFrame((_, delta) => {
         const n = internalGroupRef.current;
         if (!n) return;
+
+        // 1. Update the model's internal AnimationMixer
         if (mixerRef.current && animationPlaybackState !== "stopped") {
           mixerRef.current.update(
             delta *
@@ -1583,39 +2222,30 @@ const ImportedModel = React.memo(
                 ? animationPlaybackSpeed
                 : 0)
           );
-        } else if (
-          isAnimating &&
-          !(mixerRef.current && animationPlaybackState !== "stopped") &&
-          !isAutoRotating
+        }
+        // 2. Apply procedural-like float animation
+        else if (
+          isAnimating && // Global float animation toggle
+          !isAutoRotating && // And not currently auto-rotating via the global setting
+          !(mixerRef.current && animationPlaybackState !== "stopped") // And no model animation is playing
         ) {
           const p = animationPresets[animationPresetKey];
           if (p) {
             const t =
               (Date.now() - modelAnimationState.current.startTime) *
               0.001 *
-              settings.animationSpeed;
+              settings.animationSpeed; // Use settings.animationSpeed from ModelViewer3D
             n.position.y =
               Math.sin(t * (p.floatSpeed || 0) * 100) * (p.floatAmplitude || 0);
+            // If float presets include rotation, apply X and Z here, Y is handled by auto-rotate
+            // n.rotation.x += (p.rotationSpeed?.[0] || 0) * 60 * (delta * settings.animationSpeed);
+            // n.rotation.z += (p.rotationSpeed?.[2] || 0) * 60 * (delta * settings.animationSpeed);
           }
         }
-        if (
-          isAutoRotating &&
-          !(
-            mixerRef.current &&
-            animationPlaybackState !== "stopped" &&
-            !playAllAnimations &&
-            activeActionRef.current?.isRunning()
-          )
-        ) {
-          if (
-            playAllAnimations ||
-            !(
-              activeActionRef.current?.isRunning() &&
-              animationPlaybackState === "playing"
-            )
-          ) {
-            n.rotation.y += delta * autoRotateSpeed * 0.5;
-          }
+
+        // 3. Apply global auto-rotation if enabled
+        if (isAutoRotating) {
+          n.rotation.y += delta * autoRotateSpeed * 0.5;
         }
       });
 
@@ -1623,8 +2253,6 @@ const ImportedModel = React.memo(
         if (manualStlGeometry)
           return (
             <group ref={internalGroupRef}>
-              {" "}
-              {/* STL uses a group to host the mesh */}
               <mesh geometry={manualStlGeometry} castShadow receiveShadow />
             </group>
           );
@@ -1648,7 +2276,7 @@ const ImportedModel = React.memo(
 
       if (objectToRender && modelInitiallyProcessed)
         return (
-          <primitive // GLB, GLTF, FBX, OBJ are rendered as primitives
+          <primitive
             object={objectToRender}
             ref={internalGroupRef}
             castShadow
@@ -1658,8 +2286,6 @@ const ImportedModel = React.memo(
 
       return (
         <group ref={internalGroupRef}>
-          {" "}
-          {/* Fallback for other types while loading */}
           <Center>
             <Text color='white' fontSize={0.2}>
               Loading ({fileType ? fileType.toUpperCase() : "..."})...
