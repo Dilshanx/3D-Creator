@@ -1,10 +1,16 @@
-// components/3d/Create/SceneElements.jsx
-import { Suspense, useMemo, useRef, useEffect, useState } from "react";
+import React, {
+  Suspense,
+  useMemo,
+  useRef,
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
 import * as THREE from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { FontLoader } from "three/examples/jsm/loaders/FontLoader.js";
 import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
-import { TextureLoader } from "three"; // For useTexture fallback if needed, and export
+import { TextureLoader as ThreeTextureLoader } from "three";
 
 import {
   createHeartShape,
@@ -17,7 +23,7 @@ import {
   createLeafShape,
   createSwordShape,
   createButterflyShape,
-} from "../../LetterShape/PopularShapes"; // Adjust path if necessary
+} from "../../LetterShape/PopularShapes"; // Adjust path as needed
 
 let useFrame, useLoader, useThree, extend;
 let OrbitControls, TransformControls, Grid, Environment, Text3D, useTexture;
@@ -30,6 +36,30 @@ try {
   extend = r3f.extend;
 } catch (error) {
   console.warn("@react-three/fiber not available for SceneElements:", error);
+  useFrame = () => {};
+  useLoader = (loader, path) => {
+    console.warn(`useLoader called for ${path} but R3F not available.`);
+    if (loader === ThreeTextureLoader && typeof path === "string") {
+      const texture = new THREE.Texture();
+      const img = new Image();
+      img.onload = () => {
+        texture.image = img;
+        texture.needsUpdate = true;
+      };
+      img.onerror = () =>
+        console.error(`Fallback TextureLoader failed for ${path}`);
+      img.src = path;
+      return texture;
+    }
+    return null;
+  };
+  useThree = () => ({
+    scene: new THREE.Scene(),
+    camera: new THREE.PerspectiveCamera(),
+    gl: { domElement: null },
+    controls: null,
+    get: () => ({}),
+  });
 }
 
 try {
@@ -42,37 +72,57 @@ try {
   useTexture = trei.useTexture;
 } catch (error) {
   console.warn("@react-three/drei not available for SceneElements:", error);
+  OrbitControls = ({ children }) => <>{children}</>;
+  TransformControls = () => null;
+  Grid = () => null;
+  Environment = () => null;
+  Text3D = ({ children }) => (
+    <mesh>
+      <boxGeometry args={[0.1, 0.1, 0.1]} />
+      <meshBasicMaterial color='purple' wireframe />
+      {children}
+    </mesh>
+  );
+  useTexture = () => ({});
 }
 
 const FONT_PATH_R3F = "/fonts/helvetiker_regular.typeface.json";
-let helvetikerFontForR3F = null;
-const r3fFontLoader = new FontLoader();
-if (typeof window !== "undefined") {
-  r3fFontLoader.load(
+let helvetikerFontForR3F_Export = null;
+const r3fFontLoaderForExport = new FontLoader();
+const globalTextureLoader = new ThreeTextureLoader(); // Re-usable instance
+
+if (
+  typeof window !== "undefined" &&
+  !helvetikerFontForR3F_Export &&
+  FontLoader
+) {
+  r3fFontLoaderForExport.load(
     FONT_PATH_R3F,
     (font) => {
-      helvetikerFontForR3F = font;
-      console.log("SceneElements: Helvetiker font loaded for R3F/createMesh.");
+      helvetikerFontForR3F_Export = font;
     },
     undefined,
     (err) =>
       console.error(
-        "SceneElements: Failed to load Helvetiker for R3F/createMesh:",
+        "SceneElements: Failed to load Helvetiker for createMeshFromShape (EXPORT):",
         err
       )
   );
 }
 
-export function exportToGLB(scene, filename = "model.glb") {
+export function exportToGLB(scene, filename = "model.glb", toastHandler) {
   if (!THREE || !GLTFExporter) {
-    alert("THREE.js or GLTFExporter is not available for GLB export.");
-    console.error("THREE.js or GLTFExporter not available.");
+    const msg = "THREE.js or GLTFExporter is not available for GLB export.";
+    console.error(msg);
+    if (toastHandler && toastHandler.error)
+      toastHandler.error("GLB Export Failed", { description: msg });
+    else alert(msg);
     return;
   }
   const exporter = new GLTFExporter();
   const options = {
     binary: true,
-    onlyVisible: true,
+    onlyVisible: false,
     truncateDrawRange: true,
     embedImages: true,
     animations: scene.animations || [],
@@ -82,11 +132,14 @@ export function exportToGLB(scene, filename = "model.glb") {
       scene,
       (result) => {
         if (!(result instanceof ArrayBuffer)) {
+          const errMsg = "GLB Export failed: Invalid export result.";
           console.error(
             "GLTFExporter.parse() result is not an ArrayBuffer:",
             result
           );
-          alert("GLB Export failed: Invalid export result.");
+          if (toastHandler && toastHandler.error)
+            toastHandler.error("GLB Export Failed", { description: errMsg });
+          else alert(errMsg);
           return;
         }
         const blob = new Blob([result], { type: "application/octet-stream" });
@@ -98,20 +151,29 @@ export function exportToGLB(scene, filename = "model.glb") {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-        alert(`GLB file exported successfully as ${filename}!`);
+        const successMsg = `GLB file exported successfully as ${filename}!`;
+        if (toastHandler && toastHandler.success)
+          toastHandler.success("GLB Exported", { description: successMsg });
+        else alert(successMsg);
       },
       (error) => {
-        console.error("GLB Export parse failed:", error);
-        alert(
+        const errMsg =
           "GLB Export failed during parsing: " +
-            (error?.message || String(error))
-        );
+          (error?.message || String(error));
+        console.error("GLB Export parse failed:", error);
+        if (toastHandler && toastHandler.error)
+          toastHandler.error("GLB Export Failed", { description: errMsg });
+        else alert(errMsg);
       },
       options
     );
   } catch (error) {
+    const errMsg =
+      "GLB Export setup failed: " + (error?.message || String(error));
     console.error("GLB Export setup failed:", error);
-    alert("GLB Export setup failed: " + (error?.message || String(error)));
+    if (toastHandler && toastHandler.error)
+      toastHandler.error("GLB Export Failed", { description: errMsg });
+    else alert(errMsg);
   }
 }
 
@@ -120,13 +182,13 @@ const saneNumber = (value, defaultValue = 0) => {
   return isNaN(num) || !isFinite(num) ? defaultValue : num;
 };
 
-export const createMeshFromShape = async (
-  shapeData,
-  texturePropsForExport = null,
-  textTexturePropsForExport = null
-) => {
+export const createMeshFromShape = async (shapeData) => {
   if (!THREE) {
-    console.error("THREE.js is not available.");
+    console.error("THREE.js is not available for createMeshFromShape.");
+    return null;
+  }
+  if (!FontLoader || !TextGeometry || !ThreeTextureLoader) {
+    console.error("Required THREE add-ons not loaded for createMeshFromShape.");
     return null;
   }
   try {
@@ -135,12 +197,13 @@ export const createMeshFromShape = async (
     const textHeightForGeometry = saneNumber(shapeData.extrudeDepth, 0.2);
     const shapeSize = saneNumber(shapeData.shapeSize, 1);
     const textSizeForGeometry = saneNumber(shapeData.textSize, 0.5);
+
     switch (shapeTypeProp) {
       case "box":
         geometry = new THREE.BoxGeometry(1, 1, 1);
         break;
       case "sphere":
-        geometry = new THREE.SphereGeometry(0.5, 32, 32);
+        geometry = new THREE.SphereGeometry(0.5, 32, 16);
         break;
       case "cylinder":
         geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
@@ -149,31 +212,30 @@ export const createMeshFromShape = async (
         geometry = new THREE.ConeGeometry(0.5, 1, 32);
         break;
       case "torus":
-        geometry = new THREE.TorusGeometry(0.5, 0.2, 16, 100);
+        geometry = new THREE.TorusGeometry(0.4, 0.1, 16, 100);
         break;
       case "pyramid":
-        const pG = new THREE.BufferGeometry();
-        const pV = new Float32Array([
-          -0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, 0.5, -0.5, 0, 0.5, 0, 1, 0,
-        ]);
-        const pI = [0, 1, 2, 0, 2, 3, 0, 4, 1, 1, 4, 2, 2, 4, 3, 3, 4, 0];
-        pG.setIndex(pI);
-        pG.setAttribute("position", new THREE.Float32BufferAttribute(pV, 3));
-        pG.computeVertexNormals();
-        pG.translate(0, -0.5, 0);
+        const pG = new THREE.ConeGeometry(0.7071, 1, 4);
+        pG.translate(0, 0.5, 0);
         geometry = pG;
         break;
       case "text":
-        let fontToUse = helvetikerFontForR3F;
+        let fontToUse = helvetikerFontForR3F_Export;
         if (!fontToUse && typeof window !== "undefined") {
           try {
             fontToUse = await new Promise((resolve, reject) =>
-              r3fFontLoader.load(FONT_PATH_R3F, resolve, undefined, reject)
+              r3fFontLoaderForExport.load(
+                FONT_PATH_R3F,
+                resolve,
+                undefined,
+                reject
+              )
             );
-            if (!helvetikerFontForR3F) helvetikerFontForR3F = fontToUse;
+            if (!helvetikerFontForR3F_Export)
+              helvetikerFontForR3F_Export = fontToUse;
           } catch (e) {
             console.error(
-              "Fallback font load failed in createMeshFromShape (text):",
+              "Export Font load failed in createMeshFromShape (text):",
               e
             );
             geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
@@ -189,8 +251,8 @@ export const createMeshFromShape = async (
           height: textHeightForGeometry,
           curveSegments: 12,
           bevelEnabled: true,
-          bevelThickness: saneNumber(textSizeForGeometry * 0.04, 0.02),
-          bevelSize: saneNumber(textSizeForGeometry * 0.04, 0.02),
+          bevelThickness: saneNumber(textSizeForGeometry * 0.04, 0.015),
+          bevelSize: saneNumber(textSizeForGeometry * 0.04, 0.015),
           bevelOffset: 0,
           bevelSegments: 3,
         });
@@ -238,14 +300,13 @@ export const createMeshFromShape = async (
               .lineTo(-s / 2, s / 2)
               .closePath();
         }
-        if (!(twoDShape instanceof THREE.Shape)) {
+        if (!(twoDShape instanceof THREE.Shape))
           twoDShape = new THREE.Shape()
             .moveTo(-0.5, -0.5)
             .lineTo(0.5, -0.5)
             .lineTo(0.5, 0.5)
             .lineTo(-0.5, 0.5)
             .closePath();
-        }
         const extrudeSettings = {
           depth: textHeightForGeometry,
           bevelEnabled: true,
@@ -269,58 +330,79 @@ export const createMeshFromShape = async (
         geometry = new THREE.BoxGeometry(1, 1, 1);
     }
     let material;
-    if (shapeTypeProp === "imagePlane") {
-      if (!shapeData.imageDataUrl) {
-        material = new THREE.MeshBasicMaterial({
-          color: 0xcccccc,
-          side: THREE.DoubleSide,
-          transparent: true,
-        });
-      } else {
-        const textureLoader = new TextureLoader();
-        try {
-          const texture = await new Promise((resolve, reject) => {
-            textureLoader.load(
-              shapeData.imageDataUrl,
-              (tex) => {
-                tex.colorSpace = THREE.SRGBColorSpace;
-                resolve(tex);
-              },
-              undefined,
-              reject
-            );
-          });
-          material = new THREE.MeshBasicMaterial({
-            map: texture,
-            side: THREE.DoubleSide,
-            transparent: true,
-          });
-        } catch (error) {
-          material = new THREE.MeshBasicMaterial({
-            color: 0xff0000,
-            side: THREE.DoubleSide,
-            transparent: true,
-          });
+    // const textureLoaderForExport = new ThreeTextureLoader(); // Use globalTextureLoader
+    const loadTexAsync = (url) =>
+      new Promise((resolve) => {
+        if (!url) {
+          resolve(null);
+          return;
         }
-      }
+        globalTextureLoader.load(
+          // Use global instance
+          url,
+          (tex) => {
+            tex.flipY = false; // Consistent with useTexture and GLTF
+            tex.colorSpace = THREE.SRGBColorSpace;
+            resolve(tex);
+          },
+          undefined,
+          () => resolve(null)
+        );
+      });
+
+    if (shapeTypeProp === "imagePlane") {
+      material = new THREE.MeshStandardMaterial({
+        side: THREE.DoubleSide,
+        transparent: true,
+      });
+      if (shapeData.imageDataUrl) {
+        const texture = await loadTexAsync(shapeData.imageDataUrl);
+        if (texture) material.map = texture;
+        else material.color.set(0xcc0000);
+      } else material.color.set(0xcccccc);
     } else {
-      const color = new THREE.Color(shapeData.color || "#ffffff");
       const pbrProps = {
-        color,
-        roughness:
-          shapeData.roughness !== undefined ? shapeData.roughness : 0.5,
-        metalness:
-          shapeData.metalness !== undefined ? shapeData.metalness : 0.0,
+        color: new THREE.Color(shapeData.color || "#fff"),
+        roughness: saneNumber(shapeData.roughness, 0.5),
+        metalness: saneNumber(shapeData.metalness, 0.0),
       };
-      switch (shapeData.material) {
-        case "standard":
-          material = new THREE.MeshStandardMaterial(pbrProps);
-          break;
-        case "physical":
-          material = new THREE.MeshPhysicalMaterial(pbrProps);
-          break;
-        default:
-          material = new THREE.MeshStandardMaterial(pbrProps);
+      material = new THREE.MeshStandardMaterial(pbrProps);
+      const texSource =
+        shapeTypeProp === "text"
+          ? shapeData.textTextureProps
+          : shapeData.textureProps;
+      if (texSource) {
+        if (texSource.mapUrl) {
+          material.map = await loadTexAsync(texSource.mapUrl);
+          if (material.map) material.color.set(0xffffff);
+        }
+        if (texSource.normalMapUrl)
+          material.normalMap = await loadTexAsync(texSource.normalMapUrl);
+        if (texSource.roughnessMapUrl)
+          material.roughnessMap = await loadTexAsync(texSource.roughnessMapUrl);
+        if (texSource.metalnessMapUrl)
+          material.metalnessMap = await loadTexAsync(texSource.metalnessMapUrl);
+        if (texSource.aoMapUrl) {
+          material.aoMap = await loadTexAsync(texSource.aoMapUrl);
+          if (material.aoMap) material.aoMapIntensity = 1.0;
+          if (
+            geometry &&
+            geometry.attributes.uv &&
+            !geometry.attributes.uv2 &&
+            material.aoMap // Check if aoMap was successfully loaded
+          )
+            geometry.setAttribute(
+              "uv2",
+              new THREE.BufferAttribute(geometry.attributes.uv.array, 2)
+            );
+        }
+        if (texSource.emissiveMapUrl) {
+          material.emissiveMap = await loadTexAsync(texSource.emissiveMapUrl);
+          if (material.emissiveMap) {
+            material.emissive = new THREE.Color(0xffffff);
+            material.emissiveIntensity = 1.0; // Ensure intensity is set if map is present
+          }
+        }
       }
     }
     const mesh = new THREE.Mesh(geometry, material);
@@ -329,11 +411,7 @@ export const createMeshFromShape = async (
     mesh.receiveShadow = true;
     return mesh;
   } catch (error) {
-    console.error(
-      "Critical error in createMeshFromShape (for export context):",
-      shapeData,
-      error
-    );
+    console.error("Error in createMeshFromShape (export):", shapeData, error);
     return null;
   }
 };
@@ -345,6 +423,14 @@ function LoadedTexturesMaterial({
   metalness,
   textureProps = {},
 }) {
+  if (!useTexture)
+    return (
+      <meshStandardMaterial
+        color={color || "#ffffff"}
+        roughness={saneNumber(roughness, 0.5)}
+        metalness={saneNumber(metalness, 0.0)}
+      />
+    );
   const validTextureUrls = useMemo(() => {
     const urls = {};
     if (textureProps && typeof textureProps === "object") {
@@ -355,124 +441,130 @@ function LoadedTexturesMaterial({
           typeof textureProps[key] === "string" &&
           textureProps[key].trim() !== ""
         ) {
-          urls[key] = textureProps[key];
+          urls[key.substring(0, key.length - 3)] = textureProps[key];
         }
       }
     }
     return urls;
   }, [textureProps]);
 
-  // CORRECTED HOOK CALL: Always call useTexture.
-  // Pass validTextureUrls directly; useTexture handles an empty object.
-  const textures = useTexture ? useTexture(validTextureUrls) : {};
-  // If useTexture is undefined (Drei not loaded), textures will be an empty object.
+  // useTexture's onLoad callback for setting flipY
+  const loadedTextures = useTexture(validTextureUrls, (texturesInput) => {
+    const texturesArray = Array.isArray(texturesInput)
+      ? texturesInput
+      : [texturesInput];
+    texturesArray.forEach((textures) => {
+      if (textures && typeof textures === "object") {
+        // Can be a single texture or an object of textures
+        Object.values(textures).forEach((tex) => {
+          if (tex && tex.isTexture) {
+            tex.flipY = false;
+          }
+        });
+      } else if (textures && textures.isTexture) {
+        // Single texture case
+        textures.flipY = false;
+      }
+    });
+  });
 
-  const material = useMemo(() => {
-    const hasMapTexture = textures && textures.mapUrl;
-    const matColor = hasMapTexture
-      ? new THREE.Color(0xffffff)
-      : new THREE.Color(color || "#ffffff");
-
-    const pbrBase = {
-      color: matColor,
+  const materialProps = useMemo(() => {
+    const props = {
+      color: new THREE.Color(
+        (loadedTextures.map ? 0xffffff : color) || "#ffffff"
+      ),
       roughness: saneNumber(roughness, 0.5),
       metalness: saneNumber(metalness, 0.0),
-      map: (textures && textures.mapUrl) || null,
-      normalMap: (textures && textures.normalMapUrl) || null,
-      roughnessMap: (textures && textures.roughnessMapUrl) || null,
-      metalnessMap: (textures && textures.metalnessMapUrl) || null,
-      aoMap: (textures && textures.aoMapUrl) || null,
-      emissiveMap: (textures && textures.emissiveMapUrl) || null,
+      side: THREE.DoubleSide, // Usually good for general purpose, adjust if needed
     };
-
-    if (pbrBase.map) pbrBase.map.colorSpace = THREE.SRGBColorSpace;
-    if (pbrBase.emissiveMap) {
-      pbrBase.emissiveMap.colorSpace = THREE.SRGBColorSpace;
-      pbrBase.emissive = new THREE.Color(0xffffff);
-      pbrBase.emissiveIntensity = 1.0;
+    if (loadedTextures.map) {
+      props.map = loadedTextures.map;
+      props.map.colorSpace = THREE.SRGBColorSpace;
     }
-
-    switch (materialType) {
-      case "standard":
-        return (
-          <meshStandardMaterial
-            {...pbrBase}
-            aoMapIntensity={pbrBase.aoMap ? 1 : 0}
-          />
-        );
-      case "physical":
-        return (
-          <meshPhysicalMaterial
-            {...pbrBase}
-            transmission={0}
-            ior={1.5}
-            thickness={0.1}
-            aoMapIntensity={pbrBase.aoMap ? 1 : 0}
-          />
-        );
-      case "toon":
-        return (
-          <meshToonMaterial
-            color={matColor}
-            map={(textures && textures.mapUrl) || null}
-          />
-        );
-      case "basic":
-        return (
-          <meshBasicMaterial
-            color={matColor}
-            map={(textures && textures.mapUrl) || null}
-            wireframe={false}
-          />
-        );
-      case "lambert":
-        return (
-          <meshLambertMaterial
-            color={matColor}
-            map={(textures && textures.mapUrl) || null}
-          />
-        );
-      case "phong":
-        return (
-          <meshPhongMaterial
-            color={matColor}
-            map={(textures && textures.mapUrl) || null}
-            shininess={30}
-          />
-        );
-      case "wireframe":
-        return <meshBasicMaterial color={matColor} wireframe />;
-      default:
-        return (
-          <meshStandardMaterial
-            {...pbrBase}
-            aoMapIntensity={pbrBase.aoMap ? 1 : 0}
-          />
-        );
+    if (loadedTextures.normalMap) props.normalMap = loadedTextures.normalMap;
+    if (loadedTextures.roughnessMap)
+      props.roughnessMap = loadedTextures.roughnessMap;
+    if (loadedTextures.metalnessMap)
+      props.metalnessMap = loadedTextures.metalnessMap;
+    if (loadedTextures.aoMap) {
+      props.aoMap = loadedTextures.aoMap;
+      props.aoMapIntensity = 1.0;
+      // UV2 for aoMap is typically handled by the geometry itself when aoMap is applied.
+      // If Text3D or other geometries need explicit UV2 for aoMap, it's more complex.
+      // For <mesh> with custom geometry, ensure geometry has 'uv2' attribute.
     }
-  }, [materialType, color, roughness, metalness, textures]);
+    if (loadedTextures.emissiveMap) {
+      props.emissiveMap = loadedTextures.emissiveMap;
+      props.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+      props.emissive = new THREE.Color(0xffffff);
+      props.emissiveIntensity = 1.0;
+    }
+    return props;
+  }, [color, roughness, metalness, loadedTextures]);
 
-  return material;
+  switch (materialType) {
+    case "standard":
+      return <meshStandardMaterial {...materialProps} />;
+    case "physical":
+      return (
+        <meshPhysicalMaterial
+          {...materialProps}
+          transmission={0}
+          ior={1.5}
+          thickness={0.1}
+        />
+      );
+    case "toon":
+      return (
+        <meshToonMaterial color={materialProps.color} map={materialProps.map} />
+      );
+    case "basic":
+      return (
+        <meshBasicMaterial
+          color={materialProps.color}
+          map={materialProps.map}
+          wireframe={false}
+        />
+      );
+    case "lambert":
+      return (
+        <meshLambertMaterial
+          color={materialProps.color}
+          map={materialProps.map}
+        />
+      );
+    case "phong":
+      return (
+        <meshPhongMaterial
+          color={materialProps.color}
+          map={materialProps.map}
+          shininess={30}
+        />
+      );
+    case "wireframe":
+      return (
+        <meshBasicMaterial color={materialProps.color || "#ffffff"} wireframe />
+      );
+    default:
+      return <meshStandardMaterial {...materialProps} />;
+  }
 }
 
 function PyramidGeometryR3F(props) {
   const geometry = useMemo(() => {
     if (!THREE) return null;
-    const geom = new THREE.BufferGeometry();
-    const vertices = new Float32Array([
-      -0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, 0.5, -0.5, 0, 0.5, 0, 1, 0,
-    ]);
-    const indices = [0, 1, 2, 0, 2, 3, 0, 4, 1, 1, 4, 2, 2, 4, 3, 3, 4, 0];
-    geom.setIndex(indices);
-    geom.setAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(vertices, 3)
-    );
-    geom.computeVertexNormals();
-    geom.translate(0, -0.5, 0);
+    const geom = new THREE.ConeGeometry(0.7071, 1, 4);
+    geom.translate(0, 0.5, 0);
     return geom;
   }, []);
-  if (!geometry) return <boxGeometry args={[0.1, 0.1, 0.1]} />;
+  if (!geometry)
+    return (
+      <primitive
+        object={new THREE.BoxGeometry(0.1, 0.1, 0.1)}
+        attach='geometry'
+        {...props}
+      />
+    );
   return <primitive object={geometry} attach='geometry' {...props} />;
 }
 
@@ -480,6 +572,7 @@ function ExtrudedCustomShapeGeometry({
   shapeType,
   shapeSize = 1,
   extrudeDepth = 0.2,
+  ...props
 }) {
   const geometry = useMemo(() => {
     if (!THREE) return null;
@@ -524,14 +617,13 @@ function ExtrudedCustomShapeGeometry({
           .lineTo(-s / 2, s / 2)
           .closePath();
     }
-    if (!(twoDShape instanceof THREE.Shape)) {
+    if (!(twoDShape instanceof THREE.Shape))
       twoDShape = new THREE.Shape()
         .moveTo(-0.5, -0.5)
         .lineTo(0.5, -0.5)
         .lineTo(0.5, 0.5)
         .lineTo(-0.5, 0.5)
         .closePath();
-    }
     const extrudeSettings = {
       depth: extrudeDepth,
       bevelEnabled: true,
@@ -543,23 +635,86 @@ function ExtrudedCustomShapeGeometry({
     try {
       const geom = new THREE.ExtrudeGeometry(twoDShape, extrudeSettings);
       geom.center();
+      // For aoMap to work with ExtrudeGeometry, it needs uv2.
+      // Create uv2 from uv if it doesn't exist.
+      if (geom.attributes.uv && !geom.attributes.uv2) {
+        geom.setAttribute(
+          "uv2",
+          new THREE.BufferAttribute(geom.attributes.uv.array, 2)
+        );
+      }
       return geom;
     } catch (e) {
-      console.error("Error creating extruded geometry:", e);
+      console.error("Error creating R3F extruded geometry:", e);
       return new THREE.BoxGeometry(s, s, extrudeDepth);
     }
   }, [shapeType, shapeSize, extrudeDepth]);
-  if (!geometry) return <boxGeometry args={[0.1, 0.1, 0.1]} />;
-  return <primitive object={geometry} attach='geometry' />;
+
+  if (!geometry)
+    return (
+      <primitive
+        object={new THREE.BoxGeometry(0.1, 0.1, 0.1)}
+        attach='geometry'
+        {...props}
+      />
+    );
+  return <primitive object={geometry} attach='geometry' {...props} />;
+}
+
+function ImagePlaneWithTexture({
+  localMeshRefPassed,
+  imageDataUrl,
+  planeWidth,
+  planeHeight,
+  objectNameConstructed,
+  onClick,
+}) {
+  if (!useLoader || !ThreeTextureLoader) {
+    return (
+      <mesh
+        ref={localMeshRefPassed}
+        name={`${objectNameConstructed}_fallback_no_loader`}
+      >
+        <planeGeometry args={[planeWidth || 1, planeHeight || 1]} />
+        <meshBasicMaterial color={0xff0000} wireframe />
+      </mesh>
+    );
+  }
+  const texture = useLoader(ThreeTextureLoader, imageDataUrl);
+  useEffect(() => {
+    if (texture) {
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.flipY = false; // Consistent with other texture loading
+    }
+  }, [texture]);
+
+  return (
+    <mesh
+      ref={localMeshRefPassed}
+      name={objectNameConstructed}
+      castShadow={false}
+      receiveShadow
+      onClick={onClick}
+      onPointerOver={(e) => e.stopPropagation()}
+      onPointerOut={(e) => e.stopPropagation()}
+    >
+      <planeGeometry args={[planeWidth || 1, planeHeight || 1]} />
+      <meshStandardMaterial
+        map={texture}
+        side={THREE.DoubleSide}
+        transparent={true}
+      />
+    </mesh>
+  );
 }
 
 function Shape({
   id,
-  position,
-  rotation,
-  scale,
+  position, // Array [x, y, z]
+  rotation, // Array [x, y, z] Euler angles
+  scale, // Array [x, y, z]
   type,
-  material: materialType,
+  material: materialType, // Renamed from 'material' to avoid conflict with JSX material prop
   color,
   roughness,
   metalness,
@@ -573,54 +728,378 @@ function Shape({
   objectRef,
   animation,
   isAnimating,
-  isTransformDragging,
+  isTransformDragging, // This prop is crucial
   gltfModelScene,
-  clips,
   imageDataUrl,
   planeWidth,
   planeHeight,
   textureProps,
   textTextureProps,
+  onObjectReady,
 }) {
   const localMeshRef = useRef(null);
   const orbitAngleRef = useRef(Math.random() * Math.PI * 2);
+
+  // Refs for live transform values, updated from props via useEffect
   const livePosition = useRef(new THREE.Vector3().fromArray(position));
-  const liveRotation = useRef(new THREE.Euler().fromArray(rotation));
+  const liveRotationEuler = useRef(new THREE.Euler().fromArray(rotation));
   const liveScale = useRef(new THREE.Vector3().fromArray(scale));
-  useEffect(() => {
-    if (objectRef) objectRef.current = localMeshRef.current;
-    return () => {
-      if (objectRef && objectRef.current === localMeshRef.current)
-        objectRef.current = null;
-    };
-  }, [objectRef]);
+
+  // For slerping rotation
+  const currentQuaternion = useMemo(() => new THREE.Quaternion(), []);
+  const targetQuaternion = useMemo(() => new THREE.Quaternion(), []);
+
+  const [internalProcessedScene, setInternalProcessedScene] = useState(null);
+  const [sceneVersion, setSceneVersion] = useState(0);
+
   useEffect(() => {
     livePosition.current.fromArray(position);
   }, [position]);
+
   useEffect(() => {
-    liveRotation.current.fromArray(rotation);
+    liveRotationEuler.current.fromArray(rotation);
   }, [rotation]);
+
   useEffect(() => {
     liveScale.current.fromArray(scale);
   }, [scale]);
+
+  useEffect(() => {
+    const currentMesh = localMeshRef.current;
+    if (objectRef) {
+      objectRef.current = currentMesh;
+      if (currentMesh && onObjectReady) {
+        // Give R3F a cycle or two to fully integrate the object
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (localMeshRef.current && localMeshRef.current.parent) {
+              // Check if in scene graph
+              onObjectReady(id, localMeshRef.current);
+            } else if (!localMeshRef.current) {
+              onObjectReady(id, null); // Object might have been unmounted
+            }
+          });
+        });
+      } else if (!currentMesh && onObjectReady) {
+        onObjectReady(id, null);
+      }
+    }
+    return () => {
+      if (objectRef && objectRef.current === currentMesh) {
+        objectRef.current = null;
+        if (onObjectReady) onObjectReady(id, null);
+      }
+    };
+  }, [objectRef, id, onObjectReady]); // localMeshRef.current changes trigger this
+
+  useEffect(() => {
+    if (type === "importedGLB" && gltfModelScene) {
+      const freshClone = gltfModelScene.clone(true);
+      setInternalProcessedScene(freshClone);
+      setSceneVersion((v) => v + 1); // Trigger re-render of primitive
+    } else if (type === "importedGLB") {
+      setInternalProcessedScene(null);
+    }
+  }, [gltfModelScene, type]);
+
+  useEffect(() => {
+    if (!internalProcessedScene || type !== "importedGLB") return;
+
+    const textureLoadPromises = [];
+
+    internalProcessedScene.traverse((node) => {
+      if (node.isMesh) {
+        const originalMaterials = Array.isArray(node.material)
+          ? node.material
+          : [node.material];
+        const newAppliedMaterials = [];
+
+        for (const originalMat of originalMaterials) {
+          if (!originalMat) continue; // Skip if material is undefined
+
+          const overrideMaterialType = materialType || "standard"; // Use prop 'materialType'
+          let newMatInstance;
+
+          switch (overrideMaterialType) {
+            case "physical":
+              newMatInstance = new THREE.MeshPhysicalMaterial();
+              break;
+            case "toon":
+              newMatInstance = new THREE.MeshToonMaterial();
+              break;
+            case "basic":
+              newMatInstance = new THREE.MeshBasicMaterial();
+              break;
+            case "lambert":
+              newMatInstance = new THREE.MeshLambertMaterial();
+              break;
+            case "phong":
+              newMatInstance = new THREE.MeshPhongMaterial({ shininess: 30 });
+              break;
+            case "wireframe":
+              newMatInstance = new THREE.MeshBasicMaterial({ wireframe: true });
+              break;
+            case "standard":
+            default:
+              newMatInstance = new THREE.MeshStandardMaterial();
+              break;
+          }
+          newMatInstance.name = (originalMat.name || "gltf_mat") + "_override";
+
+          if (
+            newMatInstance.isMeshStandardMaterial ||
+            newMatInstance.isMeshPhysicalMaterial
+          ) {
+            newMatInstance.roughness = saneNumber(roughness, 0.5);
+            newMatInstance.metalness = saneNumber(metalness, 0.0);
+          }
+
+          if (textureProps?.mapUrl && overrideMaterialType !== "wireframe") {
+            newMatInstance.color.set(0xffffff);
+          } else if (color && overrideMaterialType !== "wireframe") {
+            newMatInstance.color.set(color);
+          } else if (
+            originalMat.color &&
+            overrideMaterialType !== "wireframe"
+          ) {
+            newMatInstance.color.copy(originalMat.color);
+          } else if (overrideMaterialType !== "wireframe") {
+            newMatInstance.color.set(0xcccccc);
+          } else {
+            // wireframe
+            newMatInstance.color.set(
+              color ||
+                (originalMat.color?.getHexString
+                  ? `#${originalMat.color.getHexString()}`
+                  : null) ||
+                0xcccccc
+            );
+          }
+
+          const loadAndApply = (url, mapTypeStr) => {
+            if (url && typeof newMatInstance[mapTypeStr] !== "undefined") {
+              textureLoadPromises.push(
+                new Promise((resolveLoad) => {
+                  globalTextureLoader.load(
+                    url,
+                    (tex) => {
+                      tex.flipY = false;
+                      if (
+                        mapTypeStr === "map" ||
+                        mapTypeStr === "emissiveMap"
+                      ) {
+                        tex.colorSpace = THREE.SRGBColorSpace;
+                      }
+                      newMatInstance[mapTypeStr] = tex;
+                      newMatInstance.needsUpdate = true;
+                      resolveLoad();
+                    },
+                    undefined,
+                    () => {
+                      console.warn(
+                        `Failed to load ${mapTypeStr} texture: ${url}`
+                      );
+                      resolveLoad();
+                    }
+                  );
+                })
+              );
+            } else if (
+              originalMat[mapTypeStr] &&
+              typeof newMatInstance[mapTypeStr] !== "undefined" &&
+              mapTypeStr !== "map"
+            ) {
+              // Only copy non-map original textures if no override URL is provided for that specific map type
+              if (!textureProps?.[`${mapTypeStr}Url`]) {
+                newMatInstance[mapTypeStr] = originalMat[mapTypeStr];
+              }
+            }
+          };
+
+          if (overrideMaterialType !== "wireframe") {
+            loadAndApply(textureProps?.mapUrl, "map");
+            loadAndApply(textureProps?.normalMapUrl, "normalMap");
+            if (
+              newMatInstance.isMeshStandardMaterial ||
+              newMatInstance.isMeshPhysicalMaterial
+            ) {
+              loadAndApply(textureProps?.roughnessMapUrl, "roughnessMap");
+              loadAndApply(textureProps?.metalnessMapUrl, "metalnessMap");
+            }
+
+            if (
+              textureProps?.aoMapUrl &&
+              typeof newMatInstance.aoMap !== "undefined"
+            ) {
+              textureLoadPromises.push(
+                new Promise((resolveLoad) => {
+                  globalTextureLoader.load(
+                    textureProps.aoMapUrl,
+                    (tex) => {
+                      tex.flipY = false;
+                      newMatInstance.aoMap = tex;
+                      if (newMatInstance.aoMap)
+                        newMatInstance.aoMapIntensity = 1.0;
+                      if (
+                        node.geometry &&
+                        node.geometry.attributes.uv &&
+                        !node.geometry.attributes.uv2 &&
+                        newMatInstance.aoMap
+                      ) {
+                        node.geometry.setAttribute(
+                          "uv2",
+                          new THREE.BufferAttribute(
+                            node.geometry.attributes.uv.array,
+                            2
+                          )
+                        );
+                      }
+                      newMatInstance.needsUpdate = true;
+                      resolveLoad();
+                    },
+                    undefined,
+                    () => {
+                      console.warn(
+                        `AO map load failed for URL: ${textureProps.aoMapUrl}`
+                      );
+                      resolveLoad();
+                    }
+                  );
+                })
+              );
+            } else if (
+              originalMat.aoMap &&
+              typeof newMatInstance.aoMap !== "undefined" &&
+              !textureProps?.aoMapUrl
+            ) {
+              newMatInstance.aoMap = originalMat.aoMap;
+              newMatInstance.aoMapIntensity =
+                originalMat.aoMapIntensity !== undefined
+                  ? originalMat.aoMapIntensity
+                  : 1.0;
+              if (
+                node.geometry &&
+                node.geometry.attributes.uv &&
+                !node.geometry.attributes.uv2 &&
+                newMatInstance.aoMap
+              ) {
+                node.geometry.setAttribute(
+                  "uv2",
+                  new THREE.BufferAttribute(
+                    node.geometry.attributes.uv.array,
+                    2
+                  )
+                );
+              }
+            }
+
+            if (
+              textureProps?.emissiveMapUrl &&
+              typeof newMatInstance.emissiveMap !== "undefined"
+            ) {
+              loadAndApply(textureProps?.emissiveMapUrl, "emissiveMap");
+              if (newMatInstance.emissiveMap) {
+                // Check if actually loaded
+                newMatInstance.emissive = new THREE.Color(0xffffff);
+                newMatInstance.emissiveIntensity = 1.0;
+              }
+            } else if (
+              originalMat.emissiveMap &&
+              typeof newMatInstance.emissiveMap !== "undefined" &&
+              !textureProps?.emissiveMapUrl
+            ) {
+              newMatInstance.emissiveMap = originalMat.emissiveMap;
+              newMatInstance.emissive = originalMat.emissive
+                ? originalMat.emissive.clone()
+                : new THREE.Color(0x000000);
+              newMatInstance.emissiveIntensity =
+                originalMat.emissiveIntensity !== undefined
+                  ? originalMat.emissiveIntensity
+                  : 1.0;
+            }
+          }
+
+          newMatInstance.side =
+            originalMat.side !== undefined ? originalMat.side : THREE.FrontSide;
+          const originalIsTransparent =
+            originalMat.transparent !== undefined
+              ? originalMat.transparent
+              : originalMat.opacity !== undefined && originalMat.opacity < 1.0;
+          newMatInstance.transparent = originalIsTransparent;
+          if (originalIsTransparent && originalMat.opacity !== undefined) {
+            newMatInstance.opacity = originalMat.opacity;
+          }
+          newMatInstance.alphaTest = originalMat.alphaTest || 0.0;
+
+          newAppliedMaterials.push(newMatInstance);
+        }
+        node.material =
+          newAppliedMaterials.length === 1
+            ? newAppliedMaterials[0]
+            : newAppliedMaterials;
+        node.castShadow = true;
+        node.receiveShadow = true;
+      }
+    });
+
+    if (textureLoadPromises.length > 0) {
+      Promise.all(textureLoadPromises).then(() => {
+        setSceneVersion((v) => v + 1);
+      });
+    } else {
+      setSceneVersion((v) => v + 1); // Still trigger re-render if no async loads but material props changed
+    }
+  }, [
+    internalProcessedScene,
+    textureProps,
+    color,
+    roughness,
+    metalness,
+    materialType,
+    type,
+  ]);
+
   useFrame((state, delta) => {
-    if (!localMeshRef.current) return;
+    const mesh = localMeshRef.current;
+    if (!mesh || !useFrame) return;
+
+    // If TransformControls are dragging this object, they have direct control.
+    // Props will update live* refs, and when dragging stops, lerping/animation resumes.
+    if (isTransformDragging && type !== "importedGLB") {
+      // GLB transform is handled by group, not this frame loop during drag
+      // For non-GLB, TransformControls directly manipulates mesh.position/rotation/scale
+      // We update live* refs from the mesh to keep them in sync for when dragging stops
+      livePosition.current.copy(mesh.position);
+      liveRotationEuler.current.copy(mesh.rotation);
+      liveScale.current.copy(mesh.scale);
+      return;
+    }
+    if (isTransformDragging && type === "importedGLB") {
+      // For GLB, the group is transformed. We update its live* refs.
+      // This might be redundant if props are the source of truth, but good for consistency.
+      livePosition.current.copy(mesh.position); // mesh here is the group
+      liveRotationEuler.current.copy(mesh.rotation);
+      liveScale.current.copy(mesh.scale);
+      return;
+    }
+
     if (
       type !== "importedGLB" &&
       isAnimating &&
-      !isTransformDragging &&
+      !isTransformDragging && // Redundant due to above, but good for clarity
       animation &&
       animation.type !== "none"
     ) {
       const effectiveSpeed = (animation.speed || 1) * delta;
-      let targetP = livePosition.current.clone();
-      let targetR = liveRotation.current.clone();
       switch (animation.type) {
         case "rotate":
-          if (animation.axis === "x") targetR.x += effectiveSpeed;
-          else if (animation.axis === "y") targetR.y += effectiveSpeed;
-          else if (animation.axis === "z") targetR.z += effectiveSpeed;
-          liveRotation.current.copy(targetR);
+          if (animation.axis === "x")
+            liveRotationEuler.current.x += effectiveSpeed;
+          else if (animation.axis === "y")
+            liveRotationEuler.current.y += effectiveSpeed;
+          else if (animation.axis === "z")
+            liveRotationEuler.current.z += effectiveSpeed;
+          mesh.rotation.copy(liveRotationEuler.current);
           break;
         case "orbit":
           orbitAngleRef.current += effectiveSpeed * 0.2;
@@ -632,63 +1111,106 @@ function Shape({
               : livePosition.current.y;
           const cZ = animation.orbitCenter?.[2] || 0;
           const plane = animation.orbitPlane || "xz";
+          const tempP = livePosition.current.clone(); // Use a temp Vector3
           if (plane === "xz")
-            targetP.set(
+            tempP.set(
               cX + Math.cos(orbitAngleRef.current) * radius,
               cY,
               cZ + Math.sin(orbitAngleRef.current) * radius
             );
           else if (plane === "xy")
-            targetP.set(
+            tempP.set(
               cX + Math.cos(orbitAngleRef.current) * radius,
               cY + Math.sin(orbitAngleRef.current) * radius,
               cZ
             );
           else if (plane === "yz")
-            targetP.set(
+            tempP.set(
               cX,
               cY + Math.cos(orbitAngleRef.current) * radius,
               cZ + Math.sin(orbitAngleRef.current) * radius
             );
-          livePosition.current.copy(targetP);
+
+          livePosition.current.copy(tempP); // Update live ref
+          mesh.position.copy(livePosition.current); // Apply to mesh
           break;
       }
-      localMeshRef.current.position.copy(livePosition.current);
-      localMeshRef.current.rotation.copy(liveRotation.current);
-    } else if (type !== "importedGLB") {
-      localMeshRef.current.position.copy(livePosition.current);
-      localMeshRef.current.rotation.copy(liveRotation.current);
+      // For animations, scale usually isn't part of 'rotate' or 'orbit' unless specified
+      // If scale needs to animate, add logic here. Otherwise, it lerps/copies below.
+      // mesh.scale.copy(liveScale.current); // Or lerp if smooth transition to animated scale is needed
+    } else {
+      // Not dragging, AND ( (not animatable OR not currently animating) OR is GLB )
+      if (type !== "importedGLB") {
+        mesh.position.lerp(livePosition.current, 0.15);
+        currentQuaternion.copy(mesh.quaternion);
+        targetQuaternion.setFromEuler(liveRotationEuler.current);
+        mesh.quaternion.slerp(targetQuaternion, 0.15);
+        mesh.scale.lerp(liveScale.current, 0.15);
+      } else if (type === "importedGLB" && mesh) {
+        // GLB (group) always copies from live* refs if not dragging
+        mesh.position.copy(livePosition.current);
+        mesh.rotation.copy(liveRotationEuler.current); // Assumes liveRotationEuler is correct from props
+        mesh.scale.copy(liveScale.current);
+      }
     }
-    localMeshRef.current.scale.copy(liveScale.current);
   });
+
   useEffect(() => {
     if (animation?.type !== "orbit")
       orbitAngleRef.current = Math.random() * Math.PI * 2;
   }, [animation?.type]);
-  const imagePlaneTexture = useMemo(() => {
-    if (type === "imagePlane" && imageDataUrl && useLoader) {
-      try {
-        return useLoader(TextureLoader, imageDataUrl);
-      } catch (e) {
-        return null;
-      }
-    }
-    return null;
-  }, [type, imageDataUrl]);
-  useEffect(() => {
-    if (imagePlaneTexture) imagePlaneTexture.colorSpace = THREE.SRGBColorSpace;
-  }, [imagePlaneTexture]);
-  const objectName = `shape_${id}_${type}_${
+
+  const objectNameConstructed = `shape_${id}_${type}_${
     name ||
     shapeType ||
-    (type === "text" ? text?.substring(0, 10) || "Text" : "")
+    (type === "text" ? text?.substring(0, 10) || "Text" : type)
   }`;
-  const currentTextureProps = type === "text" ? textTextureProps : textureProps;
+  const currentTexturePropsToUse =
+    type === "text" ? textTextureProps : textureProps;
+
+  const handleClick = useCallback(
+    (e) => {
+      try {
+        e.stopPropagation();
+        if (onClick) onClick(id, e);
+      } catch (error) {
+        console.warn("Error in shape click handler:", error);
+      }
+    },
+    [id, onClick]
+  );
+
+  const handlePointerOver = useCallback((e) => e.stopPropagation(), []);
+  const handlePointerOut = useCallback((e) => e.stopPropagation(), []);
+
+  // Logic for Text3D aoMap (requires uv2 on TextGeometry)
+  const textGeoRef = useRef();
+  useEffect(() => {
+    if (type === "text" && textGeoRef.current) {
+      const geometry = textGeoRef.current.geometry;
+      if (geometry && geometry.attributes.uv && !geometry.attributes.uv2) {
+        if (
+          currentTexturePropsToUse?.aoMapUrl ||
+          (materialType === "standard" && currentTexturePropsToUse?.aoMapUrl)
+        ) {
+          // check if aoMap is actually used
+          geometry.setAttribute(
+            "uv2",
+            new THREE.BufferAttribute(geometry.attributes.uv.array, 2)
+          );
+          geometry.attributes.uv2.needsUpdate = true;
+        }
+      }
+    }
+  }, [type, textGeoRef, currentTexturePropsToUse, materialType]);
 
   if (type === "text") {
-    if (!Text3D || !useTexture)
+    if (!Text3D || !useTexture || !FONT_PATH_R3F)
       return (
-        <mesh name={`${objectName}_text_fallback`}>
+        <mesh
+          ref={localMeshRef} // Fallback still needs ref for potential selection
+          name={`${objectNameConstructed}_text_fallback`}
+        >
           <boxGeometry args={[0.1, 0.1, 0.1]} />
           <meshBasicMaterial color='red' wireframe />
         </mesh>
@@ -696,194 +1218,182 @@ function Shape({
     return (
       <Suspense
         fallback={
-          <mesh name={`${objectName}_loading_text`}>
+          <mesh
+            ref={localMeshRef} // Fallback still needs ref
+            name={`${objectNameConstructed}_loading_text`}
+          >
             <boxGeometry args={[0.2, 0.2, 0.2]} />
             <meshBasicMaterial color='gray' wireframe />
           </mesh>
         }
       >
-        {" "}
         <Text3D
-          ref={localMeshRef}
+          ref={(node) => {
+            localMeshRef.current = node;
+            textGeoRef.current = node; // For aoMap uv2
+          }}
           font={FONT_PATH_R3F}
           size={saneNumber(textSize, 0.5)}
           height={saneNumber(extrudeDepth, 0.1)}
           curveSegments={12}
           bevelEnabled
-          bevelThickness={saneNumber(textSize * 0.04, 0.02)}
-          bevelSize={saneNumber(textSize * 0.04, 0.02)}
+          bevelThickness={saneNumber(textSize * 0.04, 0.015)}
+          bevelSize={saneNumber(textSize * 0.04, 0.015)}
           bevelOffset={0}
           bevelSegments={3}
-          name={objectName}
+          name={objectNameConstructed}
           castShadow
           receiveShadow
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick(id, e);
-          }}
-          onPointerOver={(e) => e.stopPropagation()}
-          onPointerOut={(e) => e.stopPropagation()}
+          onClick={handleClick}
+          onPointerOver={handlePointerOver}
+          onPointerOut={handlePointerOut}
         >
-          {" "}
-          {text || "Text"}{" "}
+          {text || "Text"}
           <LoadedTexturesMaterial
             materialType={materialType}
             color={color}
             roughness={roughness}
             metalness={metalness}
-            textureProps={currentTextureProps}
-          />{" "}
-        </Text3D>{" "}
+            textureProps={currentTexturePropsToUse}
+          />
+        </Text3D>
       </Suspense>
     );
   } else if (type === "importedGLB") {
-    if (!gltfModelScene) return null;
-    useEffect(() => {
-      if (gltfModelScene && objectRef) objectRef.current = gltfModelScene;
-    }, [gltfModelScene, objectRef]);
+    const sceneToRender = internalProcessedScene;
+    if (!sceneToRender) return null;
     return (
       <group
-        ref={localMeshRef}
-        name={objectName}
-        position={position}
-        rotation={rotation}
-        scale={scale}
-        onClick={(e) => {
-          e.stopPropagation();
-          onClick(id, e);
-        }}
-        onPointerOver={(e) => e.stopPropagation()}
-        onPointerOut={(e) => e.stopPropagation()}
+        ref={localMeshRef} // This ref points to the group
+        name={objectNameConstructed}
+        onClick={handleClick}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
       >
-        {" "}
-        <primitive object={gltfModelScene} />{" "}
+        <primitive object={sceneToRender} key={sceneVersion} />
       </group>
     );
   } else if (type === "imagePlane") {
-    return (
-      <mesh
-        ref={localMeshRef}
-        name={objectName}
-        castShadow={false}
-        receiveShadow
-        onClick={(e) => {
-          e.stopPropagation();
-          onClick(id, e);
-        }}
-        onPointerOver={(e) => e.stopPropagation()}
-        onPointerOut={(e) => e.stopPropagation()}
-      >
-        {" "}
-        <planeGeometry args={[planeWidth || 1, planeHeight || 1]} />{" "}
-        {imagePlaneTexture ? (
-          <meshBasicMaterial
-            map={imagePlaneTexture}
-            side={THREE.DoubleSide}
-            transparent={true}
-          />
-        ) : (
+    if (!imageDataUrl) {
+      return (
+        <mesh
+          ref={localMeshRef}
+          name={objectNameConstructed}
+          castShadow={false}
+          receiveShadow
+          onClick={handleClick}
+          onPointerOver={handlePointerOver}
+          onPointerOut={handlePointerOut}
+        >
+          <planeGeometry args={[planeWidth || 1, planeHeight || 1]} />
           <meshBasicMaterial
             color={0xcccccc}
             wireframe
             side={THREE.DoubleSide}
           />
-        )}{" "}
-      </mesh>
-    );
-  } else {
-    const proceduralGeometry = useMemo(() => {
-      switch (type) {
-        case "box":
-          return <boxGeometry args={[1, 1, 1]} />;
-        case "sphere":
-          return <sphereGeometry args={[0.5, 32, 32]} />;
-        case "cylinder":
-          return <cylinderGeometry args={[0.5, 0.5, 1, 32]} />;
-        case "cone":
-          return <coneGeometry args={[0.5, 1, 32]} />;
-        case "torus":
-          return <torusGeometry args={[0.5, 0.2, 16, 100]} />;
-        case "pyramid":
-          return <PyramidGeometryR3F />;
-        case "customExtruded":
-          return (
-            <ExtrudedCustomShapeGeometry
-              shapeType={shapeType}
-              shapeSize={shapeSize}
-              extrudeDepth={extrudeDepth}
-            />
-          );
-        default:
-          return <boxGeometry args={[0.1, 0.1, 0.1]} />;
-      }
-    }, [type, shapeType, shapeSize, extrudeDepth]);
-    if (!useTexture)
-      return (
-        <mesh
-          ref={localMeshRef}
-          name={objectName}
-          castShadow
-          receiveShadow
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick(id, e);
-          }}
-        >
-          <meshStandardMaterial
-            color={color}
-            roughness={roughness}
-            metalness={metalness}
-          />
         </mesh>
       );
+    }
+    return (
+      <Suspense
+        fallback={
+          <mesh
+            ref={localMeshRef}
+            name={`${objectNameConstructed}_loading_image`}
+          >
+            <planeGeometry args={[planeWidth || 1, planeHeight || 1]} />
+            <meshBasicMaterial color='gray' wireframe side={THREE.DoubleSide} />
+          </mesh>
+        }
+      >
+        <ImagePlaneWithTexture
+          localMeshRefPassed={localMeshRef}
+          imageDataUrl={imageDataUrl}
+          planeWidth={planeWidth}
+          planeHeight={planeHeight}
+          objectNameConstructed={objectNameConstructed}
+          onClick={handleClick}
+        />
+      </Suspense>
+    );
+  } else {
+    // Procedural geometries
+    let proceduralGeometry;
+    switch (type) {
+      case "box":
+        proceduralGeometry = <boxGeometry args={[1, 1, 1]} />;
+        break;
+      case "sphere":
+        proceduralGeometry = <sphereGeometry args={[0.5, 32, 16]} />;
+        break;
+      case "cylinder":
+        proceduralGeometry = <cylinderGeometry args={[0.5, 0.5, 1, 32]} />;
+        break;
+      case "cone":
+        proceduralGeometry = <coneGeometry args={[0.5, 1, 32]} />;
+        break;
+      case "torus":
+        proceduralGeometry = <torusGeometry args={[0.4, 0.1, 16, 100]} />;
+        break;
+      case "pyramid":
+        proceduralGeometry = <PyramidGeometryR3F />;
+        break;
+      case "customExtruded":
+        proceduralGeometry = (
+          <ExtrudedCustomShapeGeometry
+            shapeType={shapeType}
+            shapeSize={shapeSize}
+            extrudeDepth={extrudeDepth}
+          />
+        );
+        break;
+      default:
+        proceduralGeometry = <boxGeometry args={[0.1, 0.1, 0.1]} />;
+    }
     return (
       <mesh
         ref={localMeshRef}
-        name={objectName}
+        name={objectNameConstructed}
         castShadow
         receiveShadow
-        onClick={(e) => {
-          e.stopPropagation();
-          onClick(id, e);
-        }}
-        onPointerOver={(e) => e.stopPropagation()}
-        onPointerOut={(e) => e.stopPropagation()}
+        onClick={handleClick}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
       >
-        {" "}
-        {proceduralGeometry}{" "}
+        {proceduralGeometry}
+        {/* For procedural geometries, aoMap requires uv2 on the geometry itself.
+            Box, Sphere, etc., have them by default. Custom ones need to ensure it. */}
         <Suspense fallback={<meshStandardMaterial color='gray' wireframe />}>
-          {" "}
           <LoadedTexturesMaterial
             materialType={materialType}
             color={color}
             roughness={roughness}
             metalness={metalness}
-            textureProps={currentTextureProps}
-          />{" "}
-        </Suspense>{" "}
+            textureProps={currentTexturePropsToUse}
+          />
+        </Suspense>
       </mesh>
     );
   }
 }
-
 function SceneLighting() {
   const lightRef = useRef();
-  const hdrPath = "/brown_photostudio_02_4k.hdr";
+  const hdrPath = "/brown_photostudio_02_4k.hdr"; // Ensure this is in your public folder
+
   return (
     <>
-      {" "}
       {Environment && typeof Environment !== "string" && hdrPath ? (
         <Suspense fallback={null}>
-          <Environment files={hdrPath} background={false} blur={0.5} />
+          <Environment files={hdrPath} background={false} blur={0.6} />
         </Suspense>
       ) : (
-        <directionalLight intensity={0.5} position={[5, 5, 5]} />
-      )}{" "}
-      <ambientLight intensity={0.7} />{" "}
+        <directionalLight intensity={1.5} position={[5, 5, 5]} />
+      )}
+      <ambientLight intensity={1.0} />
       <directionalLight
         ref={lightRef}
-        position={[8, 15, 10]}
-        intensity={1.8}
+        position={[10, 15, 12]}
+        intensity={2.0}
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
@@ -893,13 +1403,19 @@ function SceneLighting() {
         shadow-camera-top={15}
         shadow-camera-bottom={-15}
         shadow-bias={-0.0005}
-      />{" "}
-      <pointLight position={[-10, -10, -10]} color={0xffeedd} intensity={0.6} />{" "}
+      />
+      <pointLight
+        position={[-10, -10, -10]}
+        color={0xffeedd}
+        intensity={1.0}
+        distance={80}
+        decay={1.2}
+      />
       <hemisphereLight
-        skyColor={0xe6f0ff}
-        groundColor={0xb0b0b0}
-        intensity={0.4}
-      />{" "}
+        skyColor={0xadd8e6}
+        groundColor={0x808080}
+        intensity={0.6}
+      />
     </>
   );
 }
@@ -909,8 +1425,7 @@ export function MainScene({
   selectedShapeId,
   mode,
   onShapeClick,
-  onShapeUpdate,
-  orbitControlsEnabled,
+  onShapeUpdate, // (shapeId, saveHistory)
   sceneRef,
   isAnimating,
   loadedGltfObjects,
@@ -920,117 +1435,163 @@ export function MainScene({
   animationPlaybackSpeed,
   animationTime,
   playAllAnimations,
+  refreshKey,
+  orbitControlsEnabled,
 }) {
-  const { scene, gl, camera } = useThree();
-  const [transformObject, setTransformObject] = useState(null);
+  const { scene: r3fScene, gl, camera } = useThree();
+  const transformControlsRef = useRef(null);
+  // selectedObjectInternalRef will be populated by the <Shape> component's objectRef prop
   const selectedObjectInternalRef = useRef(null);
   const [isTransformDragging, setIsTransformDragging] = useState(false);
+  const [selectedObjectReady, setSelectedObjectReady] = useState(false); // Track when object is ready
   const activeMixers = useRef(new Map());
-  const activeActions = useRef(new Map());
+
   useEffect(() => {
-    if (sceneRef) sceneRef.current = scene;
-  }, [scene, sceneRef]);
-  useEffect(() => {
-    if (selectedShapeId) {
-      const shapeData = shapes.find((s) => s.id === selectedShapeId);
-      if (
-        selectedObjectInternalRef.current &&
-        selectedObjectInternalRef.current.name.startsWith(
-          `shape_${selectedShapeId}`
-        )
-      ) {
-        if (transformObject !== selectedObjectInternalRef.current)
-          setTransformObject(selectedObjectInternalRef.current);
-      } else if (!shapeData) {
-        if (transformObject !== null) setTransformObject(null);
-        selectedObjectInternalRef.current = null;
+    if (sceneRef) sceneRef.current = r3fScene;
+  }, [r3fScene, sceneRef]);
+
+  // Helper function to check if object is properly in scene graph
+  const isInSceneGraph = useCallback((object, scene) => {
+    if (!object || !scene) return false;
+
+    let current = object;
+    while (current.parent) {
+      current = current.parent;
+      if (current === scene) return true;
+    }
+    return false;
+  }, []);
+
+  // More reliable approach - use useFrame to check and attach
+  const [shouldShowControls, setShouldShowControls] = useState(false);
+
+  useFrame(() => {
+    const controls = transformControlsRef.current;
+    const targetObject = selectedObjectInternalRef.current;
+
+    if (!controls || !selectedShapeId || !targetObject) {
+      setShouldShowControls(false);
+      if (controls?.object) {
+        try {
+          controls.detach();
+        } catch (e) {
+          console.warn("Detach error in useFrame:", e);
+        }
+      }
+      return;
+    }
+
+    // Check if object is properly in scene every frame
+    const isValidInScene =
+      targetObject.parent &&
+      isInSceneGraph(targetObject, r3fScene) &&
+      targetObject.isObject3D !== false;
+
+    if (isValidInScene) {
+      if (controls.object !== targetObject) {
+        try {
+          // Detach from previous object
+          if (controls.object) {
+            controls.detach();
+          }
+
+          // Attach to new object
+          controls.attach(targetObject);
+          controls.mode = mode;
+          controls.space = mode === "scale" ? "local" : "world";
+          setShouldShowControls(true);
+        } catch (attachError) {
+          console.warn("Failed to attach in useFrame:", attachError);
+          setShouldShowControls(false);
+        }
+      } else {
+        // Object already attached, just update mode
+        controls.mode = mode;
+        controls.space = mode === "scale" ? "local" : "world";
+        setShouldShowControls(true);
       }
     } else {
-      if (transformObject !== null) setTransformObject(null);
-      selectedObjectInternalRef.current = null;
+      setShouldShowControls(false);
+      if (controls.object) {
+        try {
+          controls.detach();
+        } catch (e) {
+          console.warn("Detach error for invalid object:", e);
+        }
+      }
     }
-  }, [selectedShapeId, shapes, transformObject]);
+  });
+
+  // Remove the complex effects that were causing timing issues
+  // The useFrame approach above handles all the attachment logic
+
+  // Animation mixer effect (keeping your existing logic but simplified)
   useEffect(() => {
-    if (
-      selectedShapeId &&
-      selectedObjectInternalRef.current &&
-      selectedObjectInternalRef.current.name.startsWith(
-        `shape_${selectedShapeId}`
-      )
-    ) {
-      if (transformObject !== selectedObjectInternalRef.current)
-        setTransformObject(selectedObjectInternalRef.current);
-    } else if (!selectedShapeId && transformObject !== null) {
-      setTransformObject(null);
-    }
-  }, [selectedShapeId, selectedObjectInternalRef.current]);
-  useEffect(() => {
-    const currentSelectedShape = shapes.find((s) => s.id === selectedShapeId);
+    const currentSelectedShapeData = shapes.find(
+      (s) => s.id === selectedShapeId
+    );
+
     activeMixers.current.forEach((mixer, id) => {
       if (
         id !== selectedShapeId ||
-        (currentSelectedShape && currentSelectedShape.type !== "importedGLB")
+        (currentSelectedShapeData &&
+          currentSelectedShapeData.type !== "importedGLB")
       ) {
         mixer.stopAllAction();
         activeMixers.current.delete(id);
-        activeActions.current.forEach((_, key) => {
-          if (key.startsWith(id)) activeActions.current.delete(key);
-        });
       }
     });
+
     if (
-      currentSelectedShape &&
-      currentSelectedShape.type === "importedGLB" &&
+      currentSelectedShapeData?.type === "importedGLB" &&
       selectedObjectInternalRef.current
     ) {
-      const gltfData = loadedGltfObjects[currentSelectedShape.id];
-      if (gltfData && gltfData.animations && gltfData.animations.length > 0) {
-        let mixer = activeMixers.current.get(currentSelectedShape.id);
-        const animatedRoot = gltfData.scene;
+      const gltfData = loadedGltfObjects[currentSelectedShapeData.id];
+      const animatedRoot = selectedObjectInternalRef.current;
+
+      if (animatedRoot && gltfData?.animations?.length > 0 && useFrame) {
+        let mixer = activeMixers.current.get(currentSelectedShapeData.id);
         if (!mixer || mixer.getRoot() !== animatedRoot) {
           mixer = new THREE.AnimationMixer(animatedRoot);
-          activeMixers.current.set(currentSelectedShape.id, mixer);
+          activeMixers.current.set(currentSelectedShapeData.id, mixer);
         }
         mixer.stopAllAction();
-        activeActions.current.forEach((_, key) => {
-          if (key.startsWith(currentSelectedShape.id))
-            activeActions.current.delete(key);
-        });
-        const setupAction = (clip, clipIndex) => {
+
+        const clipsToProcess = playAllAnimations
+          ? gltfData.animations
+          : selectedAnimationClipIndex >= 0 &&
+            selectedAnimationClipIndex < gltfData.animations.length
+          ? [gltfData.animations[selectedAnimationClipIndex]]
+          : [];
+
+        clipsToProcess.forEach((clip) => {
+          if (!clip) return;
           const action = mixer.clipAction(clip);
           action.setLoop(
             isAnimationLooping ? THREE.LoopRepeat : THREE.LoopOnce,
             Infinity
           );
+          action.clampWhenFinished = !isAnimationLooping;
           action.timeScale = animationPlaybackSpeed;
-          const startTime = animationTime * (clip.duration || 0);
-          action.time = startTime;
-          if (animationPlaybackState === "playing") {
-            action.play();
-            action.paused = false;
-          } else if (animationPlaybackState === "paused") {
-            action.play();
-            action.paused = true;
-            if (startTime === 0) mixer.update(0);
-          } else {
-            action.stop();
-            if (startTime === 0) mixer.update(0);
-          }
-          activeActions.current.set(
-            `${currentSelectedShape.id}_${
-              playAllAnimations ? "all_" + clipIndex : "single"
-            }`,
-            action
-          );
-        };
-        if (playAllAnimations) {
-          gltfData.animations.forEach(setupAction);
-        } else if (
-          selectedAnimationClipIndex >= 0 &&
-          selectedAnimationClipIndex < gltfData.animations.length
+          const clipDuration = clip.duration || 0;
+          action.time = animationTime * clipDuration;
+
+          if (animationPlaybackState === "playing")
+            action.play().paused = false;
+          else if (animationPlaybackState === "paused") {
+            if (clipDuration > 0) action.play().paused = true;
+            else action.stop();
+          } else action.stop();
+        });
+
+        if (animationPlaybackState === "stopped") mixer.setTime(0);
+        else if (
+          animationPlaybackState === "paused" &&
+          clipsToProcess.length > 0 &&
+          clipsToProcess[0]?.duration > 0
         ) {
-          const clip = gltfData.animations[selectedAnimationClipIndex];
-          setupAction(clip, selectedAnimationClipIndex);
+          const targetTime = animationTime * (clipsToProcess[0].duration || 0);
+          mixer.setTime(targetTime);
         }
       }
     }
@@ -1044,134 +1605,178 @@ export function MainScene({
     animationPlaybackSpeed,
     animationTime,
     playAllAnimations,
-    selectedObjectInternalRef.current,
+    refreshKey,
   ]);
+
   useFrame((state, delta) => {
-    activeMixers.current.forEach((mixer, shapeId) => {
-      if (shapeId === selectedShapeId) {
-        if (animationPlaybackState === "playing") {
-          mixer.update(delta * animationPlaybackSpeed);
-        }
-      }
+    if (!useFrame) return;
+    activeMixers.current.forEach((mixer, id) => {
+      if (id === selectedShapeId && animationPlaybackState === "playing")
+        mixer.update(delta);
     });
   });
+
+  // Simplified object ready callback
+  const handleObjectReady = useCallback(
+    (shapeId, object) => {
+      if (shapeId === selectedShapeId) {
+        selectedObjectInternalRef.current = object;
+      }
+    },
+    [selectedShapeId]
+  );
+
+  // Enhanced dragging change handler with better error handling
+  const handleDraggingChanged = useCallback(
+    (event) => {
+      const dragging = event.value;
+      setIsTransformDragging(dragging);
+
+      try {
+        // Handle orbit controls
+        const orbitCtrl = r3fScene.__r3f?.controls;
+        if (orbitCtrl) {
+          orbitCtrl.enabled = !dragging && orbitControlsEnabled;
+        }
+      } catch (error) {
+        console.warn("Error managing orbit controls:", error);
+      }
+    },
+    [r3fScene, orbitControlsEnabled]
+  );
+
+  // Enhanced object change handler
+  const handleObjectChange = useCallback(() => {
+    try {
+      if (selectedShapeId && transformControlsRef.current?.object) {
+        onShapeUpdate(selectedShapeId, false);
+      }
+    } catch (error) {
+      console.warn("Error in object change handler:", error);
+    }
+  }, [selectedShapeId, onShapeUpdate]);
+
+  // Enhanced mouse up handler
+  const handleMouseUp = useCallback(() => {
+    try {
+      if (selectedShapeId && isTransformDragging) {
+        onShapeUpdate(selectedShapeId, true);
+      }
+    } catch (error) {
+      console.warn("Error in mouse up handler:", error);
+    }
+  }, [selectedShapeId, isTransformDragging, onShapeUpdate]);
+
   return (
     <>
-      {" "}
-      <SceneLighting />{" "}
+      <SceneLighting />
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.01, 0]}
+        position={[0, 0, 0]}
         receiveShadow
-        name='ground_plane'
+        name='ground_plane_mainscene'
       >
         <planeGeometry args={[100, 100]} />
-        <shadowMaterial opacity={0.3} />
-      </mesh>{" "}
+        <shadowMaterial opacity={0.3} color={0x000000} />
+      </mesh>
       {Grid && typeof Grid !== "string" && (
         <Grid
           args={[100, 100]}
-          position={[0, 0, 0]}
-          cellSize={1}
-          cellThickness={0.6}
-          cellColor={new THREE.Color("#6f6f6f")}
-          sectionSize={5}
+          position={[0, 0.01, 0]}
+          cellSize={0.5}
+          cellThickness={0.5}
+          cellColor={"#6f6f6f"}
+          sectionSize={2.5}
           sectionThickness={1}
-          sectionColor={new THREE.Color("#9d4b4b")}
-          fadeDistance={60}
+          sectionColor={"#9d4b4b"}
+          fadeDistance={70}
           fadeStrength={1}
           infiniteGrid
           followCamera={false}
         />
-      )}{" "}
-      {shapes.map((shapeData) => {
-        const gltfObjectData = loadedGltfObjects[shapeData.id];
-        return (
-          <Shape
-            key={shapeData.id}
-            {...shapeData}
-            gltfModelScene={gltfObjectData?.scene}
-            clips={gltfObjectData?.animations}
-            animation={shapeData.animation}
-            isAnimating={isAnimating}
-            onClick={onShapeClick}
-            objectRef={
-              shapeData.id === selectedShapeId
-                ? selectedObjectInternalRef
-                : null
-            }
-            isTransformDragging={
-              shapeData.id === selectedShapeId && isTransformDragging
-            }
-            textureProps={shapeData.textureProps}
-            textTextureProps={shapeData.textTextureProps}
-          />
-        );
-      })}{" "}
-      {selectedShapeId &&
-        transformObject &&
-        mode &&
+      )}
+      {shapes.map((shapeData) => (
+        <Shape
+          key={`${shapeData.id}-${refreshKey}`}
+          {...shapeData}
+          isAnimating={isAnimating}
+          onClick={onShapeClick}
+          objectRef={
+            shapeData.id === selectedShapeId ? selectedObjectInternalRef : null
+          }
+          isTransformDragging={
+            shapeData.id === selectedShapeId && isTransformDragging
+          }
+          gltfModelScene={loadedGltfObjects[shapeData.id]?.scene}
+          onObjectReady={handleObjectReady} // New prop for object ready callback
+        />
+      ))}
+      /* TransformControls with frame-based attachment management */
+      {shouldShowControls &&
         TransformControls &&
         typeof TransformControls !== "string" && (
           <TransformControls
-            object={transformObject}
-            mode={mode}
-            onObjectChange={() => {
-              if (selectedShapeId && transformObject)
-                onShapeUpdate(selectedShapeId);
-            }}
-            onDraggingChanged={(event) => {
-              const dragging = event.value;
-              setIsTransformDragging(dragging);
-              const orbitCtrl = scene.__r3f?.controls;
-              if (orbitCtrl)
-                orbitCtrl.enabled = !dragging && orbitControlsEnabled;
-            }}
+            ref={transformControlsRef}
+            onObjectChange={handleObjectChange}
+            onMouseUp={handleMouseUp}
+            onDraggingChanged={handleDraggingChanged}
             size={0.75}
-            space={mode === "scale" ? "local" : "world"}
             camera={camera}
             domElement={gl.domElement}
           />
-        )}{" "}
-      {OrbitControls && typeof OrbitControls !== "string" && (
-        <OrbitControls
-          enabled={orbitControlsEnabled && !isTransformDragging}
-          makeDefault
-          enableDamping
-          dampingFactor={0.05}
-          minDistance={1}
-          maxDistance={100}
-          zoomSpeed={0.7}
-          panSpeed={0.7}
-        />
-      )}{" "}
+        )}
     </>
   );
 }
-export function CameraController({ preset }) {
+export function CameraController({
+  preset,
+  orbitControlsEnabled,
+  isTransformDragging,
+}) {
+  // Added isTransformDragging
   const { camera } = useThree();
   const controls = useThree((state) => state.controls);
+
   const cameraPresets = useMemo(
     () => ({
       top: { position: [0, 15, 0.01], target: [0, 0, 0] },
       front: { position: [0, 2, 15], target: [0, 1, 0] },
       side: { position: [15, 2, 0], target: [0, 1, 0] },
       isometric: { position: [10, 10, 10], target: [0, 0, 0] },
+      default: { position: [7, 7, 7], target: [0, 1, 0] },
     }),
     []
   );
+
   useEffect(() => {
-    if (preset && cameraPresets[preset] && camera) {
-      const { position, target } = cameraPresets[preset];
-      camera.position.set(...position);
-      if (controls && controls.target) {
-        controls.target.set(...target);
-        controls.update();
-      } else {
-        camera.lookAt(new THREE.Vector3(...target));
-      }
-      camera.updateProjectionMatrix();
+    if (controls) {
+      const targetPreset =
+        preset && cameraPresets[preset]
+          ? cameraPresets[preset]
+          : cameraPresets.default;
+      camera.position.set(...targetPreset.position);
+      controls.target.set(...targetPreset.target);
+      controls.update();
     }
   }, [preset, camera, controls, cameraPresets]);
-  return null;
+
+  if (!OrbitControls || typeof OrbitControls === "string") return null;
+
+  // isTransformDragging prop is now the primary source for this check
+  // const isR3FDragging = useThree((state) => state.get()?.isTransformDragging); // Fallback or additional check if needed
+
+  return (
+    <OrbitControls
+      enabled={orbitControlsEnabled && !isTransformDragging} // Use the prop
+      makeDefault
+      enableDamping
+      dampingFactor={0.1}
+      minDistance={0.5}
+      maxDistance={100}
+      zoomSpeed={0.8}
+      panSpeed={0.8}
+      rotateSpeed={0.6}
+      domElement={useThree((state) => state.gl.domElement)} // Explicitly pass domElement for OrbitControls
+    />
+  );
 }
