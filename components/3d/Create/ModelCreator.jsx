@@ -1,10 +1,19 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import * as THREE from "three";
 import { FontLoader } from "three/examples/jsm/loaders/FontLoader.js";
+import { TextureLoader as ThreeTextureLoader } from "three/src/loaders/TextureLoader.js";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { PanelLeft, PanelRight, X as CloseIcon } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SelectPortal, // Ensure SelectPortal is imported if needed for older Shadcn/Radix versions
+} from "@/components/ui/select";
 
 import PropertiesPanel from "./PropertiesPanel";
 import EditorSidebar from "./EditorSidebar";
@@ -22,7 +31,7 @@ import {
 } from "./SceneElements";
 import { cn } from "@/lib/utils";
 
-// --- Helper functions and constants (identical to your last provided version) ---
+// --- Helper functions and constants ---
 let R3FCanvasCheck;
 try {
   const r3f = require("@react-three/fiber");
@@ -39,13 +48,13 @@ const getGltfLoader = () => {
     } = require("three/examples/jsm/loaders/DRACOLoader.js");
     gltfLoaderInstance = new GLTFLoader();
     const dracoLoader = new DRACOLoader();
-    dracoLoader.setDecoderPath("/draco/gltf/");
+    dracoLoader.setDecoderPath("/draco/gltf/"); // Ensure this path is correct in your /public folder
     gltfLoaderInstance.setDRACOLoader(dracoLoader);
   }
   return gltfLoaderInstance;
 };
 const MAX_PLANE_DIMENSION = 5;
-const DEFAULT_EXPORT_FONT_PATH = "/fonts/helvetiker_regular.typeface.json";
+const DEFAULT_EXPORT_FONT_PATH = "/fonts/helvetiker_regular.typeface.json"; // Ensure this path is correct
 let helvetikerFontForExport = null;
 const exportFontLoaderInstance = new FontLoader();
 if (typeof window !== "undefined" && !helvetikerFontForExport) {
@@ -73,75 +82,110 @@ const initialTextureProps = {
   metalnessMapUrl: null,
   aoMapUrl: null,
   emissiveMapUrl: null,
+  // Add other PBR/Physical material props here that can be controlled via textureProps UI
+  // These are values, not URLs, but are often grouped with texture settings
+  roughness: 0.5, // Default value if no map
+  metalness: 0.0, // Default value if no map
+  aoMapIntensity: 1.0,
+  emissiveColor: "#000000", // Default emissive color
+  emissiveIntensity: 1.0,
+  // Physical material specific
+  transmission: 0.0,
+  ior: 1.5,
+  thickness: 0.01,
+  clearcoat: 0.0,
+  clearcoatRoughness: 0.0,
+  sheen: 0.0,
+  sheenColor: "#ffffff",
+  sheenRoughness: 0.0,
+  specularIntensity: 1.0,
+  specularColor: "#ffffff",
+  shininess: 30, // For Phong
 };
-const textureLoaderForGLB = new THREE.TextureLoader();
+
+const textureLoaderForGLB = new ThreeTextureLoader();
+
 const applyTextureToGLBNode = (
   node,
-  mapType,
-  textureUrl,
-  materialOverrideConfig,
-  callback
+  mapType, // e.g., "map", "normalMap", or null if only changing material type
+  textureUrl, // URL for the texture, or undefined if only changing material type
+  materialOverrideConfig, // { type: "standard" | "physical" | "model" ..., color, roughness, etc. }
+  callback // Optional callback
 ) => {
-  /* ... UNCHANGED from your last full version ... */ if (
-    node.isMesh &&
-    node.material
-  ) {
+  if (node.isMesh && node.material) {
     const materials = Array.isArray(node.material)
       ? node.material
       : [node.material];
     let appliedOverall = false;
+
     materials.forEach((originalMaterial, index) => {
       let targetMaterial = originalMaterial;
       let materialWasReplacedThisCall = false;
+
       if (!originalMaterial.userData) originalMaterial.userData = {};
+      if (
+        !originalMaterial.userData.originalMaterialInstance &&
+        originalMaterial.isMaterial
+      ) {
+        // Store the original material instance only once, if not already an override
+        if (!originalMaterial.userData.isOverride) {
+          originalMaterial.userData.originalMaterialInstance =
+            originalMaterial.clone();
+          originalMaterial.userData.originalMaterialInstance.name =
+            originalMaterial.name + "_original_stored";
+        }
+      }
       if (!originalMaterial.userData.originalName) {
         originalMaterial.userData.originalName =
           originalMaterial.name || `glb_material_${node.uuid}_${index}`;
       }
+
+      // Phase 1: Handle Material Override
       if (materialOverrideConfig && materialOverrideConfig.type !== "model") {
-        const newMaterialProps = {
-          color: new THREE.Color(materialOverrideConfig.color || "#cccccc"),
-        };
-        if (
-          materialOverrideConfig.type === "standard" ||
-          materialOverrideConfig.type === "physical"
-        ) {
-          newMaterialProps.roughness = materialOverrideConfig.roughness ?? 0.5;
-          newMaterialProps.metalness = materialOverrideConfig.metalness ?? 0.0;
-        }
-        if (materialOverrideConfig.type === "physical") {
-          newMaterialProps.transmission =
-            materialOverrideConfig.transmission ?? 0.0;
-          newMaterialProps.ior = materialOverrideConfig.ior ?? 1.5;
-          newMaterialProps.thickness = materialOverrideConfig.thickness ?? 0.01;
-        }
-        let NewMaterialConstructor;
+        // Check if current material is already the correct override type; if so, update it. Otherwise, replace.
+        let newMaterialInstance;
+        let MtlCtor;
         switch (materialOverrideConfig.type) {
           case "physical":
-            NewMaterialConstructor = THREE.MeshPhysicalMaterial;
+            MtlCtor = THREE.MeshPhysicalMaterial;
             break;
           case "toon":
-            NewMaterialConstructor = THREE.MeshToonMaterial;
+            MtlCtor = THREE.MeshToonMaterial;
             break;
           case "basic":
-            NewMaterialConstructor = THREE.MeshBasicMaterial;
+            MtlCtor = THREE.MeshBasicMaterial;
             break;
           case "lambert":
-            NewMaterialConstructor = THREE.MeshLambertMaterial;
+            MtlCtor = THREE.MeshLambertMaterial;
             break;
           case "phong":
-            NewMaterialConstructor = THREE.MeshPhongMaterial;
+            MtlCtor = THREE.MeshPhongMaterial;
             break;
           case "wireframe":
-            NewMaterialConstructor = THREE.MeshBasicMaterial;
-            newMaterialProps.wireframe = true;
+            MtlCtor = THREE.MeshBasicMaterial;
             break;
           default:
-            NewMaterialConstructor = THREE.MeshStandardMaterial;
+            MtlCtor = THREE.MeshStandardMaterial;
+            break;
         }
-        const newMaterialInstance = new NewMaterialConstructor(
-          newMaterialProps
+
+        if (
+          targetMaterial instanceof MtlCtor &&
+          targetMaterial.userData?.isOverride
+        ) {
+          newMaterialInstance = targetMaterial; // Update existing override
+        } else {
+          newMaterialInstance = new MtlCtor(); // Create new override
+          materialWasReplacedThisCall = true;
+        }
+
+        // Common properties
+        newMaterialInstance.color.set(
+          new THREE.Color(
+            materialOverrideConfig.color || originalMaterial.color || "#cccccc"
+          )
         );
+        newMaterialInstance.side = THREE.DoubleSide; // Default for creator
         newMaterialInstance.name =
           `${originalMaterial.userData.originalName}_override_${materialOverrideConfig.type}`.substring(
             0,
@@ -150,45 +194,92 @@ const applyTextureToGLBNode = (
         newMaterialInstance.userData.isOverride = true;
         newMaterialInstance.userData.originalName =
           originalMaterial.userData.originalName;
+
         if (
-          originalMaterial.isMaterial &&
-          originalMaterial !== newMaterialInstance
+          materialOverrideConfig.type === "standard" ||
+          materialOverrideConfig.type === "physical"
         ) {
+          newMaterialInstance.roughness =
+            materialOverrideConfig.roughness ?? 0.5;
+          newMaterialInstance.metalness =
+            materialOverrideConfig.metalness ?? 0.0;
+        }
+        if (materialOverrideConfig.type === "physical") {
+          newMaterialInstance.transmission =
+            materialOverrideConfig.transmission ?? 0.0;
+          newMaterialInstance.ior = materialOverrideConfig.ior ?? 1.5;
+          newMaterialInstance.thickness =
+            materialOverrideConfig.thickness ?? 0.01;
+          // Add other physical props from materialOverrideConfig
+          if (materialOverrideConfig.clearcoat !== undefined)
+            newMaterialInstance.clearcoat = materialOverrideConfig.clearcoat;
+          if (materialOverrideConfig.clearcoatRoughness !== undefined)
+            newMaterialInstance.clearcoatRoughness =
+              materialOverrideConfig.clearcoatRoughness;
+        }
+        if (materialOverrideConfig.type === "phong") {
+          newMaterialInstance.shininess =
+            materialOverrideConfig.shininess ?? 30;
+        }
+        if (materialOverrideConfig.type === "wireframe") {
+          newMaterialInstance.wireframe = true;
+        } else if (newMaterialInstance.hasOwnProperty("wireframe")) {
+          newMaterialInstance.wireframe = false; // Ensure not wireframe unless specified
+        }
+
+        if (materialWasReplacedThisCall) {
           if (
-            originalMaterial.userData.isOverride ||
-            originalMaterial.name.includes("_override")
+            originalMaterial.isMaterial &&
+            originalMaterial !== newMaterialInstance &&
+            originalMaterial.userData.isOverride
           ) {
-            originalMaterial.dispose();
+            originalMaterial.dispose(); // Dispose old override
+          }
+          if (Array.isArray(node.material)) {
+            node.material[index] = newMaterialInstance;
+          } else {
+            node.material = newMaterialInstance;
           }
         }
-        if (Array.isArray(node.material)) {
-          node.material[index] = newMaterialInstance;
-        } else {
-          node.material = newMaterialInstance;
-        }
         targetMaterial = newMaterialInstance;
-        materialWasReplacedThisCall = true;
         appliedOverall = true;
       } else if (
         materialOverrideConfig &&
         materialOverrideConfig.type === "model" &&
         targetMaterial.userData?.isOverride
       ) {
-        const defaultProps = {
-          color: new THREE.Color(targetMaterial.color || "#cccccc"),
-          name: targetMaterial.userData.originalName,
-        };
-        const defaultMaterial = new THREE.MeshStandardMaterial(defaultProps);
-        if (targetMaterial.isMaterial) targetMaterial.dispose();
-        if (Array.isArray(node.material)) {
-          node.material[index] = defaultMaterial;
+        // Revert to original or a new default if original is lost
+        let restoredMaterial = targetMaterial.userData.originalMaterialInstance;
+        if (restoredMaterial && restoredMaterial.isMaterial) {
+          // Ensure the restored material is not the override itself
+          if (restoredMaterial.uuid === targetMaterial.uuid) {
+            restoredMaterial = restoredMaterial.clone(); // clone if it's the same, something went wrong
+          }
         } else {
-          node.material = defaultMaterial;
+          // Fallback: create a new default standard material
+          restoredMaterial = new THREE.MeshStandardMaterial({
+            color: new THREE.Color(
+              originalMaterial.userData.originalMaterialInstance?.color ||
+                "#cccccc"
+            ),
+            name: originalMaterial.userData.originalName,
+          });
         }
-        targetMaterial = defaultMaterial;
+        restoredMaterial.userData.isOverride = false; // No longer an override
+
+        if (targetMaterial.isMaterial) targetMaterial.dispose(); // Dispose current override
+
+        if (Array.isArray(node.material)) {
+          node.material[index] = restoredMaterial;
+        } else {
+          node.material = restoredMaterial;
+        }
+        targetMaterial = restoredMaterial;
         materialWasReplacedThisCall = true;
         appliedOverall = true;
       }
+
+      // Phase 2: Apply Texture if mapType and textureUrl are provided
       if (
         mapType &&
         targetMaterial &&
@@ -199,210 +290,242 @@ const applyTextureToGLBNode = (
           targetMaterial.isMeshLambertMaterial ||
           targetMaterial.isMeshPhongMaterial)
       ) {
-        const loadAndApply = (texUrl, mapProperty, isColorMap = false) => {
+        const loadAndApply = (texUrl, mapProperty) => {
+          // Determine if it's a color map (needs SRGB) or data map (needs Linear)
+          const isColorDataMap =
+            mapProperty === "map" || mapProperty === "emissiveMap";
+
           if (texUrl) {
+            // Dispose previous texture if it exists
+            if (
+              targetMaterial[mapProperty] &&
+              targetMaterial[mapProperty].isTexture
+            ) {
+              targetMaterial[mapProperty].dispose();
+            }
             textureLoaderForGLB.load(
               texUrl,
               (texture) => {
-                texture.colorSpace = isColorMap
+                texture.colorSpace = isColorDataMap
                   ? THREE.SRGBColorSpace
                   : THREE.LinearSRGBColorSpace;
-                texture.flipY = false;
+                texture.flipY = false; // Standard for GLTF
                 texture.needsUpdate = true;
-                if (
-                  targetMaterial[mapProperty] &&
-                  targetMaterial[mapProperty].isTexture
-                )
-                  targetMaterial[mapProperty].dispose();
+
                 targetMaterial[mapProperty] = texture;
+
                 if (
-                  isColorMap &&
+                  mapProperty === "map" &&
                   (targetMaterial.isMeshStandardMaterial ||
                     targetMaterial.isMeshPhysicalMaterial)
                 ) {
-                  targetMaterial.color.set(0xffffff);
+                  targetMaterial.color.set(0xffffff); // Standard PBR practice
                 }
+                if (
+                  mapProperty === "aoMap" &&
+                  (targetMaterial.isMeshStandardMaterial ||
+                    targetMaterial.isMeshPhysicalMaterial) &&
+                  node.geometry &&
+                  !node.geometry.attributes.uv2 &&
+                  node.geometry.attributes.uv
+                ) {
+                  node.geometry.setAttribute(
+                    "uv2",
+                    node.geometry.attributes.uv.clone()
+                  ); // Needed for aoMap
+                }
+                if (
+                  mapProperty === "emissiveMap" &&
+                  (targetMaterial.isMeshStandardMaterial ||
+                    targetMaterial.isMeshPhysicalMaterial)
+                ) {
+                  targetMaterial.emissive = new THREE.Color(
+                    materialOverrideConfig?.emissiveColor || 0xffffff
+                  ); // Use config or default to white
+                  targetMaterial.emissiveIntensity =
+                    materialOverrideConfig?.emissiveIntensity ?? 1.0;
+                }
+
                 targetMaterial.needsUpdate = true;
                 appliedOverall = true;
                 if (callback) callback(true, mapProperty);
               },
               undefined,
               (err) => {
-                console.error(`Error loading ${mapProperty} for GLB:`, err);
+                console.error(
+                  `Error loading ${mapProperty} for GLB:`,
+                  texUrl,
+                  err
+                );
                 if (callback) callback(false, mapProperty);
               }
             );
           } else {
+            // No texUrl, so clear the map
             if (
               targetMaterial[mapProperty] &&
               targetMaterial[mapProperty].isTexture
-            )
+            ) {
               targetMaterial[mapProperty].dispose();
+            }
             targetMaterial[mapProperty] = null;
             if (
-              isColorMap &&
+              mapProperty === "map" &&
               (targetMaterial.isMeshStandardMaterial ||
                 targetMaterial.isMeshPhysicalMaterial)
             ) {
+              // Revert to override color or original color
               targetMaterial.color.set(
                 new THREE.Color(
                   materialOverrideConfig?.color ||
-                    (targetMaterial.userData?.isOverride
-                      ? "#cccccc"
-                      : originalMaterial?.color?.getHex()) ||
-                    0xcccccc
+                    targetMaterial.userData.originalMaterialInstance?.color ||
+                    "#cccccc"
                 )
               );
             }
-            targetMaterial.needsUpdate = true;
-            appliedOverall = true;
-            if (callback) callback(true, mapProperty);
-          }
-        };
-        switch (mapType) {
-          case "map":
-            loadAndApply(textureUrl, "map", true);
-            break;
-          case "normalMap":
-            loadAndApply(textureUrl, "normalMap");
-            break;
-          case "roughnessMap":
             if (
-              targetMaterial.isMeshStandardMaterial ||
-              targetMaterial.isMeshPhysicalMaterial
-            )
-              loadAndApply(textureUrl, "roughnessMap");
-            break;
-          case "metalnessMap":
-            if (
-              targetMaterial.isMeshStandardMaterial ||
-              targetMaterial.isMeshPhysicalMaterial
-            )
-              loadAndApply(textureUrl, "metalnessMap");
-            break;
-          case "aoMap":
-            if (
-              targetMaterial.isMeshStandardMaterial ||
-              targetMaterial.isMeshPhysicalMaterial
-            ) {
-              loadAndApply(textureUrl, "aoMap");
-              if (textureUrl && targetMaterial.aoMap)
-                targetMaterial.aoMapIntensity = 1.0;
-              else if (!textureUrl)
-                targetMaterial.aoMapIntensity =
-                  materialOverrideConfig?.aoMapIntensity ??
-                  (originalMaterial.isMeshStandardMaterial ||
-                  originalMaterial.isMeshPhysicalMaterial
-                    ? originalMaterial.aoMapIntensity
-                    : 0.0);
-            }
-            break;
-          case "emissiveMap":
-            loadAndApply(textureUrl, "emissiveMap", true);
-            if (
-              textureUrl &&
-              targetMaterial.emissiveMap &&
+              mapProperty === "emissiveMap" &&
               (targetMaterial.isMeshStandardMaterial ||
                 targetMaterial.isMeshPhysicalMaterial)
             ) {
-              targetMaterial.emissive.set(0xffffff);
+              targetMaterial.emissive = new THREE.Color(
+                materialOverrideConfig?.emissiveColor || 0x000000
+              ); // Default to black if map removed
               targetMaterial.emissiveIntensity =
-                materialOverrideConfig?.emissiveIntensity ??
-                (originalMaterial.isMeshStandardMaterial ||
-                originalMaterial.isMeshPhysicalMaterial
-                  ? originalMaterial.emissiveIntensity
-                  : 1.0);
+                materialOverrideConfig?.emissiveIntensity ?? 1.0;
             }
-            break;
-          default:
-            if (materialWasReplacedThisCall && callback) {
-              callback(true, "material_override_only");
-            } else if (callback) {
-              callback(false, mapType);
-            }
-            return;
+            targetMaterial.needsUpdate = true;
+            appliedOverall = true; // Still an operation
+            if (callback) callback(true, mapProperty); // Successful removal
+          }
+        };
+
+        // Apply specific maps
+        const validMapTypesForStandardPhysical = [
+          "map",
+          "normalMap",
+          "roughnessMap",
+          "metalnessMap",
+          "aoMap",
+          "emissiveMap",
+        ];
+        const validMapTypesForOther = ["map", "normalMap"]; // Toon, Basic, Lambert, Phong generally support map, some normalMap
+
+        if (
+          (targetMaterial.isMeshStandardMaterial ||
+            targetMaterial.isMeshPhysicalMaterial) &&
+          validMapTypesForStandardPhysical.includes(mapType)
+        ) {
+          loadAndApply(textureUrl, mapType);
+        } else if (
+          !(
+            targetMaterial.isMeshStandardMaterial ||
+            targetMaterial.isMeshPhysicalMaterial
+          ) &&
+          validMapTypesForOther.includes(mapType)
+        ) {
+          loadAndApply(textureUrl, mapType);
+        } else if (materialWasReplacedThisCall && callback) {
+          // Only material was changed, no specific texture for this mapType on this material type
+          if (callback)
+            callback(true, "material_override_only_no_texture_for_maptype");
+        } else if (callback) {
+          if (callback) callback(false, `map_type_${mapType}_not_supported`);
         }
       } else if (materialWasReplacedThisCall && callback) {
+        // Material changed, but no texture operation in this specific call
         callback(true, "material_override_only");
       } else if (callback && mapType) {
-        callback(false, mapType);
+        // mapType provided, but conditions not met for texture application
+        callback(false, `texture_application_failed_for_${mapType}`);
       }
     });
     return appliedOverall;
   }
-  if (mapType && callback) callback(false, mapType);
+  if (mapType && callback)
+    callback(false, `node_not_mesh_or_no_material_for_${mapType}`);
   return false;
 };
 
 export default function Model3DCreator() {
-  // ... (All state declarations - UNCHANGED from your previous complete version)
   const [shapes, setShapes] = useState([]);
   const [selectedShapeId, setSelectedShapeId] = useState(null);
-  const [mode, setMode] = useState("translate");
+  const [mode, setMode] = useState("translate"); // translate, rotate, scale
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
-  const [cameraPreset, setCameraPreset] = useState(null);
-  const sceneRef = useRef(null);
-  const [isAnimating, setIsAnimating] = useState(true);
-  const [isBaking, setIsBaking] = useState(false);
-  const [loadedGltfObjects, setLoadedGltfObjects] = useState({});
-  const [animationClips, setAnimationClips] = useState([]);
+  const [cameraPreset, setCameraPreset] = useState(null); // 'top', 'front', 'side', 'isometric'
+  const sceneRef = useRef(null); // Ref to the THREE.Scene object from R3F
+  const [isAnimating, setIsAnimating] = useState(true); // Global animation toggle for procedural shapes
+  const [isBaking, setIsBaking] = useState(false); // For GLB export loading state
+
+  const [loadedGltfObjects, setLoadedGltfObjects] = useState({}); // { [shapeId]: { scene, animations } }
+
+  // Animation playback state for GLBs
+  const [animationClips, setAnimationClips] = useState([]); // Array of AnimationClip from selected GLB
   const [selectedAnimationClipIndex, setSelectedAnimationClipIndex] =
-    useState(-1);
+    useState(-1); // Index for current clip
   const [animationPlaybackState, setAnimationPlaybackState] =
-    useState("stopped");
-  const [animationTime, setAnimationTime] = useState(0);
-  const [animationDuration, setAnimationDuration] = useState(0);
+    useState("stopped"); // 'playing', 'paused', 'stopped'
+  const [animationTime, setAnimationTime] = useState(0); // Current time of the animation (absolute)
+  const [animationDuration, setAnimationDuration] = useState(0); // Duration of the current/selected clip
   const [isAnimationLooping, setIsAnimationLooping] = useState(true);
   const [animationPlaybackSpeed, setAnimationPlaybackSpeed] = useState(1.0);
-  const [playAllAnimations, setPlayAllAnimations] = useState(false);
+  const [playAllAnimations, setPlayAllAnimations] = useState(false); // Play all clips of a GLB simultaneously
+
   const [forceCanvasRefreshKey, setForceCanvasRefreshKey] = useState(0);
+
   const selectedShape = shapes.find((shape) => shape.id === selectedShapeId);
+
   const jsonFileInputRef = useRef(null);
   const glbFileInputRef = useRef(null);
   const imageFileInputRef = useRef(null);
-  const shapeTextureFileInputRefs = useRef({});
-  const textTextureFileInputRefs = useRef({});
-  const creatorWrapperRef = useRef(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [activeMobilePanel, setActiveMobilePanel] = useState(null);
 
-  // ... (All callback functions like toggleFullscreen, saveState, addShape, etc. - UNCHANGED from your previous complete version)
+  // Refs for texture file inputs (one per map type)
+  const shapeTextureFileInputRefs = useRef({}); // For general shapes
+  const textTextureFileInputRefs = useRef({}); // For Text3D specific textures
+
+  const creatorWrapperRef = useRef(null); // Ref for the main container for fullscreen
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [activeMobilePanel, setActiveMobilePanel] = useState(null); // 'left', 'right', or null
+
   const toggleFullscreen = useCallback(async () => {
     if (!creatorWrapperRef.current) return;
     if (!document.fullscreenElement) {
       try {
         await creatorWrapperRef.current.requestFullscreen();
+        // setIsFullscreen(true) will be handled by the event listener
       } catch (err) {
-        console.error(
-          "Fullscreen request failed:",
-          err
-        ); /* alert("Fullscreen not available or denied."); */
+        console.error("Fullscreen request failed:", err.message, err.name);
+        // alert(`Error entering fullscreen: ${err.message}. Try browser's F11 key.`);
       }
     } else {
       if (document.exitFullscreen) {
         try {
           await document.exitFullscreen();
+          // setIsFullscreen(false) will be handled by the event listener
         } catch (err) {
-          console.error("Exit fullscreen failed:", err);
+          console.error("Exit fullscreen failed:", err.message, err.name);
         }
       }
     }
   }, []);
+
   useEffect(() => {
     const fsChangeHandler = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", fsChangeHandler);
     return () =>
       document.removeEventListener("fullscreenchange", fsChangeHandler);
   }, []);
+
   const toggleMobilePanel = useCallback((panel) => {
     setActiveMobilePanel((current) => (current === panel ? null : panel));
   }, []);
+
   const saveState = useCallback(() => {
-    if (isBaking) return;
+    if (isBaking) return; // Prevent state saving during baking
     const state = shapes.map((shape) => ({
       ...shape,
-      position: [...shape.position],
+      position: [...shape.position], // Deep copy arrays
       rotation: [...shape.rotation],
       scale: [...shape.scale],
       animation: shape.animation
@@ -411,6 +534,7 @@ export default function Model3DCreator() {
             orbitCenter: [...(shape.animation.orbitCenter || [0, 0, 0])],
           }
         : undefined,
+      // Deep copy textureProps and glbMaterialOverride
       textureProps: shape.textureProps
         ? { ...shape.textureProps }
         : { ...initialTextureProps },
@@ -422,8 +546,9 @@ export default function Model3DCreator() {
         : null,
     }));
     setUndoStack((prev) => [...prev, state]);
-    setRedoStack([]);
+    setRedoStack([]); // Clear redo stack on new action
   }, [shapes, isBaking]);
+
   const addImportedShape = useCallback(
     (gltfData, fileName, initialScaleFactor = 1) => {
       saveState();
@@ -435,22 +560,23 @@ export default function Model3DCreator() {
         position: [0, 0, 0],
         rotation: [0, 0, 0],
         scale: [initialScaleFactor, initialScaleFactor, initialScaleFactor],
-        animation: { type: "none" },
-        glbMaterialOverride: null,
-        textureProps: { ...initialTextureProps },
+        animation: { type: "none" }, // Placeholder for procedural animation, GLB uses its own clips
+        glbMaterialOverride: null, // { type: 'model', color: '#ffffff', roughness: 0.5, metalness: 0.0, ... }
+        textureProps: { ...initialTextureProps }, // For applying external textures
       };
       setShapes((prev) => [...prev, newShape]);
       setLoadedGltfObjects((prev) => ({
         ...prev,
         [newShapeId]: {
-          scene: gltfData.scene,
-          animations: gltfData.animations || [],
+          scene: gltfData.scene, // This is the THREE.Group/Scene
+          animations: gltfData.animations || [], // Array of THREE.AnimationClip
         },
       }));
       setSelectedShapeId(newShapeId);
     },
     [saveState]
   );
+
   const addImagePlane = useCallback(
     (imageDataUrl, originalWidth, originalHeight, fileName) => {
       saveState();
@@ -471,21 +597,22 @@ export default function Model3DCreator() {
         id: newShapeId,
         type: "imagePlane",
         name: fileName.split(".").slice(0, -1).join(".") || "Image Plane",
-        position: [0, planeHeight / 2, 0],
+        position: [0, planeHeight / 2, 0], // Center pivot at bottom for typical placement
         rotation: [0, 0, 0],
         scale: [1, 1, 1],
-        imageDataUrl,
+        imageDataUrl, // Base64 or blob URL
         originalWidth,
         originalHeight,
         planeWidth,
         planeHeight,
-        animation: { type: "none" },
+        animation: { type: "none" }, // Standard animation block
       };
       setShapes((prev) => [...prev, newShape]);
       setSelectedShapeId(newShape.id);
     },
     [saveState]
   );
+
   const addShape = useCallback(
     (geometryType, options = {}) => {
       if (geometryType === "importedGLB" || geometryType === "imagePlane") {
@@ -496,8 +623,10 @@ export default function Model3DCreator() {
       const newShapeBase = {
         id: Date.now().toString(),
         type: geometryType,
-        name: geometryType.charAt(0).toUpperCase() + geometryType.slice(1),
-        material: "standard",
+        name:
+          options.name ||
+          geometryType.charAt(0).toUpperCase() + geometryType.slice(1),
+        material: "standard", // Default material type
         color: `#${Math.floor(Math.random() * 16777215)
           .toString(16)
           .padStart(6, "0")}`,
@@ -508,8 +637,15 @@ export default function Model3DCreator() {
         ],
         rotation: [0, 0, 0],
         scale: [1, 1, 1],
+        // PBR properties (used by standard/physical materials)
         roughness: 0.5,
         metalness: 0.0,
+        // Physical material properties (used by physical material)
+        transmission: 0.0,
+        ior: 1.5,
+        thickness: 0.01,
+        // Phong shininess
+        shininess: 30,
         animation: {
           type: "none",
           speed: 1,
@@ -518,17 +654,19 @@ export default function Model3DCreator() {
           orbitRadius: 5,
           orbitPlane: "xz",
         },
-        textureProps: { ...initialTextureProps },
+        textureProps: { ...initialTextureProps }, // For standard textures
       };
+
       let specificProps = {};
       if (geometryType === "text") {
         specificProps = {
           text: "Text",
           textSize: 0.5,
-          extrudeDepth: 0.2,
+          extrudeDepth: 0.2, // Corresponds to "height" in Text3D
           name: "3D Text",
-          textTextureProps: { ...initialTextureProps },
+          textTextureProps: { ...initialTextureProps }, // Separate textures for text if needed
         };
+        // Adjust initial Y position based on text size and scale
         newShapeBase.position[1] =
           (specificProps.textSize || 0.5) * 0.5 * newShapeBase.scale[1];
       } else if (geometryType === "customExtruded") {
@@ -537,7 +675,7 @@ export default function Model3DCreator() {
             options.shapeType.slice(1)
           : "Custom";
         specificProps = {
-          shapeType: options.shapeType || "heart",
+          shapeType: options.shapeType || "heart", // Default custom shape
           shapeSize: options.shapeSize || 1,
           extrudeDepth: options.extrudeDepth || 0.2,
           name: shapeTypeName,
@@ -545,12 +683,14 @@ export default function Model3DCreator() {
         newShapeBase.position[1] =
           (specificProps.shapeSize / 2) * newShapeBase.scale[1];
       }
+
       const newShape = { ...newShapeBase, ...specificProps };
       setShapes((prev) => [...prev, newShape]);
       setSelectedShapeId(newShape.id);
     },
     [saveState]
   );
+
   const handleGlbFileImport = useCallback(
     (event) => {
       if (isBaking) {
@@ -565,32 +705,39 @@ export default function Model3DCreator() {
             const loader = getGltfLoader();
             loader.parse(
               e_reader.target.result,
-              "",
+              "", // path, not needed for ArrayBuffer
               (gltf) => {
                 const originalScene = gltf.scene;
+                // Center and scale the model
                 const box = new THREE.Box3().setFromObject(originalScene);
                 const center = box.getCenter(new THREE.Vector3());
                 const size = box.getSize(new THREE.Vector3());
+
                 let sceneToUse = originalScene;
                 let scaleFactor = 1;
-                const targetMaxSize = 3.0;
+                const targetMaxSize = 3.0; // Target max dimension for auto-scaling
                 const currentMaxSize = Math.max(size.x, size.y, size.z);
+
                 if (currentMaxSize > targetMaxSize && currentMaxSize > 0) {
                   scaleFactor = targetMaxSize / currentMaxSize;
                 } else if (currentMaxSize === 0) {
                   console.warn(
                     "Imported GLB has zero size. Scale not adjusted."
                   );
-                }
+                } // else, if smaller or equal, use original scaleFactor = 1
+
+                // If model is not centered, wrap it in a group and offset the original scene
                 if (center.lengthSq() > 0.0001) {
+                  // Check if center is significantly off [0,0,0]
                   const centeringGroup = new THREE.Group();
                   centeringGroup.name = originalScene.name
                     ? originalScene.name + "_centeringWrapper"
                     : "gltf_centeringWrapper";
                   centeringGroup.add(originalScene);
-                  originalScene.position.sub(center);
-                  sceneToUse = centeringGroup;
+                  originalScene.position.sub(center); // Offset the model inside the wrapper
+                  sceneToUse = centeringGroup; // Use the wrapper as the main scene object
                 }
+
                 const processedGltf = { ...gltf, scene: sceneToUse };
                 addImportedShape(processedGltf, file.name, scaleFactor);
               },
@@ -610,10 +757,11 @@ export default function Model3DCreator() {
         };
         reader.readAsArrayBuffer(file);
       }
-      if (event.target) event.target.value = null;
+      if (event.target) event.target.value = null; // Reset file input
     },
     [isBaking, addImportedShape]
   );
+
   const handleJsonFileImport = useCallback(
     (event) => {
       if (isBaking) {
@@ -647,6 +795,7 @@ export default function Model3DCreator() {
                           : [0, 0, 0],
                     }
                   : baseAnimation;
+
                 const baseShape = {
                   id: s.id || Date.now().toString() + Math.random(),
                   type: s.type || "box",
@@ -670,7 +819,22 @@ export default function Model3DCreator() {
                   textureProps: s.textureProps
                     ? { ...initialTextureProps, ...s.textureProps }
                     : { ...initialTextureProps },
+                  // Ensure all relevant material properties are loaded
+                  material: s.material || "standard",
+                  color:
+                    s.color ||
+                    `#${Math.floor(Math.random() * 16777215)
+                      .toString(16)
+                      .padStart(6, "0")}`,
+                  roughness: s.roughness !== undefined ? s.roughness : 0.5,
+                  metalness: s.metalness !== undefined ? s.metalness : 0.0,
+                  transmission:
+                    s.transmission !== undefined ? s.transmission : 0.0,
+                  ior: s.ior !== undefined ? s.ior : 1.5,
+                  thickness: s.thickness !== undefined ? s.thickness : 0.01,
+                  shininess: s.shininess !== undefined ? s.shininess : 30,
                 };
+
                 if (s.type === "importedGLB")
                   return {
                     ...baseShape,
@@ -686,16 +850,9 @@ export default function Model3DCreator() {
                     planeWidth: s.planeWidth,
                     planeHeight: s.planeHeight,
                   };
+
                 return {
                   ...baseShape,
-                  color:
-                    s.color ||
-                    `#${Math.floor(Math.random() * 16777215)
-                      .toString(16)
-                      .padStart(6, "0")}`,
-                  material: s.material || "standard",
-                  roughness: s.roughness !== undefined ? s.roughness : 0.5,
-                  metalness: s.metalness !== undefined ? s.metalness : 0.0,
                   ...(s.type === "text" && {
                     text: s.text || "Text",
                     textSize: s.textSize || 0.5,
@@ -715,12 +872,13 @@ export default function Model3DCreator() {
               setSelectedShapeId(null);
               setUndoStack([]);
               setRedoStack([]);
-              setLoadedGltfObjects({});
+              setLoadedGltfObjects({}); // Clear previously loaded GLB objects
               setIsAnimating(
                 jsonData.sceneSettings?.isAnimatingGlobal !== undefined
                   ? jsonData.sceneSettings.isAnimatingGlobal
                   : true
-              ); /* alert(`Scene loaded with ${newShapes.length} shapes. GLBs require re-importing files.`); */
+              );
+              // alert(`Scene loaded with ${newShapes.length} shapes. GLBs require re-importing files if not embedded or paths changed.`);
             } else {
               alert("Invalid JSON: 'shapes' array missing.");
             }
@@ -735,6 +893,7 @@ export default function Model3DCreator() {
     },
     [isBaking]
   );
+
   const handleImageFileImport = useCallback(
     (event) => {
       if (isBaking) {
@@ -766,23 +925,27 @@ export default function Model3DCreator() {
         };
         reader.readAsDataURL(file);
       } else if (file) {
-        alert("Please select a valid image file.");
+        // File selected but not an image
+        alert("Please select a valid image file (e.g., PNG, JPG).");
       }
       if (event.target) event.target.value = null;
     },
     [isBaking, addImagePlane]
   );
+
   const removeShape = useCallback(
     (shapeId) => {
       if (isBaking) return;
       saveState();
       const shapeToRemove = shapes.find((s) => s.id === shapeId);
       setShapes((prev) => prev.filter((shape) => shape.id !== shapeId));
+
       if (shapeToRemove && shapeToRemove.type === "importedGLB") {
         setLoadedGltfObjects((prev) => {
           const updated = { ...prev };
           const gltfObjectData = updated[shapeId];
           if (gltfObjectData && gltfObjectData.scene) {
+            // Basic cleanup of GLTF scene from memory
             gltfObjectData.scene.traverse((child) => {
               if (child.isMesh) {
                 child.geometry?.dispose();
@@ -808,6 +971,8 @@ export default function Model3DCreator() {
     },
     [selectedShapeId, saveState, isBaking, shapes]
   );
+
+  // Updates shape properties without saving to undo stack (e.g., during transform control drag)
   const updateShape = useCallback(
     (shapeId, updates) => {
       if (isBaking) return;
@@ -817,14 +982,19 @@ export default function Model3DCreator() {
     },
     [isBaking]
   );
+
   const updateShapeAndSave = useCallback(
     (shapeId, updates) => {
       if (isBaking) return;
-      saveState();
+      saveState(); // Save current state before updating
+
       setShapes((prevShapes) =>
         prevShapes.map((s) => {
           if (s.id === shapeId) {
             const newShape = { ...s, ...updates };
+
+            // If it's an imported GLB and material/texture properties are changing,
+            // we need to traverse its scene and apply changes directly.
             if (
               newShape.type === "importedGLB" &&
               (updates.hasOwnProperty("glbMaterialOverride") ||
@@ -833,45 +1003,45 @@ export default function Model3DCreator() {
               const gltfObjectData = loadedGltfObjects[shapeId];
               if (gltfObjectData && gltfObjectData.scene) {
                 gltfObjectData.scene.traverse((node) => {
-                  if (updates.hasOwnProperty("glbMaterialOverride")) {
-                    applyTextureToGLBNode(
-                      node,
-                      null,
-                      undefined,
-                      newShape.glbMaterialOverride,
-                      () => {}
-                    );
-                  }
-                  if (
-                    updates.hasOwnProperty("textureProps") &&
-                    newShape.textureProps
-                  ) {
-                    Object.keys(newShape.textureProps).forEach((mapUrlKey) => {
-                      const mapType = mapUrlKey.replace("Url", "");
-                      const url = newShape.textureProps[mapUrlKey];
+                  if (node.isMesh && node.material) {
+                    // Phase 1: Apply material override if it's part of the updates or if textures are changing
+                    if (
+                      updates.hasOwnProperty("glbMaterialOverride") ||
+                      updates.hasOwnProperty("textureProps")
+                    ) {
                       applyTextureToGLBNode(
                         node,
-                        mapType,
-                        url,
-                        newShape.glbMaterialOverride,
-                        () => {}
+                        null, // No specific texture map type, just material change
+                        undefined,
+                        newShape.glbMaterialOverride, // The latest material override config
+                        (success, mapProperty) => {
+                          /* console.log(`GLB Material override applied: ${success} for ${mapProperty}`); */
+                        }
                       );
-                    });
-                  } else if (
-                    updates.hasOwnProperty("glbMaterialOverride") &&
-                    newShape.textureProps
-                  ) {
-                    Object.keys(newShape.textureProps).forEach((mapUrlKey) => {
-                      const mapType = mapUrlKey.replace("Url", "");
-                      const url = newShape.textureProps[mapUrlKey];
-                      applyTextureToGLBNode(
-                        node,
-                        mapType,
-                        url,
-                        newShape.glbMaterialOverride,
-                        () => {}
-                      );
-                    });
+                    }
+
+                    // Phase 2: Apply all textureProps if they are part of the updates OR if the material override changed
+                    if (
+                      newShape.textureProps &&
+                      (updates.hasOwnProperty("textureProps") ||
+                        updates.hasOwnProperty("glbMaterialOverride"))
+                    ) {
+                      Object.keys(newShape.textureProps)
+                        .filter((k) => k.endsWith("Url"))
+                        .forEach((mapUrlKey) => {
+                          const mapType = mapUrlKey.replace("Url", "");
+                          const url = newShape.textureProps[mapUrlKey];
+                          applyTextureToGLBNode(
+                            node,
+                            mapType,
+                            url,
+                            newShape.glbMaterialOverride, // Pass current override config for context
+                            (success, appliedMapType) => {
+                              /* console.log(`GLB Texture ${appliedMapType} applied: ${success}`); */
+                            }
+                          );
+                        });
+                    }
                   }
                 });
               }
@@ -884,10 +1054,13 @@ export default function Model3DCreator() {
     },
     [saveState, isBaking, loadedGltfObjects]
   );
+
   const duplicateShape = useCallback(() => {
     if (!selectedShape || isBaking) return;
     saveState();
     const newId = Date.now().toString();
+
+    // Deep copy relevant properties, especially nested objects/arrays
     let duplicatedShapeData = {
       ...selectedShape,
       id: newId,
@@ -915,31 +1088,36 @@ export default function Model3DCreator() {
         ? { ...selectedShape.glbMaterialOverride }
         : null,
     };
+
     if (
       selectedShape.type === "importedGLB" &&
       loadedGltfObjects[selectedShape.id]
     ) {
       const originalGltfObject = loadedGltfObjects[selectedShape.id];
-      const clonedScene = originalGltfObject.scene.clone(true);
+      const clonedScene = originalGltfObject.scene.clone(true); // Deep clone the THREE.Object3D
+
+      // Re-apply material override and textures to the cloned scene
       if (
         duplicatedShapeData.glbMaterialOverride ||
         (duplicatedShapeData.textureProps &&
           Object.values(duplicatedShapeData.textureProps).some((v) => v))
       ) {
         clonedScene.traverse((node) => {
-          if (node.isMesh) {
-            if (duplicatedShapeData.glbMaterialOverride) {
-              applyTextureToGLBNode(
-                node,
-                null,
-                undefined,
-                duplicatedShapeData.glbMaterialOverride,
-                () => {}
-              );
-            }
+          if (node.isMesh && node.material) {
+            // Check node.material
+            // Apply material override first
+            applyTextureToGLBNode(
+              node,
+              null,
+              undefined,
+              duplicatedShapeData.glbMaterialOverride,
+              () => {}
+            );
+            // Then apply textures
             if (duplicatedShapeData.textureProps) {
-              Object.keys(duplicatedShapeData.textureProps).forEach(
-                (mapUrlKey) => {
+              Object.keys(duplicatedShapeData.textureProps)
+                .filter((k) => k.endsWith("Url"))
+                .forEach((mapUrlKey) => {
                   const mapType = mapUrlKey.replace("Url", "");
                   const url = duplicatedShapeData.textureProps[mapUrlKey];
                   applyTextureToGLBNode(
@@ -949,8 +1127,7 @@ export default function Model3DCreator() {
                     duplicatedShapeData.glbMaterialOverride,
                     () => {}
                   );
-                }
-              );
+                });
             }
           }
         });
@@ -964,31 +1141,42 @@ export default function Model3DCreator() {
         },
       }));
     }
+
     setShapes((prev) => [...prev, duplicatedShapeData]);
     setSelectedShapeId(newId);
   }, [selectedShape, saveState, isBaking, loadedGltfObjects]);
+
   const handleShapeClick = useCallback(
-    (shapeId) => {
+    (shapeId, event) => {
       if (isBaking) return;
       setSelectedShapeId(shapeId);
       if (window.innerWidth < 768 && activeMobilePanel !== "right") {
+        // md breakpoint
         setActiveMobilePanel("right");
       }
     },
     [isBaking, activeMobilePanel]
   );
+
+  // Callback from TransformControls or direct manipulation
   const handleShapeUpdateFromTransformControls = useCallback(
     (shapeIdToUpdate) => {
       if (isBaking || !shapeIdToUpdate || !sceneRef.current) return;
+
       const currentShapeData = shapes.find((s) => s.id === shapeIdToUpdate);
       if (!currentShapeData) return;
+
+      // Construct the expected name based on shapeData
+      // This needs to match the 'name' prop given to the <Shape> component's top-level mesh/group
       let objectNameSuffix =
         currentShapeData.name ||
         (currentShapeData.type === "text"
           ? currentShapeData.text?.substring(0, 10) || "Text"
           : currentShapeData.shapeType || currentShapeData.type);
+
       const objectName = `shape_${currentShapeData.id}_${currentShapeData.type}_${objectNameSuffix}`;
       const threeObject = sceneRef.current.getObjectByName(objectName);
+
       if (threeObject) {
         const newUpdates = {
           position: [
@@ -1007,8 +1195,11 @@ export default function Model3DCreator() {
             threeObject.scale.z,
           ],
         };
-        updateShapeAndSave(shapeIdToUpdate, newUpdates);
+        // Use updateShape for real-time feedback without creating excessive undo states.
+        // Save to undo stack happens on drag end or other explicit actions.
+        updateShape(shapeIdToUpdate, newUpdates); // Changed from updateShapeAndSave for performance
       } else {
+        // Fallback if precise name match fails (e.g. due to suffix truncation or issues)
         const simplerObjectName = `shape_${currentShapeData.id}`;
         const fallbackObject = sceneRef.current.getObjectByProperty(
           "name",
@@ -1032,30 +1223,35 @@ export default function Model3DCreator() {
               fallbackObject.scale.z,
             ],
           };
-          updateShapeAndSave(shapeIdToUpdate, newUpdates);
+          updateShape(shapeIdToUpdate, newUpdates);
         } else {
-          console.error(
-            `TransformControls target "${objectName}" or "${simplerObjectName}" not found.`
+          console.warn(
+            `TransformControls target "${objectName}" or prefix "${simplerObjectName}" not found in scene.`
           );
         }
       }
     },
-    [shapes, updateShapeAndSave, isBaking]
-  );
+    [shapes, updateShape, isBaking]
+  ); // updateShape instead of updateShapeAndSave
+
   const setCameraView = useCallback(
     (preset) => {
       if (isBaking) return;
       setCameraPreset(preset);
+      // Reset preset after a short delay to allow multiple clicks on the same preset button
       setTimeout(() => setCameraPreset(null), 100);
     },
     [isBaking]
   );
+
   const undo = useCallback(() => {
     if (undoStack.length === 0 || isBaking) return;
     const prevStates = [...undoStack];
     const stateToRestore = prevStates.pop();
+
     setRedoStack((prevRedo) => [
       shapes.map((s) => ({
+        // Current state before undoing
         ...s,
         position: [...s.position],
         rotation: [...s.rotation],
@@ -1080,6 +1276,8 @@ export default function Model3DCreator() {
     ]);
     setUndoStack(prevStates);
     setShapes(stateToRestore);
+
+    // After restoring state, re-apply GLB materials/textures if necessary
     stateToRestore.forEach((shape) => {
       if (
         shape.type === "importedGLB" &&
@@ -1090,42 +1288,47 @@ export default function Model3DCreator() {
         const gltfObjectData = loadedGltfObjects[shape.id];
         if (gltfObjectData && gltfObjectData.scene) {
           gltfObjectData.scene.traverse((node) => {
-            if (node.isMesh) {
-              if (shape.glbMaterialOverride) {
-                applyTextureToGLBNode(
-                  node,
-                  null,
-                  undefined,
-                  shape.glbMaterialOverride,
-                  () => {}
-                );
-              }
+            if (node.isMesh && node.material) {
+              // Apply material override first
+              applyTextureToGLBNode(
+                node,
+                null,
+                undefined,
+                shape.glbMaterialOverride,
+                () => {}
+              );
+              // Then apply textures
               if (shape.textureProps) {
-                Object.keys(shape.textureProps).forEach((mapUrlKey) => {
-                  const mapType = mapUrlKey.replace("Url", "");
-                  const url = shape.textureProps[mapUrlKey];
-                  applyTextureToGLBNode(
-                    node,
-                    mapType,
-                    url,
-                    shape.glbMaterialOverride,
-                    () => {}
-                  );
-                });
+                Object.keys(shape.textureProps)
+                  .filter((k) => k.endsWith("Url"))
+                  .forEach((mapUrlKey) => {
+                    const mapType = mapUrlKey.replace("Url", "");
+                    const url = shape.textureProps[mapUrlKey];
+                    applyTextureToGLBNode(
+                      node,
+                      mapType,
+                      url,
+                      shape.glbMaterialOverride,
+                      () => {}
+                    );
+                  });
               }
             }
           });
         }
       }
     });
-    setSelectedShapeId(null);
+    setSelectedShapeId(null); // Deselect shape on undo/redo
   }, [undoStack, shapes, isBaking, loadedGltfObjects]);
+
   const redo = useCallback(() => {
     if (redoStack.length === 0 || isBaking) return;
     const nextStates = [...redoStack];
     const stateToRestore = nextStates.shift();
+
     setUndoStack((prevUndo) => [
       shapes.map((s) => ({
+        // Current state before redoing
         ...s,
         position: [...s.position],
         rotation: [...s.rotation],
@@ -1150,6 +1353,8 @@ export default function Model3DCreator() {
     ]);
     setRedoStack(nextStates);
     setShapes(stateToRestore);
+
+    // After restoring state, re-apply GLB materials/textures
     stateToRestore.forEach((shape) => {
       if (
         shape.type === "importedGLB" &&
@@ -1160,28 +1365,28 @@ export default function Model3DCreator() {
         const gltfObjectData = loadedGltfObjects[shape.id];
         if (gltfObjectData && gltfObjectData.scene) {
           gltfObjectData.scene.traverse((node) => {
-            if (node.isMesh) {
-              if (shape.glbMaterialOverride) {
-                applyTextureToGLBNode(
-                  node,
-                  null,
-                  undefined,
-                  shape.glbMaterialOverride,
-                  () => {}
-                );
-              }
+            if (node.isMesh && node.material) {
+              applyTextureToGLBNode(
+                node,
+                null,
+                undefined,
+                shape.glbMaterialOverride,
+                () => {}
+              );
               if (shape.textureProps) {
-                Object.keys(shape.textureProps).forEach((mapUrlKey) => {
-                  const mapType = mapUrlKey.replace("Url", "");
-                  const url = shape.textureProps[mapUrlKey];
-                  applyTextureToGLBNode(
-                    node,
-                    mapType,
-                    url,
-                    shape.glbMaterialOverride,
-                    () => {}
-                  );
-                });
+                Object.keys(shape.textureProps)
+                  .filter((k) => k.endsWith("Url"))
+                  .forEach((mapUrlKey) => {
+                    const mapType = mapUrlKey.replace("Url", "");
+                    const url = shape.textureProps[mapUrlKey];
+                    applyTextureToGLBNode(
+                      node,
+                      mapType,
+                      url,
+                      shape.glbMaterialOverride,
+                      () => {}
+                    );
+                  });
               }
             }
           });
@@ -1190,6 +1395,7 @@ export default function Model3DCreator() {
     });
     setSelectedShapeId(null);
   }, [redoStack, shapes, isBaking, loadedGltfObjects]);
+
   const exportJSON = useCallback(() => {
     if (isBaking) {
       alert("Cannot export while baking.");
@@ -1201,6 +1407,7 @@ export default function Model3DCreator() {
     }
     try {
       const serializableShapes = shapes.map((s) => {
+        // Base properties common to all shapes
         const baseShape = {
           id: s.id,
           type: s.type,
@@ -1230,17 +1437,23 @@ export default function Model3DCreator() {
           textureProps: s.textureProps
             ? { ...s.textureProps }
             : { ...initialTextureProps },
+          // Include all material related properties for non-GLB, non-ImagePlane shapes
+          material: s.material,
+          color: s.color,
+          roughness: s.roughness,
+          metalness: s.metalness,
+          transmission: s.transmission,
+          ior: s.ior,
+          thickness: s.thickness,
+          shininess: s.shininess,
         };
+
         if (s.type === "text")
           return {
             ...baseShape,
             text: s.text,
             textSize: s.textSize,
             extrudeDepth: s.extrudeDepth,
-            color: s.color,
-            material: s.material,
-            roughness: s.roughness,
-            metalness: s.metalness,
             textTextureProps: s.textTextureProps
               ? { ...s.textTextureProps }
               : { ...initialTextureProps },
@@ -1251,10 +1464,6 @@ export default function Model3DCreator() {
             shapeType: s.shapeType,
             shapeSize: s.shapeSize,
             extrudeDepth: s.extrudeDepth,
-            color: s.color,
-            material: s.material,
-            roughness: s.roughness,
-            metalness: s.metalness,
           };
         else if (s.type === "importedGLB")
           return {
@@ -1264,6 +1473,7 @@ export default function Model3DCreator() {
               ? { ...s.glbMaterialOverride }
               : null,
           };
+        // GLB specific
         else if (s.type === "imagePlane")
           return {
             ...baseShape,
@@ -1272,18 +1482,14 @@ export default function Model3DCreator() {
             originalHeight: s.originalHeight,
             planeWidth: s.planeWidth,
             planeHeight: s.planeHeight,
-          };
-        return {
-          ...baseShape,
-          color: s.color,
-          material: s.material,
-          roughness: s.roughness,
-          metalness: s.metalness,
-        };
+          }; // ImagePlane specific
+
+        return baseShape; // For box, sphere, etc.
       });
+
       const sceneData = {
         metadata: {
-          version: "2.9.1-glb-material-texture-fix",
+          version: "2.9.2-robust-materials-fix",
           type: "PBR Model Creator Scene",
           generator: "Creator Pro",
           created: new Date().toISOString(),
@@ -1291,6 +1497,7 @@ export default function Model3DCreator() {
         shapes: serializableShapes,
         sceneSettings: { isAnimatingGlobal: isAnimating },
       };
+
       const jsonString = JSON.stringify(sceneData, null, 2);
       const blob = new Blob([jsonString], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -1301,12 +1508,13 @@ export default function Model3DCreator() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      alert(`Exported ${shapes.length} shapes to JSON successfully!`);
+      // alert(`Exported ${shapes.length} shapes to JSON successfully!`);
     } catch (error) {
       console.error("[EXPORT JSON] Failed:", error);
       alert("Failed to export scene as JSON: " + error.message);
     }
   }, [shapes, isAnimating, isBaking]);
+
   const exportStaticGLBFile = useCallback(async () => {
     if (isBaking) {
       alert("Cannot export while baking.");
@@ -1316,20 +1524,25 @@ export default function Model3DCreator() {
       alert("No shapes to export.");
       return;
     }
+
     try {
       setIsBaking(true);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50)); // Short delay for UI update
+
       const exportScene = new THREE.Scene();
       exportScene.name = "StaticExportScene";
+      // Add some basic lighting to the export scene
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
       exportScene.add(ambientLight);
       const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
       directionalLight.position.set(8, 15, 10);
       directionalLight.castShadow = true;
       exportScene.add(directionalLight);
+
       let successfullyAddedCount = 0;
-      const textureLoaderForExport = new THREE.TextureLoader();
-      const loadTextureAsync = (url) =>
+      const textureLoaderForExport = new ThreeTextureLoader();
+
+      const loadTextureAsync = (url, isColorData = false) =>
         new Promise((resolve) => {
           if (!url || typeof url !== "string" || url.trim() === "") {
             resolve(null);
@@ -1338,7 +1551,10 @@ export default function Model3DCreator() {
           textureLoaderForExport.load(
             url,
             (texture) => {
-              texture.flipY = false;
+              texture.colorSpace = isColorData
+                ? THREE.SRGBColorSpace
+                : THREE.LinearSRGBColorSpace;
+              texture.flipY = false; // GLTF standard
               texture.needsUpdate = true;
               resolve(texture);
             },
@@ -1349,14 +1565,21 @@ export default function Model3DCreator() {
             }
           );
         });
+
       const meshPromises = shapes.map(async (shapeData) => {
         if (shapeData.type === "importedGLB") {
           const gltfObjectData = loadedGltfObjects[shapeData.id];
           if (gltfObjectData && gltfObjectData.scene) {
             const modelClone = gltfObjectData.scene.clone(true);
+
+            // Apply material override and textures if present
             if (
-              shapeData.glbMaterialOverride &&
-              shapeData.glbMaterialOverride.type !== "model"
+              shapeData.glbMaterialOverride ||
+              (shapeData.textureProps &&
+                Object.values(shapeData.textureProps).some(
+                  (v) =>
+                    v && typeof v === "string" && v.startsWith("data:image")
+                ))
             ) {
               await modelClone.traverse(async (node) => {
                 if (node.isMesh && node.material) {
@@ -1364,70 +1587,159 @@ export default function Model3DCreator() {
                     ? node.material
                     : [node.material];
                   const newMaterials = [];
+
                   for (let i = 0; i < originalMaterials.length; i++) {
+                    constmatInstance = originalMaterials[i];
+                    let newMaterialInstance;
                     const overrideConf = shapeData.glbMaterialOverride;
-                    const newMaterialProps = {
-                      color: new THREE.Color(overrideConf.color || "#cccccc"),
-                    };
-                    if (
-                      overrideConf.type === "standard" ||
-                      overrideConf.type === "physical"
-                    ) {
-                      newMaterialProps.roughness =
-                        overrideConf.roughness ?? 0.5;
-                      newMaterialProps.metalness =
-                        overrideConf.metalness ?? 0.0;
+
+                    if (overrideConf && overrideConf.type !== "model") {
+                      const newMaterialProps = {
+                        color: new THREE.Color(
+                          overrideConf.color || matInstance.color || "#cccccc"
+                        ),
+                        side: THREE.DoubleSide,
+                      };
+                      if (
+                        overrideConf.type === "standard" ||
+                        overrideConf.type === "physical"
+                      ) {
+                        newMaterialProps.roughness =
+                          overrideConf.roughness ?? 0.5;
+                        newMaterialProps.metalness =
+                          overrideConf.metalness ?? 0.0;
+                      }
+                      let NewCtor;
+                      switch (overrideConf.type) {
+                        case "physical":
+                          NewCtor = THREE.MeshPhysicalMaterial;
+                          newMaterialProps.transmission =
+                            overrideConf.transmission ?? 0.0;
+                          newMaterialProps.ior = overrideConf.ior ?? 1.5;
+                          newMaterialProps.thickness =
+                            overrideConf.thickness ?? 0.01;
+                          // Add other physical props from overrideConf
+                          break;
+                        case "toon":
+                          NewCtor = THREE.MeshToonMaterial;
+                          break;
+                        case "basic":
+                          NewCtor = THREE.MeshBasicMaterial;
+                          break;
+                        case "lambert":
+                          NewCtor = THREE.MeshLambertMaterial;
+                          break;
+                        case "phong":
+                          NewCtor = THREE.MeshPhongMaterial;
+                          newMaterialProps.shininess =
+                            overrideConf.shininess ?? 30;
+                          break;
+                        case "wireframe":
+                          NewCtor = THREE.MeshBasicMaterial;
+                          newMaterialProps.wireframe = true;
+                          break;
+                        default:
+                          NewCtor = THREE.MeshStandardMaterial;
+                      }
+                      newMaterialInstance = new NewCtor(newMaterialProps);
+                      newMaterialInstance.name =
+                        (matInstance.name || `glb_mat_export_${i}`) +
+                        `_override_${overrideConf.type}`;
+                    } else {
+                      newMaterialInstance = matInstance.clone(); // Clone original or existing material if no override type or type is 'model'
                     }
-                    if (overrideConf.type === "physical") {
-                      newMaterialProps.transmission =
-                        overrideConf.transmission ?? 0.0;
-                      newMaterialProps.ior = overrideConf.ior ?? 1.5;
-                      newMaterialProps.thickness =
-                        overrideConf.thickness ?? 0.01;
-                    }
-                    let NewCtor;
-                    switch (overrideConf.type) {
-                      case "physical":
-                        NewCtor = THREE.MeshPhysicalMaterial;
-                        break;
-                      default:
-                        NewCtor = THREE.MeshStandardMaterial;
-                    }
-                    const newMaterialInstance = new NewCtor(newMaterialProps);
-                    newMaterialInstance.name =
-                      (originalMaterials[i].name ||
-                        `glb_material_export_${i}`) + "_override";
+
+                    // Apply textures from shapeData.textureProps
                     if (shapeData.textureProps) {
-                      for (const mapUrlKey of Object.keys(
-                        shapeData.textureProps
-                      )) {
-                        const mapType = mapUrlKey.replace("Url", "");
-                        const url = shapeData.textureProps[mapUrlKey];
-                        if (
-                          url &&
-                          newMaterialInstance.hasOwnProperty(mapType)
-                        ) {
-                          const texture = await loadTextureAsync(url);
-                          if (texture) {
-                            if (
-                              newMaterialInstance[mapType] &&
-                              newMaterialInstance[mapType].isTexture
-                            )
-                              newMaterialInstance[mapType].dispose();
-                            newMaterialInstance[mapType] = texture;
-                            if (
-                              mapType === "map" &&
-                              (newMaterialInstance.isMeshStandardMaterial ||
-                                newMaterialInstance.isMeshPhysicalMaterial)
-                            )
-                              newMaterialInstance.color.set(0xffffff);
-                            if (mapType === "map" || mapType === "emissiveMap")
-                              texture.colorSpace = THREE.SRGBColorSpace;
-                            else
-                              texture.colorSpace = THREE.LinearSRGBColorSpace;
+                      if (shapeData.textureProps.mapUrl) {
+                        newMaterialInstance.map = await loadTextureAsync(
+                          shapeData.textureProps.mapUrl,
+                          true
+                        );
+                        if (newMaterialInstance.map)
+                          newMaterialInstance.color.set(0xffffff);
+                      }
+                      if (
+                        shapeData.textureProps.normalMapUrl &&
+                        newMaterialInstance.normalMap !== undefined
+                      )
+                        newMaterialInstance.normalMap = await loadTextureAsync(
+                          shapeData.textureProps.normalMapUrl,
+                          false
+                        );
+                      if (
+                        shapeData.textureProps.roughnessMapUrl &&
+                        newMaterialInstance.roughnessMap !== undefined
+                      )
+                        newMaterialInstance.roughnessMap =
+                          await loadTextureAsync(
+                            shapeData.textureProps.roughnessMapUrl,
+                            false
+                          );
+                      if (
+                        shapeData.textureProps.metalnessMapUrl &&
+                        newMaterialInstance.metalnessMap !== undefined
+                      )
+                        newMaterialInstance.metalnessMap =
+                          await loadTextureAsync(
+                            shapeData.textureProps.metalnessMapUrl,
+                            false
+                          );
+                      if (
+                        shapeData.textureProps.aoMapUrl &&
+                        newMaterialInstance.aoMap !== undefined
+                      ) {
+                        newMaterialInstance.aoMap = await loadTextureAsync(
+                          shapeData.textureProps.aoMapUrl,
+                          false
+                        );
+                        if (newMaterialInstance.aoMap) {
+                          newMaterialInstance.aoMapIntensity =
+                            shapeData.textureProps.aoMapIntensity ?? 1.0;
+                          if (
+                            node.geometry &&
+                            !node.geometry.attributes.uv2 &&
+                            node.geometry.attributes.uv
+                          ) {
+                            node.geometry.setAttribute(
+                              "uv2",
+                              node.geometry.attributes.uv.clone()
+                            );
                           }
                         }
                       }
+                      if (
+                        shapeData.textureProps.emissiveMapUrl &&
+                        newMaterialInstance.emissiveMap !== undefined
+                      ) {
+                        newMaterialInstance.emissiveMap =
+                          await loadTextureAsync(
+                            shapeData.textureProps.emissiveMapUrl,
+                            true
+                          );
+                        if (newMaterialInstance.emissiveMap) {
+                          newMaterialInstance.emissive = new THREE.Color(
+                            shapeData.textureProps.emissiveColor || 0xffffff
+                          );
+                          newMaterialInstance.emissiveIntensity =
+                            shapeData.textureProps.emissiveIntensity ?? 1.0;
+                        }
+                      }
+                      // Apply non-map PBR props if no map is present for them
+                      if (
+                        newMaterialInstance.hasOwnProperty("roughness") &&
+                        !newMaterialInstance.roughnessMap &&
+                        shapeData.textureProps.roughness !== undefined
+                      )
+                        newMaterialInstance.roughness =
+                          shapeData.textureProps.roughness;
+                      if (
+                        newMaterialInstance.hasOwnProperty("metalness") &&
+                        !newMaterialInstance.metalnessMap &&
+                        shapeData.textureProps.metalness !== undefined
+                      )
+                        newMaterialInstance.metalness =
+                          shapeData.textureProps.metalness;
                     }
                     newMaterialInstance.needsUpdate = true;
                     newMaterials.push(newMaterialInstance);
@@ -1436,62 +1748,8 @@ export default function Model3DCreator() {
                     newMaterials.length === 1 ? newMaterials[0] : newMaterials;
                 }
               });
-            } else if (shapeData.textureProps) {
-              await modelClone.traverse(async (node) => {
-                if (node.isMesh && node.material) {
-                  const materialsToUpdate = Array.isArray(node.material)
-                    ? node.material
-                    : [node.material];
-                  for (const mat of materialsToUpdate) {
-                    let colorSetByMap = false;
-                    for (const mapUrlKey of Object.keys(
-                      shapeData.textureProps
-                    )) {
-                      const mapType = mapUrlKey.replace("Url", "");
-                      const url = shapeData.textureProps[mapUrlKey];
-                      if (url && mat.hasOwnProperty(mapType)) {
-                        const texture = await loadTextureAsync(url);
-                        if (texture) {
-                          if (mat[mapType] && mat[mapType].isTexture)
-                            mat[mapType].dispose();
-                          mat[mapType] = texture;
-                          if (
-                            mapType === "map" &&
-                            (mat.isMeshStandardMaterial ||
-                              mat.isMeshPhysicalMaterial)
-                          ) {
-                            mat.color.set(0xffffff);
-                            colorSetByMap = true;
-                          }
-                          if (mapType === "map" || mapType === "emissiveMap")
-                            texture.colorSpace = THREE.SRGBColorSpace;
-                          else texture.colorSpace = THREE.LinearSRGBColorSpace;
-                        }
-                      } else if (!url && mat.hasOwnProperty(mapType)) {
-                        if (mat[mapType] && mat[mapType].isTexture)
-                          mat[mapType].dispose();
-                        mat[mapType] = null;
-                        if (
-                          mapType === "map" &&
-                          (mat.isMeshStandardMaterial ||
-                            mat.isMeshPhysicalMaterial) &&
-                          !colorSetByMap
-                        ) {
-                          mat.color.set(
-                            new THREE.Color(
-                              shapeData.glbMaterialOverride?.color ||
-                                mat.userData.originalColorHex ||
-                                0xcccccc
-                            )
-                          );
-                        }
-                      }
-                    }
-                    mat.needsUpdate = true;
-                  }
-                }
-              });
             }
+
             modelClone.position.fromArray(shapeData.position);
             modelClone.rotation.fromArray(shapeData.rotation);
             modelClone.scale.fromArray(shapeData.scale);
@@ -1508,8 +1766,11 @@ export default function Model3DCreator() {
           }
           return null;
         }
+
+        // Procedural shapes (Text, Box, Sphere, etc.)
         let mesh;
         if (shapeData.type === "text") {
+          // Special handling for Text
           let fontToUse = helvetikerFontForExport;
           if (!fontToUse) {
             try {
@@ -1523,6 +1784,7 @@ export default function Model3DCreator() {
               });
               if (!helvetikerFontForExport) helvetikerFontForExport = fontToUse;
             } catch (e) {
+              console.error("Text export: Font load failed", e);
               return null;
             }
           }
@@ -1542,112 +1804,105 @@ export default function Model3DCreator() {
             bevelOffset: 0,
             bevelSegments: 3,
           });
-          textGeo.computeBoundingBox();
-          const actualZDepth =
-            textGeo.boundingBox.max.z - textGeo.boundingBox.min.z;
-          const expectedZDepth = tD;
-          let zScaleFactor = 1.0;
-          if (
-            actualZDepth !== 0 &&
-            !isNaN(actualZDepth) &&
-            isFinite(actualZDepth) &&
-            expectedZDepth !== 0
-          ) {
-            zScaleFactor = expectedZDepth / actualZDepth;
-          } else if (expectedZDepth === 0 && actualZDepth === 0)
-            zScaleFactor = 1.0;
-          if (
-            Math.abs(zScaleFactor - 1.0) > 0.0001 &&
-            isFinite(zScaleFactor) &&
-            zScaleFactor > 0
-          )
-            textGeo.scale(1, 1, zScaleFactor);
+          // Manual centering for TextGeometry
           textGeo.computeBoundingBox();
           const centerOffsetX =
             -0.5 * (textGeo.boundingBox.max.x + textGeo.boundingBox.min.x);
           const centerOffsetY =
             -0.5 * (textGeo.boundingBox.max.y + textGeo.boundingBox.min.y);
-          let centerOffsetZ =
+          const centerOffsetZ =
             -0.5 * (textGeo.boundingBox.max.z + textGeo.boundingBox.min.z);
-          if (tD === 0) centerOffsetZ = 0;
           textGeo.translate(centerOffsetX, centerOffsetY, centerOffsetZ);
-          const material = new THREE.MeshStandardMaterial({
+
+          const materialProps = {
             color: new THREE.Color(shapeData.color || "#ffffff"),
-            roughness: saneNumber(shapeData.roughness, 0.5),
-            metalness: saneNumber(shapeData.metalness, 0.0),
-          });
-          const texProps = shapeData.textTextureProps || initialTextureProps;
+            side: THREE.DoubleSide,
+          };
+          if (
+            shapeData.material === "standard" ||
+            shapeData.material === "physical"
+          ) {
+            materialProps.roughness = saneNumber(shapeData.roughness, 0.5);
+            materialProps.metalness = saneNumber(shapeData.metalness, 0.0);
+          }
+          let material;
+          switch (shapeData.material) {
+            case "physical":
+              material = new THREE.MeshPhysicalMaterial({
+                ...materialProps,
+                transmission: saneNumber(shapeData.transmission, 0.0),
+                ior: saneNumber(shapeData.ior, 1.5),
+                thickness: saneNumber(shapeData.thickness, 0.01),
+              });
+              break;
+            // Add other cases as in createMeshFromShape
+            default:
+              material = new THREE.MeshStandardMaterial(materialProps);
+          }
+
+          const texProps =
+            shapeData.textTextureProps ||
+            shapeData.textureProps ||
+            initialTextureProps;
           if (texProps.mapUrl) {
-            material.map = await loadTextureAsync(texProps.mapUrl);
-            if (material.map) {
-              material.color.set(0xffffff);
-              material.map.colorSpace = THREE.SRGBColorSpace;
-            }
+            material.map = await loadTextureAsync(texProps.mapUrl, true);
+            if (material.map) material.color.set(0xffffff);
           }
-          if (texProps.normalMapUrl) {
-            material.normalMap = await loadTextureAsync(texProps.normalMapUrl);
-            if (material.normalMap)
-              material.normalMap.colorSpace = THREE.LinearSRGBColorSpace;
-          }
+          if (texProps.normalMapUrl && material.normalMap !== undefined)
+            material.normalMap = await loadTextureAsync(
+              texProps.normalMapUrl,
+              false
+            );
+          // ... add other texture types for text if supported by its material ...
           mesh = new THREE.Mesh(textGeo, material);
         } else {
-          mesh = await createMeshFromShape(shapeData);
+          // Other procedural shapes or image planes
+          mesh = await createMeshFromShape(shapeData); // This creates mesh with basic material
           if (
             mesh &&
             shapeData.textureProps &&
             shapeData.type !== "imagePlane"
           ) {
+            // Re-apply textures with correct color spaces if createMeshFromShape doesn't handle them all
+            const newMaterial = mesh.material.clone(); // Clone to avoid modifying shared material
             const texProps = shapeData.textureProps;
-            const newMaterial = mesh.material.clone();
             let colorSetByMap = false;
+
             if (texProps.mapUrl) {
-              newMaterial.map = await loadTextureAsync(texProps.mapUrl);
+              newMaterial.map = await loadTextureAsync(texProps.mapUrl, true);
               if (newMaterial.map) {
                 newMaterial.color.set(0xffffff);
-                newMaterial.map.colorSpace = THREE.SRGBColorSpace;
                 colorSetByMap = true;
               }
             }
-            if (texProps.normalMapUrl) {
+            if (texProps.normalMapUrl && newMaterial.normalMap !== undefined)
               newMaterial.normalMap = await loadTextureAsync(
-                texProps.normalMapUrl
+                texProps.normalMapUrl,
+                false
               );
-              if (newMaterial.normalMap)
-                newMaterial.normalMap.colorSpace = THREE.LinearSRGBColorSpace;
-            }
             if (
               texProps.roughnessMapUrl &&
-              (newMaterial.isMeshStandardMaterial ||
-                newMaterial.isMeshPhysicalMaterial)
-            ) {
+              newMaterial.roughnessMap !== undefined
+            )
               newMaterial.roughnessMap = await loadTextureAsync(
-                texProps.roughnessMapUrl
+                texProps.roughnessMapUrl,
+                false
               );
-              if (newMaterial.roughnessMap)
-                newMaterial.roughnessMap.colorSpace =
-                  THREE.LinearSRGBColorSpace;
-            }
             if (
               texProps.metalnessMapUrl &&
-              (newMaterial.isMeshStandardMaterial ||
-                newMaterial.isMeshPhysicalMaterial)
-            ) {
+              newMaterial.metalnessMap !== undefined
+            )
               newMaterial.metalnessMap = await loadTextureAsync(
-                texProps.metalnessMapUrl
+                texProps.metalnessMapUrl,
+                false
               );
-              if (newMaterial.metalnessMap)
-                newMaterial.metalnessMap.colorSpace =
-                  THREE.LinearSRGBColorSpace;
-            }
-            if (
-              texProps.aoMapUrl &&
-              (newMaterial.isMeshStandardMaterial ||
-                newMaterial.isMeshPhysicalMaterial)
-            ) {
-              newMaterial.aoMap = await loadTextureAsync(texProps.aoMapUrl);
+            if (texProps.aoMapUrl && newMaterial.aoMap !== undefined) {
+              newMaterial.aoMap = await loadTextureAsync(
+                texProps.aoMapUrl,
+                false
+              );
               if (newMaterial.aoMap) {
-                newMaterial.aoMapIntensity = 1.0;
-                newMaterial.aoMap.colorSpace = THREE.LinearSRGBColorSpace;
+                newMaterial.aoMapIntensity = texProps.aoMapIntensity ?? 1.0;
                 if (
                   mesh.geometry.attributes.uv2 === undefined &&
                   mesh.geometry.attributes.uv
@@ -1659,26 +1914,44 @@ export default function Model3DCreator() {
                 }
               }
             }
-            if (texProps.emissiveMapUrl) {
+            if (
+              texProps.emissiveMapUrl &&
+              newMaterial.emissiveMap !== undefined
+            ) {
               newMaterial.emissiveMap = await loadTextureAsync(
-                texProps.emissiveMapUrl
+                texProps.emissiveMapUrl,
+                true
               );
               if (newMaterial.emissiveMap) {
-                newMaterial.emissive = new THREE.Color(0xffffff);
-                newMaterial.emissiveIntensity = 1.0;
-                newMaterial.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+                newMaterial.emissive = new THREE.Color(
+                  texProps.emissiveColor || 0xffffff
+                );
+                newMaterial.emissiveIntensity =
+                  texProps.emissiveIntensity ?? 1.0;
               }
             }
+            // Apply non-map PBR props if no map is present for them
+            if (
+              newMaterial.hasOwnProperty("roughness") &&
+              !newMaterial.roughnessMap &&
+              texProps.roughness !== undefined
+            )
+              newMaterial.roughness = texProps.roughness;
+            if (
+              newMaterial.hasOwnProperty("metalness") &&
+              !newMaterial.metalnessMap &&
+              texProps.metalness !== undefined
+            )
+              newMaterial.metalness = texProps.metalness;
+
             if (!colorSetByMap && shapeData.color)
-              newMaterial.color.set(shapeData.color);
-            if (shapeData.roughness !== undefined && !newMaterial.roughnessMap)
-              newMaterial.roughness = shapeData.roughness;
-            if (shapeData.metalness !== undefined && !newMaterial.metalnessMap)
-              newMaterial.metalness = shapeData.metalness;
-            mesh.material.dispose();
+              newMaterial.color.set(shapeData.color); // Restore base color if no map
+
+            mesh.material.dispose(); // Dispose old material from createMeshFromShape
             mesh.material = newMaterial;
           }
         }
+
         if (mesh) {
           mesh.position.fromArray(shapeData.position);
           mesh.rotation.fromArray(shapeData.rotation);
@@ -1692,6 +1965,7 @@ export default function Model3DCreator() {
         }
         return null;
       });
+
       const meshes = (await Promise.all(meshPromises)).filter(
         (m) => m !== null
       );
@@ -1701,15 +1975,15 @@ export default function Model3DCreator() {
           successfullyAddedCount++;
         }
       });
+
       if (successfullyAddedCount === 0) {
         alert("No shapes could be prepared for Static GLB export.");
         setIsBaking(false);
         return;
       }
+
       exportToGLB(exportScene, `static-model-${Date.now()}.glb`);
-      alert(
-        `Exported ${successfullyAddedCount} shapes to Static GLB successfully!`
-      );
+      // alert(`Exported ${successfullyAddedCount} shapes to Static GLB successfully!`);
     } catch (error) {
       console.error("[STATIC GLB EXPORT] Critical error:", error);
       alert("Static GLB Export failed: " + error.message);
@@ -1717,6 +1991,7 @@ export default function Model3DCreator() {
       setIsBaking(false);
     }
   }, [shapes, loadedGltfObjects, isBaking]);
+
   const bakeAndExportAnimatedGLB = useCallback(async () => {
     if (shapes.length === 0) {
       alert("No shapes to export for animation.");
@@ -1728,6 +2003,7 @@ export default function Model3DCreator() {
     }
     setIsBaking(true);
     await new Promise((resolve) => setTimeout(resolve, 50));
+
     try {
       const exportScene = new THREE.Scene();
       exportScene.name = "BakedAnimatedScene";
@@ -1737,19 +2013,24 @@ export default function Model3DCreator() {
       directionalLight.position.set(8, 15, 10);
       directionalLight.castShadow = true;
       exportScene.add(directionalLight);
+
       const allBakedClips = [];
-      let allOriginalClips = [];
+      let allOriginalClipsFromGLBs = [];
       let processedShapeCount = 0;
-      const textureLoaderForExport = new THREE.TextureLoader();
-      const loadTextureAsync = (url) =>
+
+      const textureLoaderForAnimExport = new ThreeTextureLoader();
+      const loadTextureAsyncAnim = (url, isColorData = false) =>
         new Promise((resolve) => {
           if (!url) {
             resolve(null);
             return;
           }
-          textureLoaderForExport.load(
+          textureLoaderForAnimExport.load(
             url,
             (t) => {
+              t.colorSpace = isColorData
+                ? THREE.SRGBColorSpace
+                : THREE.LinearSRGBColorSpace;
               t.flipY = false;
               t.needsUpdate = true;
               resolve(t);
@@ -1761,15 +2042,21 @@ export default function Model3DCreator() {
             }
           );
         });
+
       const meshCreationPromises = shapes.map(async (shapeData) => {
-        let targetObjectForAnimation;
+        let targetObjectForAnimation; // This will be the THREE.Object3D added to exportScene
+
         if (shapeData.type === "importedGLB") {
           const gltfObjectData = loadedGltfObjects[shapeData.id];
           if (gltfObjectData && gltfObjectData.scene) {
             targetObjectForAnimation = gltfObjectData.scene.clone(true);
+            // Apply material override and textures to the cloned GLB scene
             if (
-              shapeData.glbMaterialOverride &&
-              shapeData.glbMaterialOverride.type !== "model"
+              shapeData.glbMaterialOverride ||
+              (shapeData.textureProps &&
+                Object.values(shapeData.textureProps).some(
+                  (v) => v && typeof v === "string"
+                ))
             ) {
               await targetObjectForAnimation.traverse(async (node) => {
                 if (node.isMesh && node.material) {
@@ -1778,59 +2065,156 @@ export default function Model3DCreator() {
                     : [node.material];
                   const newMaterials = [];
                   for (let i = 0; i < originalMaterials.length; i++) {
+                    const matInstance = originalMaterials[i];
+                    let newMaterialInstance;
                     const overrideConf = shapeData.glbMaterialOverride;
-                    const newMaterialProps = {
-                      color: new THREE.Color(overrideConf.color || "#cccccc"),
-                    };
-                    if (
-                      overrideConf.type === "standard" ||
-                      overrideConf.type === "physical"
-                    ) {
-                      newMaterialProps.roughness =
-                        overrideConf.roughness ?? 0.5;
-                      newMaterialProps.metalness =
-                        overrideConf.metalness ?? 0.0;
+
+                    if (overrideConf && overrideConf.type !== "model") {
+                      const newMaterialProps = {
+                        color: new THREE.Color(
+                          overrideConf.color || matInstance.color || "#cccccc"
+                        ),
+                        side: THREE.DoubleSide,
+                      };
+                      if (
+                        overrideConf.type === "standard" ||
+                        overrideConf.type === "physical"
+                      ) {
+                        newMaterialProps.roughness =
+                          overrideConf.roughness ?? 0.5;
+                        newMaterialProps.metalness =
+                          overrideConf.metalness ?? 0.0;
+                      }
+                      let NewCtor;
+                      switch (overrideConf.type) {
+                        case "physical":
+                          NewCtor = THREE.MeshPhysicalMaterial;
+                          newMaterialProps.transmission =
+                            overrideConf.transmission ?? 0.0;
+                          newMaterialProps.ior = overrideConf.ior ?? 1.5;
+                          newMaterialProps.thickness =
+                            overrideConf.thickness ?? 0.01;
+                          break;
+                        // Add other cases from applyTextureToGLBNode
+                        case "toon":
+                          NewCtor = THREE.MeshToonMaterial;
+                          break;
+                        case "basic":
+                          NewCtor = THREE.MeshBasicMaterial;
+                          break;
+                        case "lambert":
+                          NewCtor = THREE.MeshLambertMaterial;
+                          break;
+                        case "phong":
+                          NewCtor = THREE.MeshPhongMaterial;
+                          newMaterialProps.shininess =
+                            overrideConf.shininess ?? 30;
+                          break;
+                        case "wireframe":
+                          NewCtor = THREE.MeshBasicMaterial;
+                          newMaterialProps.wireframe = true;
+                          break;
+                        default:
+                          NewCtor = THREE.MeshStandardMaterial;
+                      }
+                      newMaterialInstance = new NewCtor(newMaterialProps);
+                      newMaterialInstance.name =
+                        (matInstance.name || `glb_anim_mat_${i}`) +
+                        `_override_${overrideConf.type}`;
+                    } else {
+                      newMaterialInstance = matInstance.clone();
                     }
-                    if (overrideConf.type === "physical") {
-                      newMaterialProps.transmission =
-                        overrideConf.transmission ?? 0.0;
-                      newMaterialProps.ior = overrideConf.ior ?? 1.5;
-                      newMaterialProps.thickness =
-                        overrideConf.thickness ?? 0.01;
-                    }
-                    let NewCtor;
-                    switch (overrideConf.type) {
-                      default:
-                        NewCtor = THREE.MeshStandardMaterial;
-                    }
-                    const newMaterialInstance = new NewCtor(newMaterialProps);
-                    newMaterialInstance.name =
-                      (originalMaterials[i].name || `glb_anim_mat_${i}`) +
-                      "_override";
+
+                    // Apply textures
                     if (shapeData.textureProps) {
-                      for (const mapUrlKey of Object.keys(
-                        shapeData.textureProps
-                      )) {
-                        const mapType = mapUrlKey.replace("Url", "");
-                        const url = shapeData.textureProps[mapUrlKey];
-                        if (
-                          url &&
-                          newMaterialInstance.hasOwnProperty(mapType)
-                        ) {
-                          const texture = await loadTextureAsync(url);
-                          if (texture) {
-                            if (newMaterialInstance[mapType]?.isTexture)
-                              newMaterialInstance[mapType].dispose();
-                            newMaterialInstance[mapType] = texture;
-                            if (mapType === "map")
-                              newMaterialInstance.color.set(0xffffff);
-                            if (mapType === "map" || mapType === "emissiveMap")
-                              texture.colorSpace = THREE.SRGBColorSpace;
-                            else
-                              texture.colorSpace = THREE.LinearSRGBColorSpace;
-                          }
+                      if (shapeData.textureProps.mapUrl) {
+                        newMaterialInstance.map = await loadTextureAsyncAnim(
+                          shapeData.textureProps.mapUrl,
+                          true
+                        );
+                        if (newMaterialInstance.map)
+                          newMaterialInstance.color.set(0xffffff);
+                      }
+                      if (
+                        shapeData.textureProps.normalMapUrl &&
+                        newMaterialInstance.normalMap !== undefined
+                      )
+                        newMaterialInstance.normalMap =
+                          await loadTextureAsyncAnim(
+                            shapeData.textureProps.normalMapUrl,
+                            false
+                          );
+                      if (
+                        shapeData.textureProps.roughnessMapUrl &&
+                        newMaterialInstance.roughnessMap !== undefined
+                      )
+                        newMaterialInstance.roughnessMap =
+                          await loadTextureAsyncAnim(
+                            shapeData.textureProps.roughnessMapUrl,
+                            false
+                          );
+                      if (
+                        shapeData.textureProps.metalnessMapUrl &&
+                        newMaterialInstance.metalnessMap !== undefined
+                      )
+                        newMaterialInstance.metalnessMap =
+                          await loadTextureAsyncAnim(
+                            shapeData.textureProps.metalnessMapUrl,
+                            false
+                          );
+                      if (
+                        shapeData.textureProps.aoMapUrl &&
+                        newMaterialInstance.aoMap !== undefined
+                      ) {
+                        newMaterialInstance.aoMap = await loadTextureAsyncAnim(
+                          shapeData.textureProps.aoMapUrl,
+                          false
+                        );
+                        if (newMaterialInstance.aoMap) {
+                          newMaterialInstance.aoMapIntensity =
+                            shapeData.textureProps.aoMapIntensity ?? 1.0;
+                          if (
+                            node.geometry &&
+                            !node.geometry.attributes.uv2 &&
+                            node.geometry.attributes.uv
+                          )
+                            node.geometry.setAttribute(
+                              "uv2",
+                              node.geometry.attributes.uv.clone()
+                            );
                         }
                       }
+                      if (
+                        shapeData.textureProps.emissiveMapUrl &&
+                        newMaterialInstance.emissiveMap !== undefined
+                      ) {
+                        newMaterialInstance.emissiveMap =
+                          await loadTextureAsyncAnim(
+                            shapeData.textureProps.emissiveMapUrl,
+                            true
+                          );
+                        if (newMaterialInstance.emissiveMap) {
+                          newMaterialInstance.emissive = new THREE.Color(
+                            shapeData.textureProps.emissiveColor || 0xffffff
+                          );
+                          newMaterialInstance.emissiveIntensity =
+                            shapeData.textureProps.emissiveIntensity ?? 1.0;
+                        }
+                      }
+                      if (
+                        newMaterialInstance.hasOwnProperty("roughness") &&
+                        !newMaterialInstance.roughnessMap &&
+                        shapeData.textureProps.roughness !== undefined
+                      )
+                        newMaterialInstance.roughness =
+                          shapeData.textureProps.roughness;
+                      if (
+                        newMaterialInstance.hasOwnProperty("metalness") &&
+                        !newMaterialInstance.metalnessMap &&
+                        shapeData.textureProps.metalness !== undefined
+                      )
+                        newMaterialInstance.metalness =
+                          shapeData.textureProps.metalness;
                     }
                     newMaterialInstance.needsUpdate = true;
                     newMaterials.push(newMaterialInstance);
@@ -1839,74 +2223,18 @@ export default function Model3DCreator() {
                     newMaterials.length === 1 ? newMaterials[0] : newMaterials;
                 }
               });
-            } else if (shapeData.textureProps) {
-              await targetObjectForAnimation.traverse(async (node) => {
-                if (node.isMesh && node.material) {
-                  const materialsToUpdate = Array.isArray(node.material)
-                    ? node.material
-                    : [node.material];
-                  for (const mat of materialsToUpdate) {
-                    let colorSetByMap = false;
-                    for (const mapUrlKey of Object.keys(
-                      shapeData.textureProps
-                    )) {
-                      const mapType = mapUrlKey.replace("Url", "");
-                      const url = shapeData.textureProps[mapUrlKey];
-                      if (url && mat.hasOwnProperty(mapType)) {
-                        const texture = await loadTextureAsync(url);
-                        if (texture) {
-                          if (mat[mapType]?.isTexture) mat[mapType].dispose();
-                          mat[mapType] = texture;
-                          if (mapType === "map") {
-                            mat.color.set(0xffffff);
-                            colorSetByMap = true;
-                          }
-                          if (mapType === "map" || mapType === "emissiveMap")
-                            texture.colorSpace = THREE.SRGBColorSpace;
-                          else texture.colorSpace = THREE.LinearSRGBColorSpace;
-                        }
-                      } else if (!url && mat.hasOwnProperty(mapType)) {
-                        if (mat[mapType]?.isTexture) mat[mapType].dispose();
-                        mat[mapType] = null;
-                        if (mapType === "map" && !colorSetByMap)
-                          mat.color.set(
-                            new THREE.Color(
-                              shapeData.glbMaterialOverride?.color ||
-                                mat.userData.originalColorHex ||
-                                0xcccccc
-                            )
-                          );
-                      }
-                    }
-                    mat.needsUpdate = true;
-                  }
-                }
-              });
             }
-            targetObjectForAnimation.position.fromArray(shapeData.position);
-            targetObjectForAnimation.rotation.fromArray(shapeData.rotation);
-            targetObjectForAnimation.scale.fromArray(shapeData.scale);
-            targetObjectForAnimation.name = `shape_${shapeData.id}_${
-              shapeData.type
-            }_${shapeData.name || "ImportedGLBAnim"}`;
-            targetObjectForAnimation.traverse((obj) => {
-              if (obj.isMesh) {
-                obj.castShadow = true;
-                obj.receiveShadow = true;
-              }
-            });
-            exportScene.add(targetObjectForAnimation);
-            processedShapeCount++;
+            // Add original animations from the GLB
             if (
               gltfObjectData.animations &&
               gltfObjectData.animations.length > 0
             ) {
-              allOriginalClips = allOriginalClips.concat(
+              allOriginalClipsFromGLBs = allOriginalClipsFromGLBs.concat(
                 gltfObjectData.animations.map((clip) => clip.clone())
               );
             }
           } else {
-            return null;
+            return null; /* GLB data missing */
           }
         } else if (shapeData.type === "text") {
           let fontToUse = helvetikerFontForExport;
@@ -1942,111 +2270,99 @@ export default function Model3DCreator() {
             bevelSegments: 3,
           });
           textGeo.computeBoundingBox();
-          const actualZDepth =
-            textGeo.boundingBox.max.z - textGeo.boundingBox.min.z;
-          const expectedZDepth = tD;
-          let zScaleFactor = 1.0;
-          if (
-            actualZDepth !== 0 &&
-            !isNaN(actualZDepth) &&
-            isFinite(actualZDepth) &&
-            expectedZDepth !== 0
-          )
-            zScaleFactor = expectedZDepth / actualZDepth;
-          else if (expectedZDepth === 0 && actualZDepth === 0)
-            zScaleFactor = 1.0;
-          if (
-            Math.abs(zScaleFactor - 1.0) > 0.0001 &&
-            isFinite(zScaleFactor) &&
-            zScaleFactor > 0
-          )
-            textGeo.scale(1, 1, zScaleFactor);
-          textGeo.computeBoundingBox();
-          const centerOffsetX =
-            -0.5 * (textGeo.boundingBox.max.x + textGeo.boundingBox.min.x);
-          const centerOffsetY =
-            -0.5 * (textGeo.boundingBox.max.y + textGeo.boundingBox.min.y);
-          let centerOffsetZ =
-            -0.5 * (textGeo.boundingBox.max.z + textGeo.boundingBox.min.z);
-          if (tD === 0) centerOffsetZ = 0;
-          textGeo.translate(centerOffsetX, centerOffsetY, centerOffsetZ);
-          const material = new THREE.MeshStandardMaterial({
+          textGeo.translate(
+            -0.5 * (textGeo.boundingBox.max.x + textGeo.boundingBox.min.x),
+            -0.5 * (textGeo.boundingBox.max.y + textGeo.boundingBox.min.y),
+            -0.5 * (textGeo.boundingBox.max.z + textGeo.boundingBox.min.z)
+          );
+
+          const materialProps = {
             color: new THREE.Color(shapeData.color || "#ffffff"),
-            roughness: saneNumber(shapeData.roughness, 0.5),
-            metalness: saneNumber(shapeData.metalness, 0.0),
-          });
-          const texProps = shapeData.textTextureProps || initialTextureProps;
+            side: THREE.DoubleSide,
+          };
+          if (
+            shapeData.material === "standard" ||
+            shapeData.material === "physical"
+          ) {
+            materialProps.roughness = saneNumber(shapeData.roughness, 0.5);
+            materialProps.metalness = saneNumber(shapeData.metalness, 0.0);
+          }
+          let material;
+          switch (shapeData.material) {
+            case "physical":
+              material = new THREE.MeshPhysicalMaterial({
+                ...materialProps,
+                transmission: saneNumber(shapeData.transmission, 0.0),
+                ior: saneNumber(shapeData.ior, 1.5),
+                thickness: saneNumber(shapeData.thickness, 0.01),
+              });
+              break;
+            default:
+              material = new THREE.MeshStandardMaterial(materialProps);
+          }
+          const texProps =
+            shapeData.textTextureProps ||
+            shapeData.textureProps ||
+            initialTextureProps;
           if (texProps.mapUrl) {
-            material.map = await loadTextureAsync(texProps.mapUrl);
-            if (material.map) {
-              material.color.set(0xffffff);
-              material.map.colorSpace = THREE.SRGBColorSpace;
-            }
+            material.map = await loadTextureAsyncAnim(texProps.mapUrl, true);
+            if (material.map) material.color.set(0xffffff);
           }
-          if (texProps.normalMapUrl) {
-            material.normalMap = await loadTextureAsync(texProps.normalMapUrl);
-            if (material.normalMap)
-              material.normalMap.colorSpace = THREE.LinearSRGBColorSpace;
-          }
+          if (texProps.normalMapUrl && material.normalMap !== undefined)
+            material.normalMap = await loadTextureAsyncAnim(
+              texProps.normalMapUrl,
+              false
+            );
           targetObjectForAnimation = new THREE.Mesh(textGeo, material);
         } else {
-          targetObjectForAnimation = await createMeshFromShape(shapeData);
+          // Other procedural shapes
+          targetObjectForAnimation = await createMeshFromShape(shapeData); // Uses basic material
           if (
             targetObjectForAnimation &&
             shapeData.textureProps &&
             shapeData.type !== "imagePlane"
           ) {
-            const texProps = shapeData.textureProps;
             const newMaterial = targetObjectForAnimation.material.clone();
+            const texProps = shapeData.textureProps;
             let colorSetByMap = false;
             if (texProps.mapUrl) {
-              newMaterial.map = await loadTextureAsync(texProps.mapUrl);
+              newMaterial.map = await loadTextureAsyncAnim(
+                texProps.mapUrl,
+                true
+              );
               if (newMaterial.map) {
                 newMaterial.color.set(0xffffff);
-                newMaterial.map.colorSpace = THREE.SRGBColorSpace;
                 colorSetByMap = true;
               }
             }
-            if (texProps.normalMapUrl) {
-              newMaterial.normalMap = await loadTextureAsync(
-                texProps.normalMapUrl
+            if (texProps.normalMapUrl && newMaterial.normalMap !== undefined)
+              newMaterial.normalMap = await loadTextureAsyncAnim(
+                texProps.normalMapUrl,
+                false
               );
-              if (newMaterial.normalMap)
-                newMaterial.normalMap.colorSpace = THREE.LinearSRGBColorSpace;
-            }
             if (
               texProps.roughnessMapUrl &&
-              (newMaterial.isMeshStandardMaterial ||
-                newMaterial.isMeshPhysicalMaterial)
-            ) {
-              newMaterial.roughnessMap = await loadTextureAsync(
-                texProps.roughnessMapUrl
+              newMaterial.roughnessMap !== undefined
+            )
+              newMaterial.roughnessMap = await loadTextureAsyncAnim(
+                texProps.roughnessMapUrl,
+                false
               );
-              if (newMaterial.roughnessMap)
-                newMaterial.roughnessMap.colorSpace =
-                  THREE.LinearSRGBColorSpace;
-            }
             if (
               texProps.metalnessMapUrl &&
-              (newMaterial.isMeshStandardMaterial ||
-                newMaterial.isMeshPhysicalMaterial)
-            ) {
-              newMaterial.metalnessMap = await loadTextureAsync(
-                texProps.metalnessMapUrl
+              newMaterial.metalnessMap !== undefined
+            )
+              newMaterial.metalnessMap = await loadTextureAsyncAnim(
+                texProps.metalnessMapUrl,
+                false
               );
-              if (newMaterial.metalnessMap)
-                newMaterial.metalnessMap.colorSpace =
-                  THREE.LinearSRGBColorSpace;
-            }
-            if (
-              texProps.aoMapUrl &&
-              (newMaterial.isMeshStandardMaterial ||
-                newMaterial.isMeshPhysicalMaterial)
-            ) {
-              newMaterial.aoMap = await loadTextureAsync(texProps.aoMapUrl);
+            if (texProps.aoMapUrl && newMaterial.aoMap !== undefined) {
+              newMaterial.aoMap = await loadTextureAsyncAnim(
+                texProps.aoMapUrl,
+                false
+              );
               if (newMaterial.aoMap) {
-                newMaterial.aoMapIntensity = 1;
-                newMaterial.aoMap.colorSpace = THREE.LinearSRGBColorSpace;
+                newMaterial.aoMapIntensity = texProps.aoMapIntensity ?? 1.0;
                 if (
                   targetObjectForAnimation.geometry.attributes.uv2 ===
                     undefined &&
@@ -2058,29 +2374,46 @@ export default function Model3DCreator() {
                   );
               }
             }
-            if (texProps.emissiveMapUrl) {
-              newMaterial.emissiveMap = await loadTextureAsync(
-                texProps.emissiveMapUrl
+            if (
+              texProps.emissiveMapUrl &&
+              newMaterial.emissiveMap !== undefined
+            ) {
+              newMaterial.emissiveMap = await loadTextureAsyncAnim(
+                texProps.emissiveMapUrl,
+                true
               );
               if (newMaterial.emissiveMap) {
-                newMaterial.emissive = new THREE.Color(0xffffff);
-                newMaterial.emissiveIntensity = 1.0;
-                newMaterial.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+                newMaterial.emissive = new THREE.Color(
+                  texProps.emissiveColor || 0xffffff
+                );
+                newMaterial.emissiveIntensity =
+                  texProps.emissiveIntensity ?? 1.0;
               }
             }
+            if (
+              newMaterial.hasOwnProperty("roughness") &&
+              !newMaterial.roughnessMap &&
+              texProps.roughness !== undefined
+            )
+              newMaterial.roughness = texProps.roughness;
+            if (
+              newMaterial.hasOwnProperty("metalness") &&
+              !newMaterial.metalnessMap &&
+              texProps.metalness !== undefined
+            )
+              newMaterial.metalness = texProps.metalness;
             if (!colorSetByMap && shapeData.color)
               newMaterial.color.set(shapeData.color);
-            if (shapeData.roughness !== undefined && !newMaterial.roughnessMap)
-              newMaterial.roughness = shapeData.roughness;
-            if (shapeData.metalness !== undefined && !newMaterial.metalnessMap)
-              newMaterial.metalness = shapeData.metalness;
             targetObjectForAnimation.material.dispose();
             targetObjectForAnimation.material = newMaterial;
           }
         }
+
         if (!targetObjectForAnimation && shapeData.type !== "importedGLB")
-          return null;
+          return null; // Failed to create mesh for procedural
+
         if (shapeData.type !== "importedGLB") {
+          // For procedural, set transform and add to scene
           targetObjectForAnimation.position.fromArray(shapeData.position);
           targetObjectForAnimation.rotation.fromArray(shapeData.rotation);
           targetObjectForAnimation.scale.fromArray(shapeData.scale);
@@ -2091,17 +2424,35 @@ export default function Model3DCreator() {
           }`;
           targetObjectForAnimation.castShadow = shapeData.type !== "imagePlane";
           targetObjectForAnimation.receiveShadow = true;
-          exportScene.add(targetObjectForAnimation);
-          processedShapeCount++;
+        } else {
+          // For GLB, already cloned, just set root transform from shapeData
+          targetObjectForAnimation.position.fromArray(shapeData.position);
+          targetObjectForAnimation.rotation.fromArray(shapeData.rotation);
+          targetObjectForAnimation.scale.fromArray(shapeData.scale);
+          targetObjectForAnimation.name = `shape_${shapeData.id}_${
+            shapeData.type
+          }_${shapeData.name || "ImportedGLBAnim"}`;
+          targetObjectForAnimation.traverse((obj) => {
+            if (obj.isMesh) {
+              obj.castShadow = true;
+              obj.receiveShadow = true;
+            }
+          });
         }
-        return { shapeData, targetObjectForAnimation };
+        exportScene.add(targetObjectForAnimation); // Add to export scene
+        processedShapeCount++;
+        return { shapeData, targetObjectForAnimation }; // Return data for animation baking
       });
+
       const results = (await Promise.all(meshCreationPromises)).filter(
         (r) => r !== null
       );
+
       for (const result of results) {
         if (!result) continue;
         const { shapeData, targetObjectForAnimation } = result;
+
+        // Bake procedural animations (not for GLBs, they use their own clips)
         if (
           shapeData.animation &&
           shapeData.animation.type !== "none" &&
@@ -2110,7 +2461,7 @@ export default function Model3DCreator() {
         ) {
           const animParams = shapeData.animation;
           let bakeDur = 5;
-          const bakeFps = 30;
+          const bakeFps = 30; // Default duration and FPS
           if (
             animParams.type === "orbit" &&
             (animParams.speed || 1) * 0.2 !== 0
@@ -2124,24 +2475,32 @@ export default function Model3DCreator() {
             bakeDur = Math.abs((Math.PI * 2) / (animParams.speed || 1));
             bakeDur = Math.max(1, Math.min(10, bakeDur));
           }
+
           const totalFrames = Math.max(2, Math.floor(bakeDur * bakeFps));
           const timeStep = bakeDur / (totalFrames - 1);
           const times = [];
           const positions = [];
           const quaternions = [];
-          const simObj = new THREE.Object3D();
-          simObj.position.copy(targetObjectForAnimation.position);
-          simObj.quaternion.copy(targetObjectForAnimation.quaternion);
+
+          const simObj = new THREE.Object3D(); // Simulation object
+          simObj.position.copy(targetObjectForAnimation.position); // Start from initial position
+          simObj.quaternion.copy(targetObjectForAnimation.quaternion); // Start from initial rotation
+
           let currentOrbitAngle = Math.atan2(
             simObj.position.z - (animParams.orbitCenter?.[2] || 0),
             simObj.position.x - (animParams.orbitCenter?.[0] || 0)
           );
-          if (animParams.type === "orbit" && animParams.orbitRadius === 0)
-            currentOrbitAngle = 0;
+          if (
+            animParams.type === "orbit" &&
+            (animParams.orbitRadius || 0) === 0
+          )
+            currentOrbitAngle = 0; // Avoid NaN if radius is 0
+
           for (let i = 0; i < totalFrames; i++) {
             const time = i * timeStep;
             times.push(time);
-            const effSpeedThisFrame = (animParams.speed || 1) * timeStep;
+            const effSpeedThisFrame = (animParams.speed || 1) * timeStep; // Speed for this frame step
+
             switch (animParams.type) {
               case "rotate":
                 const axisVec = new THREE.Vector3();
@@ -2152,7 +2511,7 @@ export default function Model3DCreator() {
                   axisVec,
                   effSpeedThisFrame
                 );
-                simObj.quaternion.premultiply(R);
+                simObj.quaternion.premultiply(R); // Apply rotation relative to current
                 break;
               case "orbit":
                 currentOrbitAngle += effSpeedThisFrame * 0.2;
@@ -2161,7 +2520,7 @@ export default function Model3DCreator() {
                 const cY =
                   animParams.orbitCenter?.[1] !== undefined
                     ? animParams.orbitCenter[1]
-                    : simObj.position.y;
+                    : simObj.position.y; // Keep original Y if not specified for orbit center
                 const cZ = animParams.orbitCenter?.[2] || 0;
                 const p = animParams.orbitPlane || "xz";
                 if (p === "xz")
@@ -2197,6 +2556,8 @@ export default function Model3DCreator() {
               simObj.quaternion.w
             );
           }
+          // Create KeyframeTracks
+          // IMPORTANT: GLTF Exporter needs tracks to target node UUIDs, not names.
           const posTrack = new THREE.VectorKeyframeTrack(
             `${targetObjectForAnimation.uuid}.position`,
             times,
@@ -2207,6 +2568,7 @@ export default function Model3DCreator() {
             times,
             quaternions
           );
+
           const clip = new THREE.AnimationClip(
             `Anim_${shapeData.id}_${animParams.type}`,
             totalFrames > 1 ? bakeDur : 0,
@@ -2215,16 +2577,17 @@ export default function Model3DCreator() {
           allBakedClips.push(clip);
         }
       }
+
       if (processedShapeCount === 0 && shapes.length > 0) {
-        alert("No valid shapes for animated export.");
+        // No shapes were processed but some exist
+        alert("No valid shapes could be prepared for animated export.");
         setIsBaking(false);
         return;
       }
-      exportScene.animations = [...allBakedClips, ...allOriginalClips];
+
+      exportScene.animations = [...allBakedClips, ...allOriginalClipsFromGLBs]; // Combine baked and original GLB clips
       exportToGLB(exportScene, `baked-animated-model-${Date.now()}.glb`);
-      alert(
-        `Exported ${processedShapeCount} shapes with ${exportScene.animations.length} clips to GLB!`
-      );
+      // alert(`Exported ${processedShapeCount} shapes with ${exportScene.animations.length} animation clips to GLB!`);
     } catch (error) {
       console.error("[BAKED GLB EXPORT] Critical error:", error);
       alert("Animated GLB Export failed: " + error.message);
@@ -2232,6 +2595,7 @@ export default function Model3DCreator() {
       setIsBaking(false);
     }
   }, [shapes, loadedGltfObjects, isBaking]);
+
   const triggerJsonFileImport = useCallback(() => {
     if (jsonFileInputRef.current) jsonFileInputRef.current.click();
   }, []);
@@ -2241,6 +2605,7 @@ export default function Model3DCreator() {
   const triggerImageFileImport = useCallback(() => {
     if (imageFileInputRef.current) imageFileInputRef.current.click();
   }, []);
+
   const alignAllShapes = useCallback(
     (axis, method = "average") => {
       if (isBaking || shapes.length < 2) return;
@@ -2259,27 +2624,27 @@ export default function Model3DCreator() {
           ),
         }));
       }
+      // Could add other methods like 'min', 'max'
       setShapes(newShapes);
-      alert(
-        `${
-          shapes.length
-        } shapes aligned along ${axis.toUpperCase()}-axis (${method}).`
-      );
+      // alert(`${shapes.length} shapes aligned along ${axis.toUpperCase()}-axis (${method}).`);
     },
     [shapes, saveState, isBaking]
   );
+
   const alignSelectedShapeToOrigin = useCallback(
     (axis) => {
       if (!selectedShapeId || isBaking) return;
       const currentShape = shapes.find((s) => s.id === selectedShapeId);
       if (!currentShape) return;
+
       const newPosition = [...currentShape.position];
       newPosition[{ x: 0, y: 1, z: 2 }[axis]] = 0;
-      updateShapeAndSave(selectedShapeId, { position: newPosition });
-      alert(`Selected shape aligned to origin on ${axis.toUpperCase()}-axis.`);
+      updateShapeAndSave(selectedShapeId, { position: newPosition }); // Use save version for explicit action
+      // alert(`Selected shape aligned to origin on ${axis.toUpperCase()}-axis.`);
     },
     [selectedShapeId, shapes, updateShapeAndSave, isBaking]
   );
+
   const handleDropOnCanvas = useCallback(
     async (event) => {
       event.preventDefault();
@@ -2288,10 +2653,11 @@ export default function Model3DCreator() {
         alert("Cannot process drop while baking.");
         return;
       }
+
       const files = event.dataTransfer.files;
       if (files && files.length > 0) {
-        const file = files[0];
-        const syntheticEvent = { target: { files: [file], value: null } };
+        const file = files[0]; // Process first file only for simplicity
+        const syntheticEvent = { target: { files: [file], value: null } }; // Mock event for handlers
         if (
           file.name.toLowerCase().endsWith(".glb") ||
           file.name.toLowerCase().endsWith(".gltf")
@@ -2302,30 +2668,35 @@ export default function Model3DCreator() {
         } else if (file.name.toLowerCase().endsWith(".json")) {
           handleJsonFileImport(syntheticEvent);
         } else {
-          alert(`File type of "${file.name}" not recognized.`);
+          alert(`File type of "${file.name}" not recognized for drag & drop.`);
         }
       }
     },
     [isBaking, handleGlbFileImport, handleImageFileImport, handleJsonFileImport]
   );
+
   const handleForceCanvasRefresh = useCallback(() => {
     setForceCanvasRefreshKey((prevKey) => prevKey + 1);
   }, []);
+
   const editorSidebarShapeOptions = [
     { name: "Cube", geometry: "box", icon: "🧊" },
     { name: "Sphere", geometry: "sphere", icon: "⚪" },
     { name: "Cylinder", geometry: "cylinder", icon: "🥫" },
     { name: "Cone", geometry: "cone", icon: "🔺" },
     { name: "Torus", geometry: "torus", icon: "🍩" },
-    { name: "Pyramid", geometry: "pyramid", icon: "🔺" },
+    { name: "Pyramid", geometry: "pyramid", icon: "🔺" }, // Uses custom geometry component
     { name: "3D Text", geometry: "text", icon: "📝" },
   ];
+
   const toggleGlobalAnimation = useCallback(() => {
     if (isBaking) return;
     setIsAnimating((prev) => !prev);
   }, [isBaking]);
+
   useEffect(() => {
     const handleKeyDown = (event) => {
+      // Ignore keydowns if an input field is focused or contentEditable
       if (
         event.target.tagName === "INPUT" ||
         event.target.tagName === "TEXTAREA" ||
@@ -2333,6 +2704,7 @@ export default function Model3DCreator() {
         isBaking
       )
         return;
+
       switch (event.key.toLowerCase()) {
         case "w":
           setMode("translate");
@@ -2353,10 +2725,11 @@ export default function Model3DCreator() {
         case "p":
           event.preventDefault();
           toggleGlobalAnimation();
-          break;
+          break; // Toggle global animation
         default:
           break;
       }
+      // Ctrl/Cmd shortcuts
       if (event.ctrlKey || event.metaKey) {
         if (event.key.toLowerCase() === "z") {
           event.preventDefault();
@@ -2381,6 +2754,8 @@ export default function Model3DCreator() {
     isBaking,
     toggleGlobalAnimation,
   ]);
+
+  // GLB Animation Playback Handlers
   const handlePlayPauseAnimation = () => {
     if (
       !selectedShape ||
@@ -2388,7 +2763,7 @@ export default function Model3DCreator() {
       animationClips.length === 0
     )
       return;
-    if (!playAllAnimations && selectedAnimationClipIndex < 0) return;
+    if (!playAllAnimations && selectedAnimationClipIndex < 0) return; // No clip selected for single play
     setAnimationPlaybackState((prev) =>
       prev === "playing" ? "paused" : "playing"
     );
@@ -2401,16 +2776,18 @@ export default function Model3DCreator() {
     )
       return;
     setAnimationPlaybackState("stopped");
-    setAnimationTime(0);
+    setAnimationTime(0); // Reset time on stop
   };
   const handleAnimationClipChange = (indexStr) => {
     const index = parseInt(indexStr, 10);
     if (index >= 0 && index < animationClips.length) {
       setSelectedAnimationClipIndex(index);
       setAnimationDuration(animationClips[index].duration || 0);
-      setAnimationTime(0);
+      setAnimationTime(0); // Reset time when clip changes
+      // setAnimationPlaybackState("stopped"); // Optionally stop animation on clip change
     } else if (index === -1 && playAllAnimations) {
-      setSelectedAnimationClipIndex(-1);
+      // Special value for "All Clips Playing" if using SelectItem for it
+      setSelectedAnimationClipIndex(-1); // Ensure it's set for playAllAnimations mode
       const maxDuration = animationClips.reduce(
         (max, clip) => Math.max(max, clip.duration || 0),
         0
@@ -2420,7 +2797,17 @@ export default function Model3DCreator() {
     }
   };
   const handleAnimationTimeChange = (newTime) => {
+    // newTime is absolute time
     setAnimationTime(newTime);
+    if (animationPlaybackState === "playing") {
+      // If playing, briefly pause then play to reflect scrub
+      setAnimationPlaybackState("paused");
+      requestAnimationFrame(() => setAnimationPlaybackState("playing"));
+    } else if (animationPlaybackState === "stopped") {
+      // If stopped, scrubbing should move to paused state to show the frame
+      setAnimationPlaybackState("paused");
+    }
+    // If already paused, just updating animationTime will be handled by the effect
   };
   const handleAnimationLoopToggle = (checked) => {
     setIsAnimationLooping(checked);
@@ -2431,14 +2818,16 @@ export default function Model3DCreator() {
   const handlePlayAllAnimationsToggle = (checked) => {
     setPlayAllAnimations(checked);
     if (checked) {
-      setSelectedAnimationClipIndex(-1);
+      setSelectedAnimationClipIndex(-1); // Indicate all clips mode
       const maxDuration = animationClips.reduce(
         (max, clip) => Math.max(max, clip.duration || 0),
         0
       );
       setAnimationDuration(maxDuration);
     } else {
+      // Switched off playAll
       if (animationClips.length > 0) {
+        // Default to first clip if current selection is invalid for single play
         if (
           selectedAnimationClipIndex < 0 ||
           selectedAnimationClipIndex >= animationClips.length
@@ -2446,6 +2835,7 @@ export default function Model3DCreator() {
           setSelectedAnimationClipIndex(0);
           setAnimationDuration(animationClips[0].duration || 0);
         } else {
+          // Keep current valid clip
           setAnimationDuration(
             animationClips[selectedAnimationClipIndex].duration || 0
           );
@@ -2454,129 +2844,131 @@ export default function Model3DCreator() {
         setAnimationDuration(0);
       }
     }
-    setAnimationTime(0);
+    setAnimationTime(0); // Reset time on mode change
   };
+
+  // Texture Upload/Clear Handlers
   const handleTextureUpload = useCallback(
     (shapeId, mapTypeStr, event, isTextSpecific = false) => {
       const file = event.target.files[0];
       if (!file) return;
       const currentShape = shapes.find((s) => s.id === shapeId);
       if (!currentShape) return;
+
       const reader = new FileReader();
       reader.onload = (e_reader) => {
-        const newTextureUrl = e_reader.target.result;
+        const newTextureUrl = e_reader.target.result; // This will be a data URL
         let updatePayload = {};
-        if (currentShape.type === "importedGLB") {
-          const oldUrl = currentShape.textureProps?.[`${mapTypeStr}Url`];
-          if (oldUrl && oldUrl.startsWith("blob:")) {
-            URL.revokeObjectURL(oldUrl);
-          }
-          updatePayload.textureProps = {
-            ...(currentShape.textureProps || initialTextureProps),
-            [`${mapTypeStr}Url`]: newTextureUrl,
-          };
-        } else {
-          const targetPropsKey = isTextSpecific
+
+        const targetPropsKey =
+          currentShape.type === "text" && isTextSpecific
             ? "textTextureProps"
             : "textureProps";
-          const oldPropValues =
-            currentShape[targetPropsKey] || initialTextureProps;
-          const oldUrl = oldPropValues[`${mapTypeStr}Url`];
-          if (oldUrl && oldUrl.startsWith("blob:")) {
-            URL.revokeObjectURL(oldUrl);
-          }
-          updatePayload[targetPropsKey] = {
-            ...oldPropValues,
-            [`${mapTypeStr}Url`]: newTextureUrl,
-          };
+        const oldPropValues =
+          currentShape[targetPropsKey] || initialTextureProps;
+        const oldUrl = oldPropValues[`${mapTypeStr}Url`];
+        if (oldUrl && oldUrl.startsWith("blob:")) {
+          // Revoke old blob URL if it exists
+          URL.revokeObjectURL(oldUrl);
         }
+        updatePayload[targetPropsKey] = {
+          ...oldPropValues,
+          [`${mapTypeStr}Url`]: newTextureUrl,
+        };
+
         updateShapeAndSave(shapeId, updatePayload);
       };
       reader.readAsDataURL(file);
-      if (event.target) event.target.value = null;
+      if (event.target) event.target.value = null; // Reset file input
     },
     [shapes, updateShapeAndSave]
   );
+
   const handleClearTexture = useCallback(
     (shapeId, mapTypeStr, isTextSpecific = false) => {
       const currentShape = shapes.find((s) => s.id === shapeId);
       if (!currentShape) return;
       let updatePayload = {};
-      if (currentShape.type === "importedGLB") {
-        const oldUrl = currentShape.textureProps?.[`${mapTypeStr}Url`];
-        if (oldUrl && oldUrl.startsWith("blob:")) {
-          URL.revokeObjectURL(oldUrl);
-        }
-        updatePayload.textureProps = {
-          ...(currentShape.textureProps || initialTextureProps),
-          [`${mapTypeStr}Url`]: null,
-        };
-      } else {
-        const targetPropsKey = isTextSpecific
+
+      const targetPropsKey =
+        currentShape.type === "text" && isTextSpecific
           ? "textTextureProps"
           : "textureProps";
-        const oldPropValues =
-          currentShape[targetPropsKey] || initialTextureProps;
-        const oldUrl = oldPropValues[`${mapTypeStr}Url`];
-        if (oldUrl && oldUrl.startsWith("blob:")) {
-          URL.revokeObjectURL(oldUrl);
-        }
-        updatePayload[targetPropsKey] = {
-          ...oldPropValues,
-          [`${mapTypeStr}Url`]: null,
-        };
+      const oldPropValues = currentShape[targetPropsKey] || initialTextureProps;
+      const oldUrl = oldPropValues[`${mapTypeStr}Url`];
+      if (oldUrl && oldUrl.startsWith("blob:")) {
+        // Revoke old blob URL
+        URL.revokeObjectURL(oldUrl);
       }
+      updatePayload[targetPropsKey] = {
+        ...oldPropValues,
+        [`${mapTypeStr}Url`]: null,
+      };
+
       updateShapeAndSave(shapeId, updatePayload);
     },
     [shapes, updateShapeAndSave]
   );
 
+  // Effect to manage body overflow for mobile panel
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth >= 768 && activeMobilePanel) {
+      if (window.innerWidth >= 768 && activeMobilePanel)
         setActiveMobilePanel(null);
-      }
-    };
+    }; // md breakpoint
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [activeMobilePanel]);
-  useEffect(() => {
-    if (activeMobilePanel) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
+    if (activeMobilePanel) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "";
     return () => {
+      window.removeEventListener("resize", handleResize);
       document.body.style.overflow = "";
     };
   }, [activeMobilePanel]);
+
+  // Effect to update animation clips when selected GLB changes
   useEffect(() => {
     if (selectedShape && selectedShape.type === "importedGLB") {
       const gltfData = loadedGltfObjects[selectedShape.id];
       if (gltfData && gltfData.animations && gltfData.animations.length > 0) {
         setAnimationClips(gltfData.animations);
+        // If current selection is invalid or -1 (for playAll) and playAll is false, default to first clip
         if (
-          selectedAnimationClipIndex === -1 ||
-          selectedAnimationClipIndex >= gltfData.animations.length
+          !playAllAnimations &&
+          (selectedAnimationClipIndex < 0 ||
+            selectedAnimationClipIndex >= gltfData.animations.length)
         ) {
           setSelectedAnimationClipIndex(0);
+          setAnimationDuration(gltfData.animations[0]?.duration || 0);
+        } else if (playAllAnimations) {
+          setSelectedAnimationClipIndex(-1); // Ensure -1 for playAll
+          const maxDuration = gltfData.animations.reduce(
+            (max, clip) => Math.max(max, clip.duration || 0),
+            0
+          );
+          setAnimationDuration(maxDuration);
+        } else {
+          // Valid clip selected, update its duration
+          setAnimationDuration(
+            gltfData.animations[selectedAnimationClipIndex]?.duration || 0
+          );
         }
-        setAnimationDuration(
-          gltfData.animations[
-            selectedAnimationClipIndex >= 0 ? selectedAnimationClipIndex : 0
-          ]?.duration || 0
-        );
       } else {
+        // No animations or no GLTF data
         setAnimationClips([]);
         setSelectedAnimationClipIndex(-1);
         setAnimationDuration(0);
       }
     } else {
+      // Not a GLB or no shape selected
       setAnimationClips([]);
       setSelectedAnimationClipIndex(-1);
       setAnimationDuration(0);
     }
-  }, [selectedShape, loadedGltfObjects, selectedAnimationClipIndex]);
+    // Reset animation time when clips/shape change
+    setAnimationTime(0);
+    // setAnimationPlaybackState("stopped"); // Optionally stop on shape change
+  }, [selectedShape, loadedGltfObjects, playAllAnimations]); // playAllAnimations is a dependency
+
   const showAnimationBar =
     selectedShape &&
     selectedShape.type === "importedGLB" &&
@@ -2590,11 +2982,12 @@ export default function Model3DCreator() {
       <div
         ref={creatorWrapperRef}
         className={cn(
-          "flex flex-col h-[100svh] overflow-hidden",
+          "flex flex-col h-[100svh] overflow-hidden", // Changed to 100svh for better mobile viewport height
           "bg-gradient-to-br from-slate-950 via-slate-900 to-purple-950 text-slate-100 select-none",
           isBaking ? "opacity-50 pointer-events-none" : ""
         )}
       >
+        {/* Hidden file inputs */}
         <input
           type='file'
           accept='.json'
@@ -2616,51 +3009,55 @@ export default function Model3DCreator() {
           onChange={handleImageFileImport}
           style={{ display: "none" }}
         />
-        {Object.keys(initialTextureProps).map((mapTypeKey) => {
-          const mapType = mapTypeKey.replace("Url", "");
-          return (
-            <input
-              key={`shape-tex-input-${mapType}`}
-              type='file'
-              accept='image/*'
-              ref={(el) => (shapeTextureFileInputRefs.current[mapType] = el)}
-              onChange={(e) =>
-                selectedShapeId &&
-                handleTextureUpload(selectedShapeId, mapType, e, false)
-              }
-              style={{ display: "none" }}
-            />
-          );
-        })}
-        {Object.keys(initialTextureProps).map((mapTypeKey) => {
-          const mapType = mapTypeKey.replace("Url", "");
-          return (
-            (mapType === "map" || mapType === "normalMap") && (
+
+        {/* Hidden texture file inputs (one per map type) */}
+        {Object.keys(initialTextureProps)
+          .filter((k) => k.endsWith("Url"))
+          .map((mapTypeKey) => {
+            const mapType = mapTypeKey.replace("Url", "");
+            return (
               <input
-                key={`text-tex-input-${mapType}`}
+                key={`shape-tex-input-${mapType}`}
                 type='file'
                 accept='image/*'
-                ref={(el) => (textTextureFileInputRefs.current[mapType] = el)}
+                ref={(el) => (shapeTextureFileInputRefs.current[mapType] = el)}
                 onChange={(e) =>
                   selectedShapeId &&
-                  handleTextureUpload(selectedShapeId, mapType, e, true)
+                  handleTextureUpload(selectedShapeId, mapType, e, false)
                 }
                 style={{ display: "none" }}
               />
-            )
-          );
-        })}
+            );
+          })}
+        {Object.keys(initialTextureProps)
+          .filter((k) => k.endsWith("Url"))
+          .map((mapTypeKey) => {
+            const mapType = mapTypeKey.replace("Url", "");
+            // Example: only allow map and normalMap for text for now
+            return (
+              (mapType === "map" || mapType === "normalMap") && (
+                <input
+                  key={`text-tex-input-${mapType}`}
+                  type='file'
+                  accept='image/*'
+                  ref={(el) => (textTextureFileInputRefs.current[mapType] = el)}
+                  onChange={(e) =>
+                    selectedShapeId &&
+                    handleTextureUpload(selectedShapeId, mapType, e, true)
+                  }
+                  style={{ display: "none" }}
+                />
+              )
+            );
+          })}
 
         {isBaking && (
           <div className='fixed inset-0 bg-black/80 flex items-center justify-center z-[100] backdrop-blur-sm'>
-            {" "}
             <div className='text-slate-100 text-xl p-6 bg-slate-800 rounded-lg shadow-2xl flex items-center ring-1 ring-purple-500/50'>
-              {" "}
               <svg
                 className='animate-spin h-6 w-6 text-purple-400 mr-3'
                 viewBox='0 0 24 24'
               >
-                {" "}
                 <circle
                   className='opacity-25'
                   cx='12'
@@ -2668,15 +3065,15 @@ export default function Model3DCreator() {
                   r='10'
                   stroke='currentColor'
                   strokeWidth='4'
-                ></circle>{" "}
+                ></circle>
                 <path
                   className='opacity-75'
                   fill='currentColor'
                   d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                ></path>{" "}
-              </svg>{" "}
-              Baking GLB... Please Wait{" "}
-            </div>{" "}
+                ></path>
+              </svg>
+              Baking GLB... Please Wait
+            </div>
           </div>
         )}
 
@@ -2707,13 +3104,11 @@ export default function Model3DCreator() {
           forceRefreshCanvas={handleForceCanvasRefresh}
         />
 
-        {/* Main layout area - This div will take all space between toolbar and statusbar */}
         <div
           className={cn(
             "flex flex-1 min-h-0 relative overflow-hidden md:p-4 md:pt-0"
           )}
         >
-          {/* Left Sidebar */}
           <aside
             className={cn(
               "transition-transform duration-300 ease-in-out fixed md:static inset-y-0 left-0 z-40 transform md:translate-x-0 w-72 shrink-0 md:mr-4",
@@ -2745,7 +3140,6 @@ export default function Model3DCreator() {
             </Button>
           </aside>
 
-          {/* Center Content Column (Canvas + Animation Bar) */}
           <div
             className={cn(
               "flex-1 flex flex-col min-w-0 min-h-0",
@@ -2779,7 +3173,8 @@ export default function Model3DCreator() {
                 CameraControllerComponent={CameraController}
                 isAnimating={isAnimating}
                 onDropOnCanvas={handleDropOnCanvas}
-                animationClips={animationClips}
+                // GLB animation props for MainScene
+                animationClips={animationClips} // Pass all clips for potential use
                 selectedAnimationClipIndex={selectedAnimationClipIndex}
                 animationPlaybackState={animationPlaybackState}
                 isAnimationLooping={isAnimationLooping}
@@ -2806,6 +3201,9 @@ export default function Model3DCreator() {
                   onAnimationSpeedChange={handleAnimationSpeedChange}
                   playAllAnimations={playAllAnimations}
                   onPlayAllAnimationsToggle={handlePlayAllAnimationsToggle}
+                  // Fullscreen props for Select inside AnimationPlaybackBar
+                  portalContainerRef={creatorWrapperRef}
+                  isFullscreen={isFullscreen}
                 />
               </div>
             )}
@@ -2822,15 +3220,18 @@ export default function Model3DCreator() {
             <div className='h-full w-full bg-slate-900/95 md:bg-transparent md:border-l md:border-slate-700/30 backdrop-blur-md md:backdrop-blur-none overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800'>
               <PropertiesPanel
                 selectedShape={selectedShape}
-                updateShape={updateShapeAndSave}
+                updateShape={updateShapeAndSave} // Use save version for explicit property changes
                 removeShape={removeShape}
                 duplicateShape={duplicateShape}
-                addShape={addShape}
+                addShape={addShape} // To add shapes from panel potentially
                 handleTextureUpload={handleTextureUpload}
                 handleClearTexture={handleClearTexture}
                 shapeTextureFileInputRefs={shapeTextureFileInputRefs}
                 textTextureFileInputRefs={textTextureFileInputRefs}
                 forceRefreshCanvas={handleForceCanvasRefresh}
+                // Fullscreen props for Selects inside PropertiesPanel
+                portalContainerRef={creatorWrapperRef}
+                isFullscreen={isFullscreen}
               />
             </div>
             <Button

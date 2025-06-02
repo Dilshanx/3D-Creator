@@ -8,11 +8,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/select"; // Shadcn UI import
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Play, Pause, StopCircle, Repeat, Disc3 } from "lucide-react";
-// import { cn } from "@/lib/utils"; // cn is not used in this version of the file
 
 const AnimationPlaybackBar = ({
   animationClips,
@@ -30,6 +29,8 @@ const AnimationPlaybackBar = ({
   onAnimationSpeedChange,
   playAllAnimations,
   onPlayAllAnimationsToggle,
+  portalContainerRef,
+  isFullscreen,
 }) => {
   if (!animationClips || animationClips.length === 0) {
     return null;
@@ -42,11 +43,14 @@ const AnimationPlaybackBar = ({
     if (onAnimationSpeedChange) onAnimationSpeedChange(valueArray[0]);
   };
 
+  const displayTime =
+    animationDuration > 0 ? animationTime * animationDuration : 0;
+  const displayDuration = animationDuration > 0 ? animationDuration : 0;
+
   return (
     <Card className='bg-slate-800/80 backdrop-blur-md border border-slate-700/60 shadow-xl rounded-none md:rounded-lg'>
       <CardHeader className='pb-2 pt-3 px-3 sm:pb-3 sm:pt-4 sm:px-4'>
         <CardTitle className='text-sm sm:text-base text-slate-100 flex items-center'>
-          {/* CORRECTED: Removed sm:size prop, using a single size */}
           <Disc3 size={18} className='mr-2 text-purple-400' />
           Animation Controls
         </CardTitle>
@@ -58,8 +62,7 @@ const AnimationPlaybackBar = ({
               htmlFor='animationClipSelect'
               className='text-xs text-slate-400'
             >
-              {" "}
-              Animation Clip{" "}
+              Animation Clip
             </Label>
             <Select
               value={selectedAnimationClipIndex.toString()}
@@ -72,7 +75,12 @@ const AnimationPlaybackBar = ({
               >
                 <SelectValue placeholder='Select clip' />
               </SelectTrigger>
-              <SelectContent className='bg-slate-700 border-slate-600 text-slate-200'>
+              <SelectContent
+                container={
+                  isFullscreen ? portalContainerRef.current : undefined
+                } // CORRECTED PROP
+                className='bg-slate-700 border-slate-600 text-slate-200'
+              >
                 {animationClips.map((clip, index) => (
                   <SelectItem
                     key={index}
@@ -121,13 +129,13 @@ const AnimationPlaybackBar = ({
               disabled={
                 animationPlaybackState === "stopped" || animationDuration === 0
               }
-              title={`Time: ${(animationTime * animationDuration).toFixed(
+              title={`Time: ${displayTime.toFixed(
                 2
-              )}s / ${animationDuration.toFixed(2)}s`}
+              )}s / ${displayDuration.toFixed(2)}s`}
             />
             <div className='text-[10px] sm:text-xs text-slate-400 text-right pr-1'>
-              {(animationTime * animationDuration).toFixed(2)}s /{" "}
-              {animationDuration > 0 ? animationDuration.toFixed(2) : "N/A"}s
+              {displayTime.toFixed(2)}s /{" "}
+              {displayDuration > 0 ? displayDuration.toFixed(2) : "N/A"}s
             </div>
           </div>
         </div>
@@ -139,12 +147,10 @@ const AnimationPlaybackBar = ({
                 htmlFor='animationSpeedSlider'
                 className='text-xs text-slate-400'
               >
-                {" "}
-                Speed{" "}
+                Speed
               </Label>
               <span className='text-xs text-slate-400'>
-                {" "}
-                {animationPlaybackSpeed.toFixed(1)}x{" "}
+                {animationPlaybackSpeed.toFixed(1)}x
               </span>
             </div>
             <Slider
@@ -168,8 +174,7 @@ const AnimationPlaybackBar = ({
               htmlFor='animationLoopToggle'
               className='text-xs text-slate-400 flex items-center'
             >
-              {" "}
-              Loop <Repeat size={12} className='inline ml-1 opacity-70' />{" "}
+              Loop <Repeat size={12} className='inline ml-1 opacity-70' />
             </Label>
           </div>
 
@@ -185,8 +190,7 @@ const AnimationPlaybackBar = ({
                 htmlFor='playAllAnimationsToggle'
                 className='text-xs text-slate-400 text-center xs:text-left'
               >
-                {" "}
-                Play All Clips{" "}
+                Play All Clips
               </Label>
             </div>
           )}

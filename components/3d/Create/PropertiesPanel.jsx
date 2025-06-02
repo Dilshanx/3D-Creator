@@ -1,29 +1,22 @@
 import React, { useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  // CardDescription, // Available if needed
-  // CardFooter,      // Available if needed
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button"; // Keep Button
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+// REMOVE: Select related imports
+// import {
+//   Select,
+//   SelectContent,
+//   SelectItem,
+//   SelectTrigger,
+//   SelectValue,
+// } from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-  // TooltipProvider should be at a higher level, e.g., Model3DCreator
 } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -40,21 +33,30 @@ import {
   PlusCircle,
 } from "lucide-react";
 import * as THREE from "three";
-// ForceRefreshButton was moved to EditorToolbar
 
-const initialTextureProps = {
+const initialTexturePropsValues = {
   mapUrl: null,
   normalMapUrl: null,
   roughnessMapUrl: null,
   metalnessMapUrl: null,
   aoMapUrl: null,
   emissiveMapUrl: null,
-  // You can add default values for other PBR props here if needed
-  // emissiveIntensity: 1.0,
-  // aoMapIntensity: 1.0,
-  // transmission: 0.0,
-  // ior: 1.5,
-  // thickness: 0.01,
+  roughness: 0.5,
+  metalness: 0.0,
+  aoMapIntensity: 1.0,
+  emissiveColor: "#000000",
+  emissiveIntensity: 1.0,
+  transmission: 0.0,
+  ior: 1.5,
+  thickness: 0.01,
+  clearcoat: 0.0,
+  clearcoatRoughness: 0.0,
+  sheen: 0.0,
+  sheenColor: "#ffffff",
+  sheenRoughness: 0.0,
+  specularIntensity: 1.0,
+  specularColor: "#ffffff",
+  shininess: 30,
 };
 
 const allTextureSlots = [
@@ -64,6 +66,40 @@ const allTextureSlots = [
   { id: "metalnessMap", name: "Metalness Map" },
   { id: "aoMap", name: "AO Map" },
   { id: "emissiveMap", name: "Emissive Map" },
+];
+
+// Options for replacement button groups
+const materialOptionsList = [
+  { name: "Standard (PBR)", type: "standard" },
+  { name: "Physical (PBR)", type: "physical" },
+  { name: "Toon", type: "toon" },
+  { name: "Basic (Non-PBR)", type: "basic" },
+  { name: "Lambert (Non-PBR)", type: "lambert" },
+  { name: "Phong (Non-PBR)", type: "phong" },
+  { name: "Wireframe", type: "wireframe" },
+];
+
+const glbMaterialOptionsWithModel = [
+  { name: "Model's Own Materials", type: "model" },
+  ...materialOptionsList,
+];
+
+const animationTypeOptions = [
+  { name: "None", value: "none" },
+  { name: "Rotate", value: "rotate" },
+  { name: "Orbit", value: "orbit" },
+];
+
+const animationAxisOptions = [
+  { name: "X Axis", value: "x" },
+  { name: "Y Axis", value: "y" },
+  { name: "Z Axis", value: "z" },
+];
+
+const animationPlaneOptions = [
+  { name: "XY Plane", value: "xy" },
+  { name: "XZ Plane", value: "xz" },
+  { name: "YZ Plane", value: "yz" },
 ];
 
 export default function PropertiesPanel({
@@ -76,7 +112,8 @@ export default function PropertiesPanel({
   handleClearTexture,
   shapeTextureFileInputRefs,
   textTextureFileInputRefs,
-  // forceRefreshCanvas, // Prop removed as button moved to EditorToolbar
+  portalContainerRef, // Kept for potential use by other components like Tooltip if needed
+  isFullscreen, // Kept for potential general use
 }) {
   const shapeDisplayOptions = [
     { name: "Cube", type: "box", icon: "🧊" },
@@ -98,6 +135,7 @@ export default function PropertiesPanel({
     },
   ];
   const popularShapeIcons = {
+    // ... (unchanged)
     heart: "❤️",
     star: "⭐",
     crown: "👑",
@@ -109,15 +147,7 @@ export default function PropertiesPanel({
     sword: "⚔️",
     butterfly: "🦋",
   };
-  const materialOptions = [
-    { name: "Standard (PBR)", type: "standard" },
-    { name: "Physical (PBR)", type: "physical" },
-    { name: "Toon", type: "toon" },
-    { name: "Basic (Non-PBR)", type: "basic" },
-    { name: "Lambert (Non-PBR)", type: "lambert" },
-    { name: "Phong (Non-PBR)", type: "phong" },
-    { name: "Wireframe", type: "wireframe" },
-  ];
+  // REMOVED: materialOptions (now materialOptionsList is used)
 
   const currentShapeType = selectedShape?.type;
   const isCustomExtruded = currentShapeType === "customExtruded";
@@ -126,18 +156,34 @@ export default function PropertiesPanel({
   const isImagePlane = currentShapeType === "imagePlane";
 
   const glbMaterialOverride = selectedShape?.glbMaterialOverride || null;
+
   const showPBRForGLBOverride =
     glbMaterialOverride &&
     ["standard", "physical"].includes(glbMaterialOverride.type);
+
+  const currentMaterialForPrimitives = selectedShape?.material;
   const showPBRPropertiesForPrimitives =
     !isImportedGLB &&
     !isImagePlane &&
     selectedShape &&
-    ["standard", "physical"].includes(selectedShape.material);
+    ["standard", "physical"].includes(currentMaterialForPrimitives);
+  const showPhongPropertiesForPrimitives =
+    !isImportedGLB &&
+    !isImagePlane &&
+    selectedShape &&
+    currentMaterialForPrimitives === "phong";
+  const showPhysicalPropertiesForPrimitives =
+    !isImportedGLB &&
+    !isImagePlane &&
+    selectedShape &&
+    currentMaterialForPrimitives === "physical";
+
+  const showPhysicalForGLBOverride =
+    glbMaterialOverride && glbMaterialOverride.type === "physical";
 
   const animation = selectedShape?.animation
     ? {
-        type: selectedShape.animation.type || "none",
+        /* ... (unchanged) ... */ type: selectedShape.animation.type || "none",
         speed:
           selectedShape.animation.speed !== undefined
             ? selectedShape.animation.speed
@@ -161,6 +207,7 @@ export default function PropertiesPanel({
 
   const handleTransformUpdate = useCallback(
     (property, index, valueStr) => {
+      /* ... (unchanged) ... */
       if (!selectedShape) return;
       const value = parseFloat(valueStr);
       if (isNaN(value) && property !== "rotation") return;
@@ -173,40 +220,84 @@ export default function PropertiesPanel({
     },
     [selectedShape, updateShape]
   );
+
   const handleGenericUpdate = useCallback(
     (property, value) => {
+      /* ... (unchanged) ... */
       if (!selectedShape) return;
       updateShape(selectedShape.id, { [property]: value });
     },
     [selectedShape, updateShape]
   );
+
+  const handleTexturePropUpdate = useCallback(
+    (propName, value) => {
+      /* ... (unchanged) ... */
+      if (!selectedShape) return;
+      const targetPropsKey = isText ? "textTextureProps" : "textureProps";
+      const newTextureProps = {
+        ...(selectedShape[targetPropsKey] || initialTexturePropsValues),
+        [propName]: value,
+      };
+      updateShape(selectedShape.id, { [targetPropsKey]: newTextureProps });
+    },
+    [selectedShape, updateShape, isText]
+  );
+
   const handleGLBMaterialOverrideUpdate = useCallback(
     (property, value) => {
+      /* ... (unchanged, but type update will affect more properties) ... */
       if (!selectedShape || !isImportedGLB) return;
       const currentOverride = selectedShape.glbMaterialOverride || {};
       let newOverrideSettings = { ...currentOverride, [property]: value };
+
       if (property === "type") {
         if (value === "model") {
-          newOverrideSettings = null;
+          newOverrideSettings = null; // Revert to model's own
         } else {
+          // Initialize common properties if switching from "model" or another type
           newOverrideSettings.color =
             currentOverride.color || selectedShape.color || "#cccccc";
+
+          // PBR common
           if (value === "standard" || value === "physical") {
-            newOverrideSettings.roughness = currentOverride.roughness ?? 0.5;
-            newOverrideSettings.metalness = currentOverride.metalness ?? 0.0;
+            newOverrideSettings.roughness =
+              currentOverride.roughness ?? initialTexturePropsValues.roughness;
+            newOverrideSettings.metalness =
+              currentOverride.metalness ?? initialTexturePropsValues.metalness;
           } else {
             delete newOverrideSettings.roughness;
             delete newOverrideSettings.metalness;
           }
+
+          // Physical specific
           if (value === "physical") {
             newOverrideSettings.transmission =
-              currentOverride.transmission ?? 0.0;
-            newOverrideSettings.ior = currentOverride.ior ?? 1.5;
-            newOverrideSettings.thickness = currentOverride.thickness ?? 0.01;
+              currentOverride.transmission ??
+              initialTexturePropsValues.transmission;
+            newOverrideSettings.ior =
+              currentOverride.ior ?? initialTexturePropsValues.ior;
+            newOverrideSettings.thickness =
+              currentOverride.thickness ?? initialTexturePropsValues.thickness;
+            newOverrideSettings.clearcoat =
+              currentOverride.clearcoat ?? initialTexturePropsValues.clearcoat;
+            newOverrideSettings.clearcoatRoughness =
+              currentOverride.clearcoatRoughness ??
+              initialTexturePropsValues.clearcoatRoughness;
           } else {
             delete newOverrideSettings.transmission;
             delete newOverrideSettings.ior;
             delete newOverrideSettings.thickness;
+            delete newOverrideSettings.clearcoat;
+            delete newOverrideSettings.clearcoatRoughness;
+          }
+
+          // Phong specific
+          if (value === "phong") {
+            newOverrideSettings.shininess =
+              currentOverride.shininess ?? initialTexturePropsValues.shininess;
+          } else {
+            delete newOverrideSettings.shininess;
           }
         }
       }
@@ -216,8 +307,10 @@ export default function PropertiesPanel({
     },
     [selectedShape, updateShape, isImportedGLB]
   );
+
   const handleAnimationUpdate = useCallback(
     (property, value) => {
+      /* ... (unchanged) ... */
       if (!selectedShape) return;
       const currentAnimationData = selectedShape.animation || {
         type: "none",
@@ -233,8 +326,10 @@ export default function PropertiesPanel({
     },
     [selectedShape, updateShape]
   );
+
   const handleOrbitCenterUpdate = useCallback(
     (index, valueStr) => {
+      /* ... (unchanged) ... */
       if (!selectedShape || !selectedShape.animation) return;
       const value = parseFloat(valueStr);
       if (isNaN(value)) return;
@@ -246,8 +341,10 @@ export default function PropertiesPanel({
     },
     [selectedShape, handleAnimationUpdate]
   );
+
   const handleQuickAction = useCallback(
     (action) => {
+      /* ... (unchanged) ... */
       if (!selectedShape) return;
       const actions = {
         resetScale: () => updateShape(selectedShape.id, { scale: [1, 1, 1] }),
@@ -300,20 +397,19 @@ export default function PropertiesPanel({
     ]
   );
 
-  let activeTextureSlots = [];
-  let currentTextureValues = { ...initialTextureProps }; // Ensure it's a copy
+  let activeTextureSlots = []; // ... (unchanged)
+  let currentTextureValues = { ...initialTexturePropsValues };
   let fileInputRefsToUse = shapeTextureFileInputRefs;
-  let texturePropsKeyForShape = "textureProps"; // Default
+  let texturePropsKeyForShape = "textureProps";
 
   if (selectedShape) {
-    // Only process if a shape is selected
     if (isText) {
       activeTextureSlots = [
         { id: "map", name: "Color/Albedo Map" },
         { id: "normalMap", name: "Normal Map" },
       ];
       currentTextureValues = {
-        ...initialTextureProps,
+        ...initialTexturePropsValues,
         ...(selectedShape.textTextureProps || {}),
       };
       fileInputRefsToUse = textTextureFileInputRefs;
@@ -321,23 +417,20 @@ export default function PropertiesPanel({
     } else if (isImportedGLB) {
       activeTextureSlots = allTextureSlots;
       currentTextureValues = {
-        ...initialTextureProps,
+        ...initialTexturePropsValues,
         ...(selectedShape.textureProps || {}),
       };
-      fileInputRefsToUse = shapeTextureFileInputRefs;
-      texturePropsKeyForShape = "textureProps";
     } else if (!isImagePlane) {
       activeTextureSlots = allTextureSlots;
       currentTextureValues = {
-        ...initialTextureProps,
+        ...initialTexturePropsValues,
         ...(selectedShape.textureProps || {}),
       };
-      fileInputRefsToUse = shapeTextureFileInputRefs;
-      texturePropsKeyForShape = "textureProps";
     }
   }
 
   const getShapeIcon = () => {
+    /* ... (unchanged) ... */
     if (!selectedShape) return <Square size={24} className='text-slate-500' />;
     const iconData = shapeDisplayOptions.find(
       (s) => s.type === currentShapeType
@@ -361,7 +454,60 @@ export default function PropertiesPanel({
   const inputClass =
     "bg-slate-700 border-slate-600 text-slate-100 text-xs h-8 focus:ring-1 focus:ring-purple-500 focus:border-purple-500";
   const labelClass = "text-xs text-slate-300 mb-1 block";
-  const selectTriggerClass = cn(inputClass, "py-0");
+  // REMOVED: selectTriggerClass & selectContentClassName
+
+  const pbrRoughness = isImportedGLB
+    ? glbMaterialOverride?.roughness ?? currentTextureValues.roughness
+    : selectedShape?.textureProps?.roughness ??
+      selectedShape?.roughness ??
+      initialTexturePropsValues.roughness;
+  const pbrMetalness = isImportedGLB
+    ? glbMaterialOverride?.metalness ?? currentTextureValues.metalness
+    : selectedShape?.textureProps?.metalness ??
+      selectedShape?.metalness ??
+      initialTexturePropsValues.metalness;
+  // ... other prop calculations (unchanged) ...
+  const physicalTransmission = isImportedGLB
+    ? glbMaterialOverride?.transmission ?? currentTextureValues.transmission
+    : selectedShape?.textureProps?.transmission ??
+      selectedShape?.transmission ??
+      initialTexturePropsValues.transmission;
+  const physicalIor = isImportedGLB
+    ? glbMaterialOverride?.ior ?? currentTextureValues.ior
+    : selectedShape?.textureProps?.ior ??
+      selectedShape?.ior ??
+      initialTexturePropsValues.ior;
+  const physicalThickness = isImportedGLB
+    ? glbMaterialOverride?.thickness ?? currentTextureValues.thickness
+    : selectedShape?.textureProps?.thickness ??
+      selectedShape?.thickness ??
+      initialTexturePropsValues.thickness;
+  const physicalClearcoat = isImportedGLB
+    ? glbMaterialOverride?.clearcoat ?? currentTextureValues.clearcoat
+    : selectedShape?.textureProps?.clearcoat ??
+      selectedShape?.clearcoat ??
+      initialTexturePropsValues.clearcoat;
+  const physicalClearcoatRoughness = isImportedGLB
+    ? glbMaterialOverride?.clearcoatRoughness ??
+      currentTextureValues.clearcoatRoughness
+    : selectedShape?.textureProps?.clearcoatRoughness ??
+      selectedShape?.clearcoatRoughness ??
+      initialTexturePropsValues.clearcoatRoughness;
+  const phongShininess = isImportedGLB
+    ? glbMaterialOverride?.shininess ?? currentTextureValues.shininess
+    : selectedShape?.textureProps?.shininess ??
+      selectedShape?.shininess ??
+      initialTexturePropsValues.shininess;
+
+  // For debugging, ensure this log appears and portalContainerRef.current is what you expect in fullscreen
+  if (typeof window !== "undefined") {
+    console.log(
+      "PropertiesPanel - isFullscreen:",
+      isFullscreen,
+      "portalContainerRef.current:",
+      portalContainerRef?.current
+    );
+  }
 
   return (
     <motion.div
@@ -379,21 +525,19 @@ export default function PropertiesPanel({
             exit={{ opacity: 0, y: -15 }}
             className='space-y-5'
           >
+            {/* Object Name, Text Settings, Custom Shape Settings, Transform - UNCHANGED START */}
             <div className='flex justify-between items-center'>
               <div>
-                {" "}
                 <h3 className='text-md font-semibold text-slate-100'>
                   Object Properties
-                </h3>{" "}
+                </h3>
                 <p className='text-xs text-slate-400'>
-                  {" "}
                   {selectedShape.name ||
-                    (isText ? "3D Text" : currentShapeType)}{" "}
-                </p>{" "}
+                    (isText ? "3D Text" : currentShapeType)}
+                </p>
               </div>
               <div className='flex items-center space-x-1'>
                 <Tooltip>
-                  {" "}
                   <TooltipTrigger asChild>
                     <Button
                       onClick={duplicateShape}
@@ -401,19 +545,17 @@ export default function PropertiesPanel({
                       size='icon'
                       className='w-7 h-7 text-slate-400 hover:text-purple-300 hover:bg-slate-700/50'
                     >
-                      {" "}
-                      <LayersIconLucide size={14} />{" "}
+                      <LayersIconLucide size={14} />
                     </Button>
-                  </TooltipTrigger>{" "}
+                  </TooltipTrigger>
                   <TooltipContent
                     side='bottom'
                     className='bg-slate-800 text-slate-200 border-slate-700'
                   >
                     <p>Duplicate (Ctrl+D)</p>
-                  </TooltipContent>{" "}
+                  </TooltipContent>
                 </Tooltip>
                 <Tooltip>
-                  {" "}
                   <TooltipTrigger asChild>
                     <Button
                       onClick={() => removeShape(selectedShape.id)}
@@ -421,52 +563,47 @@ export default function PropertiesPanel({
                       size='icon'
                       className='w-7 h-7 text-red-500 hover:text-red-400 hover:bg-red-500/20'
                     >
-                      {" "}
-                      <Trash2 size={14} />{" "}
+                      <Trash2 size={14} />
                     </Button>
-                  </TooltipTrigger>{" "}
+                  </TooltipTrigger>
                   <TooltipContent
                     side='bottom'
                     className='bg-slate-800 text-slate-200 border-slate-700'
                   >
                     <p>Delete (Del/Backspace)</p>
-                  </TooltipContent>{" "}
+                  </TooltipContent>
                 </Tooltip>
               </div>
             </div>
             <Separator className='bg-slate-700' />
+
             <Card className={cardClass}>
-              {" "}
               <CardContent className='p-3'>
-                {" "}
                 <Label htmlFor='object-name' className={labelClass}>
                   Name
-                </Label>{" "}
+                </Label>
                 <Input
                   id='object-name'
                   value={selectedShape.name || ""}
                   onChange={(e) => handleGenericUpdate("name", e.target.value)}
                   placeholder='Object Name'
                   className={inputClass}
-                />{" "}
-              </CardContent>{" "}
+                />
+              </CardContent>
             </Card>
 
             {isText && (
               <Card className={cardClass}>
-                {" "}
                 <CardHeader className='p-3'>
                   <CardTitle className='text-sm text-slate-200'>
                     Text Settings
                   </CardTitle>
-                </CardHeader>{" "}
+                </CardHeader>
                 <CardContent className='space-y-3 p-3'>
-                  {" "}
                   <div>
-                    {" "}
                     <Label htmlFor='text-content' className={labelClass}>
                       Content
-                    </Label>{" "}
+                    </Label>
                     <Input
                       id='text-content'
                       value={selectedShape.text || ""}
@@ -475,13 +612,12 @@ export default function PropertiesPanel({
                       }
                       placeholder='Enter text...'
                       className={inputClass}
-                    />{" "}
-                  </div>{" "}
+                    />
+                  </div>
                   <div>
-                    {" "}
                     <Label className={labelClass}>
                       Size: {selectedShape.textSize?.toFixed(2) || 0.5}
-                    </Label>{" "}
+                    </Label>
                     <Slider
                       value={[selectedShape.textSize || 0.5]}
                       onValueChange={([v]) =>
@@ -490,13 +626,12 @@ export default function PropertiesPanel({
                       max={2}
                       min={0.1}
                       step={0.05}
-                    />{" "}
-                  </div>{" "}
+                    />
+                  </div>
                   <div>
-                    {" "}
                     <Label className={labelClass}>
                       Thickness: {selectedShape.extrudeDepth?.toFixed(2) || 0.2}
-                    </Label>{" "}
+                    </Label>
                     <Slider
                       value={[selectedShape.extrudeDepth || 0.2]}
                       onValueChange={([v]) =>
@@ -505,26 +640,23 @@ export default function PropertiesPanel({
                       max={1}
                       min={0.01}
                       step={0.01}
-                    />{" "}
-                  </div>{" "}
-                </CardContent>{" "}
+                    />
+                  </div>
+                </CardContent>
               </Card>
             )}
             {isCustomExtruded && (
               <Card className={cardClass}>
-                {" "}
                 <CardHeader className='p-3'>
                   <CardTitle className='text-sm text-slate-200'>
                     Custom Shape Settings
                   </CardTitle>
-                </CardHeader>{" "}
+                </CardHeader>
                 <CardContent className='space-y-3 p-3'>
-                  {" "}
                   <div>
-                    {" "}
                     <Label className={labelClass}>
                       Size: {selectedShape.shapeSize?.toFixed(2) || 1.0}
-                    </Label>{" "}
+                    </Label>
                     <Slider
                       value={[selectedShape.shapeSize || 1]}
                       onValueChange={([v]) =>
@@ -533,13 +665,12 @@ export default function PropertiesPanel({
                       max={5}
                       min={0.1}
                       step={0.05}
-                    />{" "}
-                  </div>{" "}
+                    />
+                  </div>
                   <div>
-                    {" "}
                     <Label className={labelClass}>
                       Depth: {selectedShape.extrudeDepth?.toFixed(2) || 0.2}
-                    </Label>{" "}
+                    </Label>
                     <Slider
                       value={[selectedShape.extrudeDepth || 0.2]}
                       onValueChange={([v]) =>
@@ -548,39 +679,35 @@ export default function PropertiesPanel({
                       max={2}
                       min={0.01}
                       step={0.01}
-                    />{" "}
-                  </div>{" "}
-                </CardContent>{" "}
+                    />
+                  </div>
+                </CardContent>
               </Card>
             )}
 
             <Card className={cardClass}>
-              {" "}
               <CardHeader className='p-3'>
                 <CardTitle className='text-sm text-slate-200'>
                   Transform
                 </CardTitle>
-              </CardHeader>{" "}
+              </CardHeader>
               <CardContent className='space-y-3 p-3'>
-                {" "}
                 {["position", "rotation", "scale"].map((prop) => (
                   <div key={prop} className='space-y-1.5'>
-                    {" "}
                     <h4 className='font-medium text-xs text-slate-300 capitalize'>
                       {prop}
-                    </h4>{" "}
+                    </h4>
                     {["X", "Y", "Z"].map((axis, index) => (
                       <div
                         key={axis}
                         className='grid grid-cols-6 items-center gap-2'
                       >
-                        {" "}
                         <Label
                           htmlFor={`${prop}-${axis}`}
                           className='text-xs text-slate-400 col-span-1'
                         >
                           {axis}
-                        </Label>{" "}
+                        </Label>
                         <Input
                           id={`${prop}-${axis}`}
                           type='number'
@@ -596,7 +723,7 @@ export default function PropertiesPanel({
                           }
                           step={prop === "rotation" ? 5 : 0.1}
                           className={cn(inputClass, "col-span-2")}
-                        />{" "}
+                        />
                         <Slider
                           value={[
                             prop === "rotation"
@@ -630,77 +757,69 @@ export default function PropertiesPanel({
                               : 0.1
                           }
                           className='col-span-3'
-                        />{" "}
+                        />
                       </div>
-                    ))}{" "}
+                    ))}
                   </div>
-                ))}{" "}
-              </CardContent>{" "}
+                ))}
+              </CardContent>
             </Card>
+            {/* Object Name, Text Settings, Custom Shape Settings, Transform - UNCHANGED END */}
 
             {!isImagePlane && (
               <Card className={cardClass}>
-                {" "}
                 <CardHeader className='p-3'>
                   <CardTitle className='text-sm text-slate-200 flex items-center'>
                     <Palette size={14} className='mr-1.5 text-purple-400' />{" "}
                     Appearance
                   </CardTitle>
-                </CardHeader>{" "}
+                </CardHeader>
                 <CardContent className='space-y-3 p-3'>
-                  {" "}
                   {isImportedGLB ? (
                     <>
-                      {" "}
                       <p className='text-xs text-slate-400'>
                         Override model's materials. Changes apply to all meshes.
-                      </p>{" "}
+                      </p>
                       <div>
-                        {" "}
-                        <Label className={labelClass}>
-                          Override Material
-                        </Label>{" "}
-                        <Select
-                          value={glbMaterialOverride?.type || "model"}
-                          onValueChange={(newType) =>
-                            handleGLBMaterialOverrideUpdate("type", newType)
-                          }
-                        >
-                          {" "}
-                          <SelectTrigger className={selectTriggerClass}>
-                            <SelectValue />
-                          </SelectTrigger>{" "}
-                          <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
-                            <SelectItem
-                              value='model'
-                              className='focus:bg-purple-600/30'
-                            >
-                              Model's Own Materials
-                            </SelectItem>{" "}
-                            {materialOptions.map((m) => (
-                              <SelectItem
-                                key={m.type}
-                                value={m.type}
-                                className='focus:bg-purple-600/30'
+                        <Label className={labelClass}>Override Material</Label>
+                        <div className='flex flex-col space-y-1.5 mt-1'>
+                          {glbMaterialOptionsWithModel.map((opt) => {
+                            const isActive =
+                              (glbMaterialOverride?.type || "model") ===
+                              opt.type;
+                            return (
+                              <Button
+                                key={opt.type}
+                                variant='outline'
+                                className={cn(
+                                  inputClass, // Base styling (h-8, bg, border, text, focus)
+                                  "px-2.5 w-full justify-start text-left", // Layout
+                                  isActive
+                                    ? "bg-purple-600 hover:bg-purple-700 text-white !border-purple-500" // Active state
+                                    : "hover:bg-slate-600" // Inactive hover
+                                )}
+                                onClick={() =>
+                                  handleGLBMaterialOverrideUpdate(
+                                    "type",
+                                    opt.type
+                                  )
+                                }
                               >
-                                {m.name}
-                              </SelectItem>
-                            ))}{" "}
-                          </SelectContent>{" "}
-                        </Select>{" "}
-                      </div>{" "}
+                                {opt.name}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
                       {glbMaterialOverride &&
                         glbMaterialOverride.type !== "model" && (
                           <>
-                            {" "}
-                            <Separator className='my-2 bg-slate-700' />{" "}
+                            <Separator className='my-2 bg-slate-700' />
                             <div>
-                              {" "}
                               <Label className={labelClass}>
                                 Override Color
-                              </Label>{" "}
+                              </Label>
                               <div className='flex items-center space-x-2'>
-                                {" "}
                                 <Input
                                   type='color'
                                   value={glbMaterialOverride.color || "#cccccc"}
@@ -711,7 +830,7 @@ export default function PropertiesPanel({
                                     )
                                   }
                                   className='p-0.5 h-8 w-10 rounded border-slate-600 cursor-pointer'
-                                />{" "}
+                                />
                                 <Input
                                   value={glbMaterialOverride.color || "#cccccc"}
                                   onChange={(e) =>
@@ -721,24 +840,17 @@ export default function PropertiesPanel({
                                     )
                                   }
                                   className={cn(inputClass, "flex-1")}
-                                />{" "}
-                              </div>{" "}
-                            </div>{" "}
-                            {showPBRForGLBOverride && (
+                                />
+                              </div>
+                            </div>
+                            {showPBRForGLBOverride /* ... PBR Sliders ... */ && (
                               <>
-                                {" "}
                                 <div>
-                                  {" "}
                                   <Label className={labelClass}>
-                                    Roughness:{" "}
-                                    {Number(
-                                      glbMaterialOverride.roughness ?? 0.5
-                                    ).toFixed(2)}
-                                  </Label>{" "}
+                                    Roughness: {Number(pbrRoughness).toFixed(2)}
+                                  </Label>
                                   <Slider
-                                    value={[
-                                      glbMaterialOverride.roughness ?? 0.5,
-                                    ]}
+                                    value={[pbrRoughness]}
                                     onValueChange={([v]) =>
                                       handleGLBMaterialOverrideUpdate(
                                         "roughness",
@@ -748,20 +860,14 @@ export default function PropertiesPanel({
                                     max={1}
                                     min={0}
                                     step={0.01}
-                                  />{" "}
-                                </div>{" "}
+                                  />
+                                </div>
                                 <div>
-                                  {" "}
                                   <Label className={labelClass}>
-                                    Metalness:{" "}
-                                    {Number(
-                                      glbMaterialOverride.metalness ?? 0.0
-                                    ).toFixed(2)}
-                                  </Label>{" "}
+                                    Metalness: {Number(pbrMetalness).toFixed(2)}
+                                  </Label>
                                   <Slider
-                                    value={[
-                                      glbMaterialOverride.metalness ?? 0.0,
-                                    ]}
+                                    value={[pbrMetalness]}
                                     onValueChange={([v]) =>
                                       handleGLBMaterialOverrideUpdate(
                                         "metalness",
@@ -771,47 +877,159 @@ export default function PropertiesPanel({
                                     max={1}
                                     min={0}
                                     step={0.01}
-                                  />{" "}
-                                </div>{" "}
+                                  />
+                                </div>
                               </>
-                            )}{" "}
+                            )}
+                            {showPhysicalForGLBOverride /* ... Physical Sliders ... */ && (
+                              <>
+                                <div>
+                                  <Label className={labelClass}>
+                                    Transmission:{" "}
+                                    {Number(physicalTransmission).toFixed(2)}
+                                  </Label>
+                                  <Slider
+                                    value={[physicalTransmission]}
+                                    onValueChange={([v]) =>
+                                      handleGLBMaterialOverrideUpdate(
+                                        "transmission",
+                                        v
+                                      )
+                                    }
+                                    max={1}
+                                    min={0}
+                                    step={0.01}
+                                  />
+                                </div>
+                                <div>
+                                  <Label className={labelClass}>
+                                    IOR: {Number(physicalIor).toFixed(2)}
+                                  </Label>
+                                  <Slider
+                                    value={[physicalIor]}
+                                    onValueChange={([v]) =>
+                                      handleGLBMaterialOverrideUpdate("ior", v)
+                                    }
+                                    max={2.33}
+                                    min={1}
+                                    step={0.01}
+                                  />
+                                </div>
+                                <div>
+                                  <Label className={labelClass}>
+                                    Thickness:{" "}
+                                    {Number(physicalThickness).toFixed(3)}
+                                  </Label>
+                                  <Slider
+                                    value={[physicalThickness]}
+                                    onValueChange={([v]) =>
+                                      handleGLBMaterialOverrideUpdate(
+                                        "thickness",
+                                        v
+                                      )
+                                    }
+                                    max={1}
+                                    min={0}
+                                    step={0.001}
+                                  />
+                                </div>
+                                <div>
+                                  <Label className={labelClass}>
+                                    Clearcoat:{" "}
+                                    {Number(physicalClearcoat).toFixed(2)}
+                                  </Label>
+                                  <Slider
+                                    value={[physicalClearcoat]}
+                                    onValueChange={([v]) =>
+                                      handleGLBMaterialOverrideUpdate(
+                                        "clearcoat",
+                                        v
+                                      )
+                                    }
+                                    max={1}
+                                    min={0}
+                                    step={0.01}
+                                  />
+                                </div>
+                                <div>
+                                  <Label className={labelClass}>
+                                    Clearcoat Roughness:{" "}
+                                    {Number(physicalClearcoatRoughness).toFixed(
+                                      2
+                                    )}
+                                  </Label>
+                                  <Slider
+                                    value={[physicalClearcoatRoughness]}
+                                    onValueChange={([v]) =>
+                                      handleGLBMaterialOverrideUpdate(
+                                        "clearcoatRoughness",
+                                        v
+                                      )
+                                    }
+                                    max={1}
+                                    min={0}
+                                    step={0.01}
+                                  />
+                                </div>
+                              </>
+                            )}
+                            {glbMaterialOverride.type ===
+                              "phong" /* ... Phong Sliders ... */ && (
+                              <div>
+                                <Label className={labelClass}>
+                                  Shininess: {Number(phongShininess).toFixed(0)}
+                                </Label>
+                                <Slider
+                                  value={[phongShininess]}
+                                  onValueChange={([v]) =>
+                                    handleGLBMaterialOverrideUpdate(
+                                      "shininess",
+                                      v
+                                    )
+                                  }
+                                  max={100}
+                                  min={0}
+                                  step={1}
+                                />
+                              </div>
+                            )}
                           </>
-                        )}{" "}
+                        )}
                     </>
                   ) : (
                     <>
-                      {" "}
                       <div>
-                        {" "}
-                        <Label className={labelClass}>Material</Label>{" "}
-                        <Select
-                          value={selectedShape.material || "standard"}
-                          onValueChange={(v) =>
-                            handleGenericUpdate("material", v)
-                          }
-                        >
-                          {" "}
-                          <SelectTrigger className={selectTriggerClass}>
-                            <SelectValue />
-                          </SelectTrigger>{" "}
-                          <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
-                            {materialOptions.map((m) => (
-                              <SelectItem
-                                key={m.type}
-                                value={m.type}
-                                className='focus:bg-purple-600/30'
+                        <Label className={labelClass}>Material</Label>
+                        <div className='flex flex-col space-y-1.5 mt-1'>
+                          {materialOptionsList.map((opt) => {
+                            const isActive =
+                              (selectedShape.material || "standard") ===
+                              opt.type;
+                            return (
+                              <Button
+                                key={opt.type}
+                                variant='outline'
+                                className={cn(
+                                  inputClass,
+                                  "px-2.5 w-full justify-start text-left",
+                                  isActive
+                                    ? "bg-purple-600 hover:bg-purple-700 text-white !border-purple-500"
+                                    : "hover:bg-slate-600"
+                                )}
+                                onClick={() =>
+                                  handleGenericUpdate("material", opt.type)
+                                }
                               >
-                                {m.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>{" "}
-                        </Select>{" "}
-                      </div>{" "}
+                                {opt.name}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {/* ... Color, PBR, Physical, Phong sliders for primitives (unchanged structure, ensure correct handlers) ... */}
                       <div>
-                        {" "}
-                        <Label className={labelClass}>Color</Label>{" "}
+                        <Label className={labelClass}>Color</Label>
                         <div className='flex items-center space-x-2'>
-                          {" "}
                           <Input
                             type='color'
                             value={selectedShape.color || "#ffffff"}
@@ -819,66 +1037,153 @@ export default function PropertiesPanel({
                               handleGenericUpdate("color", e.target.value)
                             }
                             className='p-0.5 h-8 w-10 rounded border-slate-600 cursor-pointer'
-                          />{" "}
+                          />
                           <Input
                             value={selectedShape.color || "#ffffff"}
                             onChange={(e) =>
                               handleGenericUpdate("color", e.target.value)
                             }
                             className={cn(inputClass, "flex-1")}
-                          />{" "}
-                        </div>{" "}
-                      </div>{" "}
+                          />
+                        </div>
+                      </div>
                       {showPBRPropertiesForPrimitives && (
                         <>
-                          {" "}
-                          <Separator className='my-2 bg-slate-700' />{" "}
+                          <Separator className='my-2 bg-slate-700' />
                           <div>
-                            {" "}
                             <Label className={labelClass}>
-                              Roughness:{" "}
-                              {Number(selectedShape.roughness || 0.5).toFixed(
-                                2
-                              )}
-                            </Label>{" "}
+                              Roughness: {Number(pbrRoughness).toFixed(2)}
+                            </Label>
                             <Slider
-                              value={[selectedShape.roughness || 0.5]}
+                              value={[pbrRoughness]}
                               onValueChange={([v]) =>
-                                handleGenericUpdate("roughness", v)
+                                handleTexturePropUpdate("roughness", v)
                               }
                               max={1}
                               min={0}
                               step={0.01}
-                            />{" "}
-                          </div>{" "}
+                            />
+                          </div>
                           <div>
-                            {" "}
                             <Label className={labelClass}>
-                              Metalness:{" "}
-                              {Number(selectedShape.metalness || 0.0).toFixed(
-                                2
-                              )}
-                            </Label>{" "}
+                              Metalness: {Number(pbrMetalness).toFixed(2)}
+                            </Label>
                             <Slider
-                              value={[selectedShape.metalness || 0.0]}
+                              value={[pbrMetalness]}
                               onValueChange={([v]) =>
-                                handleGenericUpdate("metalness", v)
+                                handleTexturePropUpdate("metalness", v)
                               }
                               max={1}
                               min={0}
                               step={0.01}
-                            />{" "}
-                          </div>{" "}
+                            />
+                          </div>
                         </>
-                      )}{" "}
+                      )}
+                      {showPhysicalPropertiesForPrimitives && (
+                        <>
+                          <Separator className='my-2 bg-slate-700' />
+                          <div>
+                            <Label className={labelClass}>
+                              Transmission:{" "}
+                              {Number(physicalTransmission).toFixed(2)}
+                            </Label>
+                            <Slider
+                              value={[physicalTransmission]}
+                              onValueChange={([v]) =>
+                                handleTexturePropUpdate("transmission", v)
+                              }
+                              max={1}
+                              min={0}
+                              step={0.01}
+                            />
+                          </div>
+                          <div>
+                            <Label className={labelClass}>
+                              IOR: {Number(physicalIor).toFixed(2)}
+                            </Label>
+                            <Slider
+                              value={[physicalIor]}
+                              onValueChange={([v]) =>
+                                handleTexturePropUpdate("ior", v)
+                              }
+                              max={2.33}
+                              min={1}
+                              step={0.01}
+                            />
+                          </div>
+                          <div>
+                            <Label className={labelClass}>
+                              Thickness: {Number(physicalThickness).toFixed(3)}
+                            </Label>
+                            <Slider
+                              value={[physicalThickness]}
+                              onValueChange={([v]) =>
+                                handleTexturePropUpdate("thickness", v)
+                              }
+                              max={1}
+                              min={0}
+                              step={0.001}
+                            />
+                          </div>
+                          <div>
+                            <Label className={labelClass}>
+                              Clearcoat: {Number(physicalClearcoat).toFixed(2)}
+                            </Label>
+                            <Slider
+                              value={[physicalClearcoat]}
+                              onValueChange={([v]) =>
+                                handleTexturePropUpdate("clearcoat", v)
+                              }
+                              max={1}
+                              min={0}
+                              step={0.01}
+                            />
+                          </div>
+                          <div>
+                            <Label className={labelClass}>
+                              Clearcoat Roughness:{" "}
+                              {Number(physicalClearcoatRoughness).toFixed(2)}
+                            </Label>
+                            <Slider
+                              value={[physicalClearcoatRoughness]}
+                              onValueChange={([v]) =>
+                                handleTexturePropUpdate("clearcoatRoughness", v)
+                              }
+                              max={1}
+                              min={0}
+                              step={0.01}
+                            />
+                          </div>
+                        </>
+                      )}
+                      {showPhongPropertiesForPrimitives && (
+                        <>
+                          <Separator className='my-2 bg-slate-700' />
+                          <div>
+                            <Label className={labelClass}>
+                              Shininess: {Number(phongShininess).toFixed(0)}
+                            </Label>
+                            <Slider
+                              value={[phongShininess]}
+                              onValueChange={([v]) =>
+                                handleTexturePropUpdate("shininess", v)
+                              }
+                              max={100}
+                              min={0}
+                              step={1}
+                            />
+                          </div>
+                        </>
+                      )}
                     </>
-                  )}{" "}
-                  <Separator className='my-3 bg-slate-700' />{" "}
+                  )}
+                  {/* Texture Uploads (unchanged logic) */}
+                  <Separator className='my-3 bg-slate-700' />
                   <h4 className='text-xs font-semibold text-purple-300 flex items-center'>
                     <ImageUp size={12} className='mr-1' /> Textures
-                  </h4>{" "}
+                  </h4>
                   <div className='grid grid-cols-2 gap-2.5'>
-                    {" "}
                     {activeTextureSlots.map((slot) => {
                       const currentUrl = currentTextureValues[`${slot.id}Url`];
                       const fileInputRef = fileInputRefsToUse.current[slot.id];
@@ -887,21 +1192,19 @@ export default function PropertiesPanel({
                           key={`${texturePropsKeyForShape}-${slot.id}`}
                           className='space-y-1'
                         >
-                          {" "}
                           <Label
                             htmlFor={`tex-upload-${slot.id}`}
                             className='text-xs text-slate-400'
                           >
                             {slot.name}
-                          </Label>{" "}
+                          </Label>
                           {currentUrl && (
                             <div className='relative group w-full aspect-square bg-slate-700/50 rounded overflow-hidden mb-0.5'>
-                              {" "}
                               <img
                                 src={currentUrl}
                                 alt={`${slot.name} preview`}
                                 className='w-full h-full object-cover'
-                              />{" "}
+                              />
                               <Button
                                 variant='destructive'
                                 size='icon'
@@ -910,17 +1213,18 @@ export default function PropertiesPanel({
                                   handleClearTexture(
                                     selectedShape.id,
                                     slot.id,
-                                    isText
+                                    isText &&
+                                      texturePropsKeyForShape ===
+                                        "textTextureProps"
                                   )
                                 }
                                 title={`Clear ${slot.name}`}
                               >
                                 <Trash2 size={10} />
-                              </Button>{" "}
+                              </Button>
                             </div>
-                          )}{" "}
+                          )}
                           <div className='flex items-center space-x-1'>
-                            {" "}
                             <Button
                               variant='outline'
                               size='xs'
@@ -933,7 +1237,7 @@ export default function PropertiesPanel({
                             >
                               <ImageUp size={10} className='mr-1' />{" "}
                               {currentUrl ? "Change" : "Upload"}
-                            </Button>{" "}
+                            </Button>
                             {currentUrl && (
                               <Button
                                 variant='ghost'
@@ -942,7 +1246,9 @@ export default function PropertiesPanel({
                                   handleClearTexture(
                                     selectedShape.id,
                                     slot.id,
-                                    isText
+                                    isText &&
+                                      texturePropsKeyForShape ===
+                                        "textTextureProps"
                                   )
                                 }
                                 title={`Clear ${slot.name}`}
@@ -950,56 +1256,52 @@ export default function PropertiesPanel({
                               >
                                 <X size={10} />
                               </Button>
-                            )}{" "}
-                          </div>{" "}
+                            )}
+                          </div>
                         </div>
                       );
-                    })}{" "}
-                  </div>{" "}
-                </CardContent>{" "}
+                    })}
+                  </div>
+                </CardContent>
               </Card>
             )}
 
             <Card className={cardClass}>
-              {" "}
               <CardHeader className='p-3'>
                 <CardTitle className='text-sm text-slate-200'>
                   Animation
                 </CardTitle>
-              </CardHeader>{" "}
+              </CardHeader>
               <CardContent className='space-y-3 p-3'>
-                {" "}
                 <div>
                   <Label className={labelClass}>Type</Label>
-                  <Select
-                    value={animation.type}
-                    onValueChange={(v) => handleAnimationUpdate("type", v)}
-                  >
-                    <SelectTrigger className={selectTriggerClass}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
-                      <SelectItem
-                        value='none'
-                        className='focus:bg-purple-600/30'
-                      >
-                        None
-                      </SelectItem>
-                      <SelectItem
-                        value='rotate'
-                        className='focus:bg-purple-600/30'
-                      >
-                        Rotate
-                      </SelectItem>
-                      <SelectItem
-                        value='orbit'
-                        className='focus:bg-purple-600/30'
-                      >
-                        Orbit
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>{" "}
+                  {/* Animation Type Buttons */}
+                  <div className='flex space-x-1.5 mt-1'>
+                    {" "}
+                    {/* Or grid grid-cols-3 gap-1.5 */}
+                    {animationTypeOptions.map((opt) => {
+                      const isActive = animation.type === opt.value;
+                      return (
+                        <Button
+                          key={opt.value}
+                          variant='outline'
+                          className={cn(
+                            inputClass,
+                            "px-2.5 flex-1 text-center", // Adjusted for horizontal layout
+                            isActive
+                              ? "bg-purple-600 hover:bg-purple-700 text-white !border-purple-500"
+                              : "hover:bg-slate-600"
+                          )}
+                          onClick={() =>
+                            handleAnimationUpdate("type", opt.value)
+                          }
+                        >
+                          {opt.name}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
                 {animation.type !== "none" && (
                   <>
                     <div>
@@ -1015,42 +1317,38 @@ export default function PropertiesPanel({
                         max={5}
                         step={0.05}
                       />
-                    </div>{" "}
+                    </div>
                     {animation.type === "rotate" && (
                       <div>
                         <Label className={labelClass}>Rotation Axis</Label>
-                        <Select
-                          value={animation.axis}
-                          onValueChange={(v) =>
-                            handleAnimationUpdate("axis", v)
-                          }
-                        >
-                          <SelectTrigger className={selectTriggerClass}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
-                            <SelectItem
-                              value='x'
-                              className='focus:bg-purple-600/30'
-                            >
-                              X
-                            </SelectItem>
-                            <SelectItem
-                              value='y'
-                              className='focus:bg-purple-600/30'
-                            >
-                              Y
-                            </SelectItem>
-                            <SelectItem
-                              value='z'
-                              className='focus:bg-purple-600/30'
-                            >
-                              Z
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {/* Animation Axis Buttons */}
+                        <div className='flex space-x-1.5 mt-1'>
+                          {" "}
+                          {/* Or grid grid-cols-3 gap-1.5 */}
+                          {animationAxisOptions.map((opt) => {
+                            const isActive = animation.axis === opt.value;
+                            return (
+                              <Button
+                                key={opt.value}
+                                variant='outline'
+                                className={cn(
+                                  inputClass,
+                                  "px-2.5 flex-1 text-center",
+                                  isActive
+                                    ? "bg-purple-600 hover:bg-purple-700 text-white !border-purple-500"
+                                    : "hover:bg-slate-600"
+                                )}
+                                onClick={() =>
+                                  handleAnimationUpdate("axis", opt.value)
+                                }
+                              >
+                                {opt.name}
+                              </Button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    )}{" "}
+                    )}
                     {animation.type === "orbit" && (
                       <>
                         <div>
@@ -1067,40 +1365,40 @@ export default function PropertiesPanel({
                             max={20}
                             step={0.1}
                           />
-                        </div>{" "}
+                        </div>
                         <div>
                           <Label className={labelClass}>Orbit Plane</Label>
-                          <Select
-                            value={animation.orbitPlane || "xz"}
-                            onValueChange={(v) =>
-                              handleAnimationUpdate("orbitPlane", v)
-                            }
-                          >
-                            <SelectTrigger className={selectTriggerClass}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className='bg-slate-700 border-slate-600 text-slate-100'>
-                              <SelectItem
-                                value='xy'
-                                className='focus:bg-purple-600/30'
-                              >
-                                XY
-                              </SelectItem>
-                              <SelectItem
-                                value='xz'
-                                className='focus:bg-purple-600/30'
-                              >
-                                XZ
-                              </SelectItem>
-                              <SelectItem
-                                value='yz'
-                                className='focus:bg-purple-600/30'
-                              >
-                                YZ
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>{" "}
+                          {/* Animation Plane Buttons */}
+                          <div className='flex space-x-1.5 mt-1'>
+                            {" "}
+                            {/* Or grid grid-cols-3 gap-1.5 */}
+                            {animationPlaneOptions.map((opt) => {
+                              const isActive =
+                                (animation.orbitPlane || "xz") === opt.value;
+                              return (
+                                <Button
+                                  key={opt.value}
+                                  variant='outline'
+                                  className={cn(
+                                    inputClass,
+                                    "px-2.5 flex-1 text-center",
+                                    isActive
+                                      ? "bg-purple-600 hover:bg-purple-700 text-white !border-purple-500"
+                                      : "hover:bg-slate-600"
+                                  )}
+                                  onClick={() =>
+                                    handleAnimationUpdate(
+                                      "orbitPlane",
+                                      opt.value
+                                    )
+                                  }
+                                >
+                                  {opt.name}
+                                </Button>
+                              );
+                            })}
+                          </div>
+                        </div>
                         <div className='space-y-1'>
                           <Label className={labelClass}>Orbit Center</Label>
                           <div className='grid grid-cols-3 gap-2 items-center'>
@@ -1132,23 +1430,21 @@ export default function PropertiesPanel({
                           </div>
                         </div>
                       </>
-                    )}{" "}
+                    )}
                   </>
-                )}{" "}
-              </CardContent>{" "}
+                )}
+              </CardContent>
             </Card>
 
+            {/* Quick Actions (unchanged) */}
             <Card className={cardClass}>
-              {" "}
               <CardHeader className='p-3'>
                 <CardTitle className='text-sm text-slate-200'>
                   Quick Actions
                 </CardTitle>
-              </CardHeader>{" "}
+              </CardHeader>
               <CardContent className='p-3'>
-                {" "}
                 <div className='grid grid-cols-2 gap-2'>
-                  {" "}
                   {[
                     "resetScale",
                     "resetRotation",
@@ -1168,17 +1464,17 @@ export default function PropertiesPanel({
                           "hover:bg-slate-600/50"
                         )}
                       >
-                        {" "}
                         {actionKey
                           .replace(/([A-Z])/g, " $1")
-                          .replace(/^./, (str) => str.toUpperCase())}{" "}
+                          .replace(/^./, (str) => str.toUpperCase())}
                       </Button>
-                    ))}{" "}
-                </div>{" "}
-              </CardContent>{" "}
+                    ))}
+                </div>
+              </CardContent>
             </Card>
           </motion.div>
         ) : (
+          // Empty state (unchanged)
           <motion.div
             key='empty-properties'
             initial={{ opacity: 0, y: 15 }}
@@ -1195,19 +1491,16 @@ export default function PropertiesPanel({
               No Object Selected
             </h3>
             <p className='text-xs text-slate-500 mb-6 leading-relaxed px-4'>
-              {" "}
               Click an object in the scene to see its properties, or add a new
-              one from the sidebar.{" "}
+              one from the sidebar.
             </p>
             <div className='space-y-2 w-full max-w-[200px]'>
-              {" "}
               <Button
                 onClick={() => addShape("box")}
                 className='w-full bg-purple-600 hover:bg-purple-700 text-white'
               >
-                {" "}
-                <PlusCircle size={14} className='mr-2' /> Add Cube{" "}
-              </Button>{" "}
+                <PlusCircle size={14} className='mr-2' /> Add Cube
+              </Button>
               <Button
                 onClick={() => addShape("text")}
                 variant='outline'
@@ -1216,11 +1509,9 @@ export default function PropertiesPanel({
                   "w-full"
                 )}
               >
-                {" "}
-                <TypeIcon size={14} className='mr-2' /> Add 3D Text{" "}
-              </Button>{" "}
+                <TypeIcon size={14} className='mr-2' /> Add 3D Text
+              </Button>
             </div>
-            {/* ForceRefreshButton was removed from here and moved to EditorToolbar */}
           </motion.div>
         )}
       </AnimatePresence>

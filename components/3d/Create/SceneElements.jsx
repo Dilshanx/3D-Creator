@@ -5,7 +5,7 @@ import { FontLoader } from "three/examples/jsm/loaders/FontLoader.js";
 import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 // TextureLoader is often available on THREE namespace, but direct import is safer:
-import { TextureLoader } from "three/src/loaders/TextureLoader.js";
+import { TextureLoader as ThreeTextureLoader } from "three/src/loaders/TextureLoader.js"; // Renamed to avoid conflict if useTexture is also named TextureLoader
 
 import {
   createHeartShape,
@@ -277,7 +277,7 @@ export const createMeshFromShape = async (shapeData) => {
     }
 
     let material;
-    const textureLoaderInstance = new THREE.TextureLoader(); // Local instance for this function
+    const textureLoaderInstance = new ThreeTextureLoader(); // Local instance for this function
 
     if (shapeTypeProp === "imagePlane") {
       if (!shapeData.imageDataUrl) {
@@ -293,8 +293,8 @@ export const createMeshFromShape = async (shapeData) => {
               shapeData.imageDataUrl,
               (tex) => {
                 tex.colorSpace = THREE.SRGBColorSpace;
-                tex.flipY = false;
-                tex.needsUpdate = true;
+                tex.flipY = false; // GLTF standard
+                // tex.needsUpdate = true; // Loader handles this typically
                 resolve(tex);
               },
               undefined,
@@ -337,7 +337,13 @@ export const createMeshFromShape = async (shapeData) => {
           material = new THREE.MeshStandardMaterial(pbrProps);
           break;
         case "physical":
-          material = new THREE.MeshPhysicalMaterial(pbrProps);
+          material = new THREE.MeshPhysicalMaterial({
+            ...pbrProps,
+            transmission: saneNumber(shapeData.transmission, 0.0),
+            ior: saneNumber(shapeData.ior, 1.5),
+            thickness: saneNumber(shapeData.thickness, 0.01),
+            // Add other physical props if they are part of shapeData
+          });
           break;
         case "toon":
           material = new THREE.MeshToonMaterial({
@@ -395,7 +401,7 @@ function LoadedTexturesMaterial({
   color,
   roughness,
   metalness,
-  textureProps = {},
+  textureProps = {}, // This should contain all props including transmission, ior, etc.
 }) {
   const validTextureUrls = useMemo(() => {
     const urls = {};
@@ -407,16 +413,21 @@ function LoadedTexturesMaterial({
           typeof textureProps[key] === "string" &&
           textureProps[key].trim() !== ""
         ) {
-          urls[key] = textureProps[key];
+          // useTexture from Drei will assign these directly, e.g. textures.map, textures.normalMap
+          // So we pass the key without "Url" for useTexture hook.
+          urls[key.replace("Url", "")] = textureProps[key];
         }
       }
     }
     return urls;
   }, [textureProps]);
+
+  // useTexture hook handles sRGB encoding for known color texture types automatically
+  // For other maps, it generally assumes linear.
   const textures = useTexture ? useTexture(validTextureUrls) : {};
 
   const materialProps = useMemo(() => {
-    const hasMapTexture = textures && textures.mapUrl;
+    const hasMapTexture = textures && textures.map; // Key is 'map', not 'mapUrl' after useTexture
     const matColor = hasMapTexture ? 0xffffff : color || "#ffffff";
 
     const baseProps = {
@@ -424,32 +435,56 @@ function LoadedTexturesMaterial({
       side: THREE.DoubleSide,
     };
 
-    if (textures?.mapUrl) baseProps.map = textures.mapUrl;
-    if (textures?.normalMapUrl) baseProps.normalMap = textures.normalMapUrl;
+    if (textures?.map) {
+      baseProps.map = textures.map;
+      // useTexture typically sets SRGBColorSpace for .jpg, .png
+    }
+    if (textures?.normalMap) {
+      baseProps.normalMap = textures.normalMap;
+      // useTexture typically sets Linear for normal maps
+    }
 
     if (materialType === "standard" || materialType === "physical") {
-      baseProps.roughness = saneNumber(roughness, 0.5);
-      baseProps.metalness = saneNumber(metalness, 0.0);
-      if (textures?.roughnessMapUrl)
-        baseProps.roughnessMap = textures.roughnessMapUrl;
-      if (textures?.metalnessMapUrl)
-        baseProps.metalnessMap = textures.metalnessMapUrl;
-      if (textures?.aoMapUrl) {
-        baseProps.aoMap = textures.aoMapUrl;
+      baseProps.roughness = saneNumber(roughness, 0.5); // Roughness from main prop
+      baseProps.metalness = saneNumber(metalness, 0.0); // Metalness from main prop
+
+      if (textureProps.roughness !== undefined && !textures?.roughnessMap) {
+        // Check dedicated roughness prop from textureProps
+        baseProps.roughness = saneNumber(textureProps.roughness, 0.5);
+      }
+      if (textureProps.metalness !== undefined && !textures?.metalnessMap) {
+        // Check dedicated metalness prop from textureProps
+        baseProps.metalness = saneNumber(textureProps.metalness, 0.0);
+      }
+
+      if (textures?.roughnessMap) {
+        baseProps.roughnessMap = textures.roughnessMap;
+        // useTexture typically sets Linear for roughness maps
+      }
+      if (textures?.metalnessMap) {
+        baseProps.metalnessMap = textures.metalnessMap;
+        // useTexture typically sets Linear for metalness maps
+      }
+      if (textures?.aoMap) {
+        baseProps.aoMap = textures.aoMap;
         baseProps.aoMapIntensity =
           textureProps.aoMapIntensity !== undefined
             ? saneNumber(textureProps.aoMapIntensity, 1.0)
             : 1.0;
+        // useTexture typically sets Linear for ao maps
       }
-      if (textures?.emissiveMapUrl) {
-        baseProps.emissiveMap = textures.emissiveMapUrl;
-        baseProps.emissive = new THREE.Color(0xffffff);
+
+      if (textures?.emissiveMap) {
+        baseProps.emissiveMap = textures.emissiveMap;
+        // useTexture typically sets SRGBColorSpace for emissive maps
+        baseProps.emissive = new THREE.Color(
+          textureProps.emissiveColor || 0xffffff
+        ); // Use emissiveColor from textureProps if available
         baseProps.emissiveIntensity =
           textureProps.emissiveIntensity !== undefined
             ? saneNumber(textureProps.emissiveIntensity, 1.0)
             : 1.0;
       } else if (textureProps.emissiveColor) {
-        // Allow setting emissive color even without a map
         baseProps.emissive = new THREE.Color(textureProps.emissiveColor);
         baseProps.emissiveIntensity =
           textureProps.emissiveIntensity !== undefined
@@ -459,14 +494,37 @@ function LoadedTexturesMaterial({
     }
 
     if (materialType === "physical") {
+      // Ensure these come from textureProps as they are specific physical material properties
       baseProps.transmission = saneNumber(textureProps.transmission, 0.0);
       baseProps.ior = saneNumber(textureProps.ior, 1.5);
       baseProps.thickness = saneNumber(textureProps.thickness, 0.01);
+      // Add other physical material properties from textureProps if needed
+      // e.g., clearcoat, sheen, specularIntensity/Color
+      if (textureProps.clearcoat !== undefined)
+        baseProps.clearcoat = saneNumber(textureProps.clearcoat, 0.0);
+      if (textureProps.clearcoatRoughness !== undefined)
+        baseProps.clearcoatRoughness = saneNumber(
+          textureProps.clearcoatRoughness,
+          0.0
+        );
+      if (textureProps.sheen !== undefined)
+        baseProps.sheen = saneNumber(textureProps.sheen, 0.0);
+      if (textureProps.sheenColor !== undefined)
+        baseProps.sheenColor = new THREE.Color(textureProps.sheenColor);
+      if (textureProps.sheenRoughness !== undefined)
+        baseProps.sheenRoughness = saneNumber(textureProps.sheenRoughness, 0.0);
+      if (textureProps.specularIntensity !== undefined)
+        baseProps.specularIntensity = saneNumber(
+          textureProps.specularIntensity,
+          1.0
+        );
+      if (textureProps.specularColor !== undefined)
+        baseProps.specularColor = new THREE.Color(textureProps.specularColor);
     }
 
-    if (baseProps.map) baseProps.map.colorSpace = THREE.SRGBColorSpace;
-    if (baseProps.emissiveMap)
-      baseProps.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+    // After useTexture, textures are already THREE.Texture instances.
+    // Their colorSpace should be correctly set by useTexture based on image type or explicit hints.
+    // No need to set colorSpace again here unless useTexture is configured differently.
 
     return baseProps;
   }, [materialType, color, roughness, metalness, textures, textureProps]);
@@ -480,7 +538,7 @@ function LoadedTexturesMaterial({
       return (
         <meshToonMaterial
           color={materialProps.color}
-          map={materialProps.map}
+          map={materialProps.map} // Toon can use map
           side={THREE.DoubleSide}
         />
       );
@@ -488,8 +546,8 @@ function LoadedTexturesMaterial({
       return (
         <meshBasicMaterial
           color={materialProps.color}
-          map={materialProps.map}
-          wireframe={false}
+          map={materialProps.map} // Basic can use map
+          wireframe={false} // Ensure wireframe is false unless 'wireframe' material type
           side={THREE.DoubleSide}
         />
       );
@@ -497,7 +555,7 @@ function LoadedTexturesMaterial({
       return (
         <meshLambertMaterial
           color={materialProps.color}
-          map={materialProps.map}
+          map={materialProps.map} // Lambert can use map
           side={THREE.DoubleSide}
         />
       );
@@ -505,20 +563,24 @@ function LoadedTexturesMaterial({
       return (
         <meshPhongMaterial
           color={materialProps.color}
-          map={materialProps.map}
-          shininess={30}
+          map={materialProps.map} // Phong can use map
+          shininess={
+            textureProps.shininess !== undefined
+              ? saneNumber(textureProps.shininess, 30)
+              : 30
+          }
           side={THREE.DoubleSide}
         />
       );
-    case "wireframe":
+    case "wireframe": // Special case for wireframe
       return (
         <meshBasicMaterial
-          color={materialProps.color}
-          wireframe
+          color={materialProps.color} // Usually uses the base color
+          wireframe={true}
           side={THREE.DoubleSide}
         />
       );
-    default:
+    default: // Fallback to standard
       return <meshStandardMaterial {...materialProps} />;
   }
 }
@@ -635,8 +697,12 @@ function Shape({
   imageDataUrl,
   planeWidth,
   planeHeight,
-  textureProps,
-  textTextureProps,
+  textureProps, // Generic texture properties
+  textTextureProps, // Specific for Text3D if it needs different handling
+  // Physical material props (could be part of textureProps too)
+  transmission,
+  ior,
+  thickness,
 }) {
   const localMeshRef = useRef(null);
   const groupRef = useRef(null);
@@ -679,7 +745,7 @@ function Shape({
         : localMeshRef.current;
     if (!targetRef) return;
     if (
-      type !== "importedGLB" &&
+      type !== "importedGLB" && // GLB animations are handled by AnimationMixer
       isAnimating &&
       !isTransformDragging &&
       animation &&
@@ -740,11 +806,14 @@ function Shape({
   }, [animation?.type]);
   const imagePlaneDisplayTexture =
     useTexture && type === "imagePlane" && imageDataUrl
-      ? useTexture(imageDataUrl)
+      ? useTexture(imageDataUrl) // useTexture returns the texture directly
       : null;
+
   useEffect(() => {
     if (imagePlaneDisplayTexture && type === "imagePlane") {
-      imagePlaneDisplayTexture.colorSpace = THREE.SRGBColorSpace;
+      // useTexture typically sets sRGB for JPG/PNG by default
+      // imagePlaneDisplayTexture.colorSpace = THREE.SRGBColorSpace; // Might be redundant if useTexture handles it
+      imagePlaneDisplayTexture.flipY = false; // GLTF standard
       imagePlaneDisplayTexture.needsUpdate = true;
     }
   }, [imagePlaneDisplayTexture, type]);
@@ -753,7 +822,23 @@ function Shape({
     shapeType ||
     (type === "text" ? text?.substring(0, 10) || "Text" : "")
   }`;
-  const currentTextureProps = type === "text" ? textTextureProps : textureProps;
+
+  // Consolidate texture props. If textTextureProps is defined and type is text, use it.
+  // Otherwise, use generic textureProps.
+  // Also pass down physical material props if they are separate.
+  const currentMaterialAndTextureProps = useMemo(() => {
+    const props =
+      type === "text" && textTextureProps ? textTextureProps : textureProps;
+    return {
+      ...props, // This includes mapUrl, normalMapUrl, roughness, metalness, aoMapIntensity, etc.
+      // Explicitly pass physical props if they are top-level on the shapeData
+      // and not already inside textureProps (LoadedTexturesMaterial expects them in textureProps)
+      transmission: props?.transmission ?? transmission,
+      ior: props?.ior ?? ior,
+      thickness: props?.thickness ?? thickness,
+      // Add any other physical props here if they are separate on shapeData
+    };
+  }, [type, textureProps, textTextureProps, transmission, ior, thickness]);
 
   if (type === "text") {
     if (!Text3D || !useTexture || !FONT_PATH_R3F)
@@ -776,7 +861,7 @@ function Shape({
           ref={localMeshRef}
           font={FONT_PATH_R3F}
           size={saneNumber(textSize, 0.5)}
-          height={saneNumber(extrudeDepth, 0.1)}
+          height={saneNumber(extrudeDepth, 0.1)} // Renamed from 'depth' to 'height' for Text3D
           curveSegments={12}
           bevelEnabled
           bevelThickness={saneNumber(textSize * 0.04, 0.02)}
@@ -797,15 +882,17 @@ function Shape({
           <LoadedTexturesMaterial
             materialType={materialType}
             color={color}
-            roughness={roughness}
-            metalness={metalness}
-            textureProps={currentTextureProps}
+            roughness={roughness} // Pass base roughness
+            metalness={metalness} // Pass base metalness
+            textureProps={currentMaterialAndTextureProps} // Pass all texture-related props
           />
         </Text3D>
       </Suspense>
     );
   } else if (type === "importedGLB") {
     if (!gltfModelScene) return null;
+    // For GLBs, material/texture changes are applied directly to the model's meshes
+    // by applyTextureToGLBNode, so no <LoadedTexturesMaterial> here.
     return (
       <group
         ref={groupRef}
@@ -851,6 +938,7 @@ function Shape({
       </group>
     );
   } else {
+    // Procedural shapes
     const proceduralGeometry = useMemo(() => {
       switch (type) {
         case "box":
@@ -874,10 +962,39 @@ function Shape({
             />
           );
         default:
-          return <boxGeometry args={[0.1, 0.1, 0.1]} />;
+          return <boxGeometry args={[0.1, 0.1, 0.1]} />; // Fallback
       }
     }, [type, shapeType, shapeSize, extrudeDepth]);
-    if (!useTexture)
+
+    if (!useTexture) {
+      // Fallback if useTexture is not available
+      let fallbackMaterial;
+      const fallbackColor = new THREE.Color(color || "#ffffff");
+      switch (materialType) {
+        case "physical":
+          fallbackMaterial = (
+            <meshPhysicalMaterial
+              color={fallbackColor}
+              roughness={roughness}
+              metalness={metalness}
+              transmission={transmission}
+              ior={ior}
+              thickness={thickness}
+              side={THREE.DoubleSide}
+            />
+          );
+          break;
+        // Add other material types if needed for fallback
+        default:
+          fallbackMaterial = (
+            <meshStandardMaterial
+              color={fallbackColor}
+              roughness={roughness}
+              metalness={metalness}
+              side={THREE.DoubleSide}
+            />
+          );
+      }
       return (
         <mesh
           ref={localMeshRef}
@@ -890,13 +1007,11 @@ function Shape({
           }}
         >
           {proceduralGeometry}
-          <meshStandardMaterial
-            color={color}
-            roughness={roughness}
-            metalness={metalness}
-          />
+          {fallbackMaterial}
         </mesh>
       );
+    }
+
     return (
       <mesh
         ref={localMeshRef}
@@ -915,9 +1030,9 @@ function Shape({
           <LoadedTexturesMaterial
             materialType={materialType}
             color={color}
-            roughness={roughness}
-            metalness={metalness}
-            textureProps={currentTextureProps}
+            roughness={roughness} // Pass base roughness
+            metalness={metalness} // Pass base metalness
+            textureProps={currentMaterialAndTextureProps} // Pass all texture-related props
           />
         </Suspense>
       </mesh>
@@ -927,14 +1042,14 @@ function Shape({
 
 function SceneLighting() {
   const lightRef = useRef();
-  const hdrPath = "/brown_photostudio_02_4k.hdr";
+  const hdrPath = "/brown_photostudio_02_4k.hdr"; // Make sure this path is correct in your /public folder
   return (
     <>
       <Suspense fallback={null}>
         {Environment && typeof Environment !== "string" && hdrPath ? (
           <Environment files={hdrPath} background={false} blur={0.5} />
         ) : (
-          <directionalLight intensity={0.5} position={[5, 5, 5]} />
+          <directionalLight intensity={0.5} position={[5, 5, 5]} /> // Fallback if Environment or HDR path fails
         )}
       </Suspense>
       <ambientLight intensity={0.7} />
@@ -950,7 +1065,7 @@ function SceneLighting() {
         shadow-camera-right={15}
         shadow-camera-top={15}
         shadow-camera-bottom={-15}
-        shadow-bias={-0.0005}
+        shadow-bias={-0.0005} // Adjusted shadow bias
       />
       <pointLight position={[-10, -10, -10]} color={0xffeedd} intensity={0.6} />
       <hemisphereLight
@@ -961,6 +1076,291 @@ function SceneLighting() {
     </>
   );
 }
+
+// export function MainScene({
+//   shapes,
+//   selectedShapeId,
+//   mode,
+//   onShapeClick,
+//   onShapeUpdate,
+//   orbitControlsEnabled,
+//   sceneRef,
+//   isAnimating, // Global animation state for procedural shapes
+//   loadedGltfObjects,
+//   // GLB specific animation props
+//   selectedAnimationClipIndex,
+//   animationPlaybackState,
+//   isAnimationLooping,
+//   animationPlaybackSpeed,
+//   animationTime, // Current time, normalized 0-1 or absolute
+//   playAllAnimations,
+// }) {
+//   const { scene, gl, camera } = useThree();
+//   const [transformObject, setTransformObject] = useState(null);
+//   const selectedObjectInternalRef = useRef(null); // Ref to the THREE.Object3D instance
+//   const [isTransformDragging, setIsTransformDragging] = useState(false);
+
+//   // Refs for GLB animation
+//   const activeMixers = useRef(new Map());
+//   const activeActions = useRef(new Map()); // Stores individual actions
+
+//   useEffect(() => {
+//     if (sceneRef) sceneRef.current = scene;
+//   }, [scene, sceneRef]);
+
+//   useEffect(() => {
+//     if (selectedShapeId && selectedObjectInternalRef.current) {
+//       const shapeData = shapes.find((s) => s.id === selectedShapeId);
+//       // Check if the internal ref still points to the selected shape (name check as a heuristic)
+//       if (
+//         shapeData &&
+//         selectedObjectInternalRef.current.name.startsWith(
+//           `shape_${selectedShapeId}_${shapeData.type}`
+//         )
+//       ) {
+//         if (transformObject !== selectedObjectInternalRef.current) {
+//           setTransformObject(selectedObjectInternalRef.current);
+//         }
+//       } else if (transformObject !== null) {
+//         // If internal ref doesn't match, or shapeData not found, clear transformObject
+//         setTransformObject(null);
+//       }
+//     } else {
+//       // No selectedShapeId or no internal ref, clear transformObject
+//       if (transformObject !== null) setTransformObject(null);
+//     }
+//   }, [
+//     selectedShapeId,
+//     shapes,
+//     selectedObjectInternalRef.current,
+//     transformObject,
+//   ]); // Dependency on selectedObjectInternalRef.current is tricky but necessary here
+
+//   // Effect for handling GLB animations
+//   useEffect(() => {
+//     const currentSelectedShape = shapes.find((s) => s.id === selectedShapeId);
+
+//     // Cleanup mixers for shapes that are no longer selected or not GLBs
+//     activeMixers.current.forEach((mixer, id) => {
+//       if (
+//         id !== selectedShapeId ||
+//         (currentSelectedShape && currentSelectedShape.type !== "importedGLB")
+//       ) {
+//         mixer.stopAllAction();
+//         activeMixers.current.delete(id);
+//         activeActions.current.forEach((_, key) => {
+//           // Clean up actions map
+//           if (key.startsWith(id)) activeActions.current.delete(key);
+//         });
+//       }
+//     });
+
+//     if (
+//       currentSelectedShape &&
+//       currentSelectedShape.type === "importedGLB" &&
+//       loadedGltfObjects[currentSelectedShape.id]
+//     ) {
+//       const gltfData = loadedGltfObjects[currentSelectedShape.id];
+//       if (
+//         gltfData &&
+//         gltfData.animations &&
+//         gltfData.animations.length > 0 &&
+//         gltfData.scene
+//       ) {
+//         let mixer = activeMixers.current.get(currentSelectedShape.id);
+//         const animatedRoot = gltfData.scene; // The object that AnimationMixer will operate on
+
+//         if (!mixer || mixer.getRoot() !== animatedRoot) {
+//           mixer = new THREE.AnimationMixer(animatedRoot);
+//           activeMixers.current.set(currentSelectedShape.id, mixer);
+//         }
+
+//         // Stop and clear previous actions for this shape before setting up new ones
+//         mixer.stopAllAction();
+//         activeActions.current.forEach((_, key) => {
+//           if (key.startsWith(currentSelectedShape.id))
+//             activeActions.current.delete(key);
+//         });
+
+//         const setupAction = (clip, clipIndex) => {
+//           const action = mixer.clipAction(clip, animatedRoot); // Ensure root is correct
+//           action.setLoop(
+//             isAnimationLooping ? THREE.LoopRepeat : THREE.LoopOnce,
+//             Infinity
+//           );
+//           action.timeScale = animationPlaybackSpeed;
+
+//           // animationTime for GLBs is usually the absolute time for the clip
+//           // If animationTime is normalized (0-1), multiply by duration
+//           // Assuming animationTime from props is absolute here
+//           const startTime = animationTime; // Direct use if absolute time
+//           // const startTime = animationTime * (clip.duration || 0); // If normalized
+//           action.time = startTime;
+
+//           if (animationPlaybackState === "playing") {
+//             action.play();
+//             action.paused = false;
+//           } else if (animationPlaybackState === "paused") {
+//             action.play(); // Action must be 'playing' to be paused at a specific frame
+//             action.paused = true;
+//             if (startTime === 0 && !action.isRunning()) mixer.update(0); // Update to show first frame if paused at start
+//           } else {
+//             // 'stopped'
+//             action.stop();
+//             if (startTime === 0 && !action.isRunning()) mixer.update(0); // Ensure reset to first frame
+//           }
+//           // Store the action for potential direct manipulation (e.g., scrubbing)
+//           const actionKey = `${currentSelectedShape.id}_${
+//             playAllAnimations
+//               ? `all_${clipIndex}`
+//               : `clip_${selectedAnimationClipIndex}`
+//           }`;
+//           activeActions.current.set(actionKey, action);
+//         };
+
+//         if (playAllAnimations) {
+//           gltfData.animations.forEach(setupAction);
+//         } else if (
+//           selectedAnimationClipIndex >= 0 &&
+//           selectedAnimationClipIndex < gltfData.animations.length
+//         ) {
+//           const clip = gltfData.animations[selectedAnimationClipIndex];
+//           setupAction(clip, selectedAnimationClipIndex);
+//         }
+//       }
+//     }
+//   }, [
+//     selectedShapeId,
+//     shapes,
+//     loadedGltfObjects,
+//     selectedAnimationClipIndex,
+//     animationPlaybackState,
+//     isAnimationLooping,
+//     animationPlaybackSpeed,
+//     animationTime, // React to time changes for scrubbing
+//     playAllAnimations,
+//   ]);
+
+//   useFrame((state, delta) => {
+//     // Update active mixers
+//     activeMixers.current.forEach((mixer, shapeId) => {
+//       // Only update mixer for the currently selected GLB if its animation is playing
+//       if (shapeId === selectedShapeId && animationPlaybackState === "playing") {
+//         mixer.update(delta);
+//       }
+//     });
+//   });
+
+//   return (
+//     <>
+//       <SceneLighting />
+//       {/* Ground Plane for Shadows */}
+//       <mesh
+//         rotation={[-Math.PI / 2, 0, 0]}
+//         position={[0, -0.01, 0]} // Slightly below grid
+//         receiveShadow
+//         name='ground_plane'
+//       >
+//         <planeGeometry args={[100, 100]} />
+//         <shadowMaterial opacity={0.25} color={0x000000} />
+//       </mesh>
+
+//       {/* Grid Helper */}
+//       {Grid && typeof Grid !== "string" && (
+//         <Grid
+//           args={[100, 100]} // size of the grid
+//           position={[0, 0, 0]} // position of the grid
+//           cellSize={0.5}
+//           cellThickness={0.5} // Make grid lines thinner
+//           cellColor={new THREE.Color(0x444444)} // Darker grey for subtle lines
+//           sectionSize={2.5} // Every 5 cells make a thicker line
+//           sectionThickness={1} // Thicker lines for sections
+//           sectionColor={new THREE.Color(0x6f6f6f)} // Slightly lighter grey for sections
+//           fadeDistance={50} // Start fading at 50 units
+//           fadeStrength={1} // Fully faded at distance
+//           infiniteGrid
+//           followCamera={false} // If true, grid moves with camera
+//         />
+//       )}
+
+//       {/* Render all shapes */}
+//       {shapes.map((shapeData) => {
+//         const gltfObjectData = loadedGltfObjects[shapeData.id];
+//         return (
+//           <Shape
+//             key={shapeData.id}
+//             {...shapeData} // Spread all shape properties
+//             gltfModelScene={gltfObjectData?.scene}
+//             animation={shapeData.animation} // Procedural animation config
+//             isAnimating={isAnimating && shapeData.type !== "importedGLB"} // Pass global animation state for procedural shapes
+//             onClick={onShapeClick}
+//             objectRef={
+//               shapeData.id === selectedShapeId
+//                 ? selectedObjectInternalRef
+//                 : null
+//             } // Pass ref only for the selected shape
+//             isTransformDragging={
+//               shapeData.id === selectedShapeId && isTransformDragging
+//             } // Pass dragging state only for selected
+//             textureProps={shapeData.textureProps}
+//             textTextureProps={shapeData.textTextureProps}
+//             // Pass physical material props if they are stored directly on shapeData
+//             transmission={shapeData.transmission}
+//             ior={shapeData.ior}
+//             thickness={shapeData.thickness}
+//           />
+//         );
+//       })}
+
+//       {/* Transform Controls for selected shape */}
+//       {selectedShapeId &&
+//         transformObject &&
+//         mode &&
+//         TransformControls &&
+//         typeof TransformControls !== "string" && (
+//           <TransformControls
+//             object={transformObject}
+//             mode={mode}
+//             onObjectChange={() => {
+//               // This callback can be too frequent. Debounce or use onDraggingChanged.
+//               // For now, let's assume onShapeUpdate handles debouncing or is efficient.
+//               if (selectedShapeId && transformObject)
+//                 onShapeUpdate(selectedShapeId); // Tell parent to update shape's state from THREE object
+//             }}
+//             onDraggingChanged={(event) => {
+//               const dragging = event.value;
+//               setIsTransformDragging(dragging);
+//               // Disable orbit controls while transform dragging
+//               const orbitCtrl = scene.__r3f?.controls; // Access orbit controls instance
+//               if (orbitCtrl)
+//                 orbitCtrl.enabled = !dragging && orbitControlsEnabled; // Re-enable based on prop
+//             }}
+//             size={0.75}
+//             space={mode === "scale" ? "local" : "world"} // Scale usually local, others world
+//             camera={camera}
+//             domElement={gl.domElement} // Important for event handling
+//           />
+//         )}
+
+//       {/* Orbit Controls */}
+//       {OrbitControls && typeof OrbitControls !== "string" && (
+//         <OrbitControls
+//           enabled={orbitControlsEnabled && !isTransformDragging} // Controlled by prop and transform dragging state
+//           makeDefault // Makes these the default controls
+//           enableDamping
+//           dampingFactor={0.05}
+//           minDistance={0.5}
+//           maxDistance={100} // Increased max distance
+//           zoomSpeed={0.7}
+//           panSpeed={0.7}
+//         />
+//       )}
+//     </>
+//   );
+// }
+// SceneElements.jsx
+
+// ... other imports and code ...
 
 export function MainScene({
   shapes,
@@ -979,41 +1379,75 @@ export function MainScene({
   animationTime,
   playAllAnimations,
 }) {
-  const { scene, gl, camera } = useThree();
+  const { scene, gl, camera } = useThree(); // scene is from useThree
   const [transformObject, setTransformObject] = useState(null);
   const selectedObjectInternalRef = useRef(null);
   const [isTransformDragging, setIsTransformDragging] = useState(false);
+
   const activeMixers = useRef(new Map());
   const activeActions = useRef(new Map());
+
   useEffect(() => {
     if (sceneRef) sceneRef.current = scene;
   }, [scene, sceneRef]);
+
+  // MODIFIED useEffect for setting transformObject
   useEffect(() => {
-    if (selectedShapeId && selectedObjectInternalRef.current) {
+    if (selectedShapeId) {
       const shapeData = shapes.find((s) => s.id === selectedShapeId);
-      if (
-        shapeData &&
-        selectedObjectInternalRef.current.name.startsWith(
-          `shape_${selectedShapeId}_${shapeData.type}`
-        )
-      ) {
-        if (transformObject !== selectedObjectInternalRef.current) {
-          setTransformObject(selectedObjectInternalRef.current);
+      if (shapeData && selectedObjectInternalRef.current) {
+        // Check if the object is actually part of the current R3F scene graph
+        let current = selectedObjectInternalRef.current;
+        let isInScene = false;
+        while (current.parent) {
+          if (current.parent === scene) {
+            isInScene = true;
+            break;
+          }
+          current = current.parent;
+        }
+
+        // Also ensure the ref points to the currently selected shape's object
+        const expectedNamePrefix = `shape_${selectedShapeId}_${shapeData.type}`;
+        const isCorrectObject =
+          selectedObjectInternalRef.current.name?.startsWith(
+            expectedNamePrefix
+          );
+
+        if (isInScene && isCorrectObject) {
+          if (transformObject !== selectedObjectInternalRef.current) {
+            // console.log("MainScene: Setting transform object to:", selectedObjectInternalRef.current.name);
+            setTransformObject(selectedObjectInternalRef.current);
+          }
+        } else if (transformObject !== null) {
+          // console.log(`MainScene: Clearing transform object. In scene: ${isInScene}, Correct object: ${isCorrectObject}, Ref name: ${selectedObjectInternalRef.current?.name}`);
+          setTransformObject(null);
         }
       } else if (transformObject !== null) {
+        // console.log("MainScene: Clearing transform object because shapeData or internalRef is missing.");
         setTransformObject(null);
       }
     } else {
-      if (transformObject !== null) setTransformObject(null);
+      // No selectedShapeId
+      if (transformObject !== null) {
+        // console.log("MainScene: Clearing transform object due to no selectedShapeId.");
+        setTransformObject(null);
+      }
     }
-  }, [
-    selectedShapeId,
-    shapes,
-    selectedObjectInternalRef.current,
-    transformObject,
-  ]);
+    // Dependencies:
+    // - selectedShapeId: Triggers re-evaluation when selection changes.
+    // - shapes: If the shape data itself changes for the selected ID.
+    // - scene: If the R3F scene context changes (less common but good to include).
+    // - transformObject: To allow re-evaluation if it was set to null externally.
+    // We don't include selectedObjectInternalRef.current directly because its change
+    // is a side effect of rendering, and including it can lead to loops or excessive runs.
+    // The effect checks its current value when triggered by other dependencies.
+  }, [selectedShapeId, shapes, scene, transformObject]);
+
+  // Effect for handling GLB animations (ensure this doesn't interfere)
   useEffect(() => {
     const currentSelectedShape = shapes.find((s) => s.id === selectedShapeId);
+
     activeMixers.current.forEach((mixer, id) => {
       if (
         id !== selectedShapeId ||
@@ -1026,6 +1460,7 @@ export function MainScene({
         });
       }
     });
+
     if (
       currentSelectedShape &&
       currentSelectedShape.type === "importedGLB" &&
@@ -1040,15 +1475,18 @@ export function MainScene({
       ) {
         let mixer = activeMixers.current.get(currentSelectedShape.id);
         const animatedRoot = gltfData.scene;
+
         if (!mixer || mixer.getRoot() !== animatedRoot) {
           mixer = new THREE.AnimationMixer(animatedRoot);
           activeMixers.current.set(currentSelectedShape.id, mixer);
         }
+
         mixer.stopAllAction();
         activeActions.current.forEach((_, key) => {
           if (key.startsWith(currentSelectedShape.id))
             activeActions.current.delete(key);
         });
+
         const setupAction = (clip, clipIndex) => {
           const action = mixer.clipAction(clip, animatedRoot);
           action.setLoop(
@@ -1056,18 +1494,21 @@ export function MainScene({
             Infinity
           );
           action.timeScale = animationPlaybackSpeed;
-          const startTime = animationTime * (clip.duration || 0);
-          action.time = startTime;
+
+          // animationTime is normalized (0-1), convert to absolute for action.time
+          const absoluteTime = animationTime * (clip.duration || 0);
+          action.time = absoluteTime;
+
           if (animationPlaybackState === "playing") {
             action.play();
             action.paused = false;
           } else if (animationPlaybackState === "paused") {
             action.play();
             action.paused = true;
-            if (startTime === 0) mixer.update(0);
+            if (absoluteTime === 0 && !action.isRunning()) mixer.setTime(0); // Use mixer.setTime to ensure frame 0
           } else {
             action.stop();
-            if (startTime === 0) mixer.update(0);
+            if (absoluteTime === 0 && !action.isRunning()) mixer.setTime(0); // Reset to first frame
           }
           const actionKey = `${currentSelectedShape.id}_${
             playAllAnimations
@@ -1076,6 +1517,7 @@ export function MainScene({
           }`;
           activeActions.current.set(actionKey, action);
         };
+
         if (playAllAnimations) {
           gltfData.animations.forEach(setupAction);
         } else if (
@@ -1097,12 +1539,15 @@ export function MainScene({
     animationPlaybackSpeed,
     animationTime,
     playAllAnimations,
+    // scene // Add scene as dependency for mixer context if needed, but usually not.
   ]);
+
   useFrame((state, delta) => {
     activeMixers.current.forEach((mixer, shapeId) => {
       if (shapeId === selectedShapeId && animationPlaybackState === "playing") {
         mixer.update(delta);
       }
+      // If paused and scrubbing via animationTime, the useEffect above should handle mixer.setTime()
     });
   });
 
@@ -1118,16 +1563,17 @@ export function MainScene({
         <planeGeometry args={[100, 100]} />
         <shadowMaterial opacity={0.25} color={0x000000} />
       </mesh>
+
       {Grid && typeof Grid !== "string" && (
         <Grid
           args={[100, 100]}
           position={[0, 0, 0]}
           cellSize={0.5}
           cellThickness={0.5}
-          cellColor={new THREE.Color(0x444444)} // Updated
+          cellColor={new THREE.Color(0x444444)}
           sectionSize={2.5}
           sectionThickness={1}
-          sectionColor={new THREE.Color(0x6f6f6f)} // Updated
+          sectionColor={new THREE.Color(0x6f6f6f)}
           fadeDistance={50}
           fadeStrength={1}
           infiniteGrid
@@ -1143,11 +1589,11 @@ export function MainScene({
             {...shapeData}
             gltfModelScene={gltfObjectData?.scene}
             animation={shapeData.animation}
-            isAnimating={isAnimating}
+            isAnimating={isAnimating && shapeData.type !== "importedGLB"}
             onClick={onShapeClick}
             objectRef={
               shapeData.id === selectedShapeId
-                ? selectedObjectInternalRef
+                ? selectedObjectInternalRef // Pass the ref itself
                 : null
             }
             isTransformDragging={
@@ -1155,19 +1601,24 @@ export function MainScene({
             }
             textureProps={shapeData.textureProps}
             textTextureProps={shapeData.textTextureProps}
+            transmission={shapeData.transmission}
+            ior={shapeData.ior}
+            thickness={shapeData.thickness}
           />
         );
       })}
+
       {selectedShapeId &&
-        transformObject &&
+        transformObject && // CRITICAL: transformObject must be valid and in scene
         mode &&
         TransformControls &&
         typeof TransformControls !== "string" && (
           <TransformControls
-            object={transformObject}
+            object={transformObject} // This is the prop that needs a valid scene object
             mode={mode}
             onObjectChange={() => {
               if (selectedShapeId && transformObject)
+                // Check transformObject again
                 onShapeUpdate(selectedShapeId);
             }}
             onDraggingChanged={(event) => {
@@ -1183,6 +1634,7 @@ export function MainScene({
             domElement={gl.domElement}
           />
         )}
+
       {OrbitControls && typeof OrbitControls !== "string" && (
         <OrbitControls
           enabled={orbitControlsEnabled && !isTransformDragging}
@@ -1201,28 +1653,35 @@ export function MainScene({
 
 export function CameraController({ preset }) {
   const { camera } = useThree();
-  const controls = useThree((state) => state.controls);
+  const controls = useThree((state) => state.controls); // Access controls from R3F state
+
+  // Define camera presets with positions and lookAt targets
   const cameraPresets = useMemo(
     () => ({
-      top: { position: [0, 15, 0.01], target: [0, 0, 0] },
-      front: { position: [0, 2, 15], target: [0, 1, 0] },
+      top: { position: [0, 15, 0.01], target: [0, 0, 0] }, // 0.01 to avoid gimbal lock if looking straight down
+      front: { position: [0, 2, 15], target: [0, 1, 0] }, // Slightly elevated target for better view
       side: { position: [15, 2, 0], target: [0, 1, 0] },
-      isometric: { position: [10, 10, 10], target: [0, 0, 0] },
+      isometric: { position: [10, 10, 10], target: [0, 0, 0] }, // Classic isometric
     }),
     []
   );
+
   useEffect(() => {
     if (preset && cameraPresets[preset] && camera) {
       const { position, target } = cameraPresets[preset];
       camera.position.set(...position);
+
       if (controls && controls.target) {
+        // If OrbitControls are active, set their target
         controls.target.set(...target);
-        controls.update();
+        controls.update(); // Required after changing target
       } else {
+        // Fallback if controls are not available (shouldn't happen if makeDefault)
         camera.lookAt(new THREE.Vector3(...target));
       }
-      camera.updateProjectionMatrix();
+      camera.updateProjectionMatrix(); // Always update projection matrix after camera changes
     }
   }, [preset, camera, controls, cameraPresets]);
-  return null;
+
+  return null; // This component doesn't render anything itself
 }

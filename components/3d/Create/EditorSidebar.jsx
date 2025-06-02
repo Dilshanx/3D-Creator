@@ -11,10 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider, // Ensure TooltipProvider wraps this if used standalone, or its parent
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils"; // Assuming you have a cn utility
+import { cn } from "@/lib/utils";
 
 export default function EditorSidebar({
   mode,
@@ -55,15 +55,15 @@ export default function EditorSidebar({
   ];
 
   return (
+    // TooltipProvider should wrap the highest level component using tooltips,
+    // or individual sections if preferred. Assuming it's at Model3DCreator level.
     <motion.div
-      initial={{ x: -30, opacity: 0 }} // Slightly increased initial offset
+      initial={{ x: -30, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ delay: 0.1, type: "spring", stiffness: 120 }}
       className='w-72 p-4 bg-slate-900/80 backdrop-blur-sm border-r border-slate-700/50 overflow-y-auto shadow-xl scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800'
     >
       <Tabs defaultValue='tools' className='space-y-5'>
-        {" "}
-        {/* Consistent spacing */}
         <TabsList className='grid w-full grid-cols-4 gap-1 p-1 bg-slate-800/60 rounded-lg'>
           {["tools", "shapes", "popular", "camera"].map((value) => (
             <TabsTrigger
@@ -79,6 +79,7 @@ export default function EditorSidebar({
             </TabsTrigger>
           ))}
         </TabsList>
+
         <TabsContent value='tools' className='space-y-5 outline-none'>
           <Card className='bg-slate-800/70 border border-slate-700 shadow-lg'>
             <CardHeader className='p-4'>
@@ -129,6 +130,7 @@ export default function EditorSidebar({
             </CardContent>
           </Card>
         </TabsContent>
+
         <TabsContent value='shapes' className='space-y-5 outline-none'>
           <Card className='bg-slate-800/70 border border-slate-700 shadow-lg'>
             <CardHeader className='p-4'>
@@ -175,6 +177,7 @@ export default function EditorSidebar({
             </CardContent>
           </Card>
         </TabsContent>
+
         <TabsContent value='popular' className='space-y-5 outline-none'>
           <Card className='bg-slate-800/70 border border-slate-700 shadow-lg'>
             <CardHeader className='p-4'>
@@ -222,6 +225,7 @@ export default function EditorSidebar({
             </CardContent>
           </Card>
         </TabsContent>
+
         <TabsContent value='camera' className='space-y-5 outline-none'>
           <Card className='bg-slate-800/70 border border-slate-700 shadow-lg'>
             <CardHeader className='p-4'>
