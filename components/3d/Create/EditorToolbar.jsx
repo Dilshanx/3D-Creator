@@ -1,347 +1,43 @@
-// import { motion } from "framer-motion";
-// import { Button } from "@/components/ui/button";
-// import { Badge } from "@/components/ui/badge";
-// import { Separator } from "@/components/ui/separator";
-// import {
-//   Tooltip,
-//   TooltipContent,
-//   TooltipTrigger,
-// } from "@/components/ui/tooltip";
-// import {
-//   DropdownMenu,
-//   DropdownMenuContent,
-//   DropdownMenuItem,
-//   DropdownMenuTrigger,
-//   DropdownMenuSeparator,
-//   DropdownMenuLabel,
-// } from "@/components/ui/dropdown-menu";
-
-// import {
-//   Play,
-//   Pause,
-//   Archive,
-//   Image as ImageIcon, // New icon for Image import
-//   Film,
-//   FileText,
-//   FilePlus,
-//   Undo2,
-//   Redo2,
-//   AlignHorizontalJustifyStart,
-//   AlignVerticalJustifyStart,
-//   Layers,
-//   Target,
-//   LayoutPanelLeft,
-//   UploadCloud,
-// } from "lucide-react";
-
-// export default function EditorToolbar({
-//   undo,
-//   redo,
-//   undoStackLength,
-//   redoStackLength,
-//   exportJSON,
-//   exportStaticGLBFile,
-//   bakeAndExportAnimatedGLB,
-//   triggerJsonFileImport,
-//   triggerGlbFileImport,
-//   triggerImageFileImport, // New prop
-//   alignAllShapes,
-//   alignSelectedShapeToOrigin,
-//   selectedShapeId,
-//   shapesCount,
-//   isAnimating,
-//   toggleGlobalAnimation,
-//   isBaking,
-// }) {
-//   const iconSize = 16;
-//   const iconStrokeWidth = 1.5;
-
-//   return (
-//     <motion.div
-//       initial={{ y: -20, opacity: 0 }}
-//       animate={{ y: 0, opacity: 1 }}
-//       className='flex justify-between items-center p-4 bg-card/80 backdrop-blur-lg border-b border-border/60 shadow-md'
-//     >
-//       <div className='flex items-center space-x-4'>
-//         <motion.div
-//           whileHover={{ scale: 1.05, rotate: 5 }}
-//           className='w-10 h-10 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg'
-//         >
-//           <span className='text-white font-bold text-lg'>3D</span>
-//         </motion.div>
-//         <div>
-//           <h1 className='text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent'>
-//             Creator Pro
-//           </h1>
-//           <p className='text-xs text-muted-foreground'>
-//             Design, Animate, Align & Export
-//           </p>
-//         </div>
-//         <Badge
-//           variant='secondary'
-//           className='bg-gradient-to-r from-indigo-500/10 to-purple-500/10 text-indigo-600 border-indigo-300'
-//         >
-//           v2.6 • Image Planes {/* Updated Version Badge */}
-//         </Badge>
-//       </div>
-
-//       <div className='flex items-center space-x-2'>
-//         <Tooltip>
-//           <TooltipTrigger asChild>
-//             <Button
-//               onClick={toggleGlobalAnimation}
-//               variant='outline'
-//               size='sm'
-//               className='w-32'
-//               disabled={isBaking}
-//             >
-//               {isAnimating ? (
-//                 <Pause
-//                   size={iconSize}
-//                   strokeWidth={iconStrokeWidth}
-//                   className='mr-2'
-//                 />
-//               ) : (
-//                 <Play
-//                   size={iconSize}
-//                   strokeWidth={iconStrokeWidth}
-//                   className='mr-2'
-//                 />
-//               )}
-//               {isAnimating ? "Pause All (P)" : "Play All (P)"}
-//             </Button>
-//           </TooltipTrigger>
-//           <TooltipContent>
-//             {isAnimating ? "Pause animations" : "Play animations"}
-//           </TooltipContent>
-//         </Tooltip>
-//         <Separator orientation='vertical' className='h-6' />
-//         <Tooltip>
-//           <TooltipTrigger asChild>
-//             <Button
-//               onClick={undo}
-//               disabled={undoStackLength === 0 || isBaking}
-//               variant='outline'
-//               size='icon'
-//               className='w-9 h-9'
-//             >
-//               <Undo2 size={iconSize} strokeWidth={iconStrokeWidth} />
-//             </Button>
-//           </TooltipTrigger>
-//           <TooltipContent>Undo (Ctrl+Z)</TooltipContent>
-//         </Tooltip>
-//         <Tooltip>
-//           <TooltipTrigger asChild>
-//             <Button
-//               onClick={redo}
-//               disabled={redoStackLength === 0 || isBaking}
-//               variant='outline'
-//               size='icon'
-//               className='w-9 h-9'
-//             >
-//               <Redo2 size={iconSize} strokeWidth={iconStrokeWidth} />
-//             </Button>
-//           </TooltipTrigger>
-//           <TooltipContent>Redo (Ctrl+Y)</TooltipContent>
-//         </Tooltip>
-//         <Separator orientation='vertical' className='h-6' />
-
-//         {/* Align Dropdown */}
-//         <DropdownMenu>
-//           <DropdownMenuTrigger asChild>
-//             <Button variant='outline' size='sm' disabled={isBaking}>
-//               <LayoutPanelLeft
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               Align
-//             </Button>
-//           </DropdownMenuTrigger>
-//           <DropdownMenuContent align='end'>
-//             <DropdownMenuLabel>Align All Shapes</DropdownMenuLabel>
-//             <DropdownMenuItem
-//               onClick={() => alignAllShapes("x", "average")}
-//               disabled={isBaking || shapesCount < 2}
-//             >
-//               <AlignHorizontalJustifyStart
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               Horizontally (Avg X)
-//             </DropdownMenuItem>
-//             <DropdownMenuItem
-//               onClick={() => alignAllShapes("y", "average")}
-//               disabled={isBaking || shapesCount < 2}
-//             >
-//               <AlignVerticalJustifyStart
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               Vertically (Avg Y)
-//             </DropdownMenuItem>
-//             <DropdownMenuItem
-//               onClick={() => alignAllShapes("z", "average")}
-//               disabled={isBaking || shapesCount < 2}
-//             >
-//               <Layers
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               By Depth (Avg Z)
-//             </DropdownMenuItem>
-//             <DropdownMenuSeparator />
-//             <DropdownMenuLabel>Align Selected to Origin</DropdownMenuLabel>
-//             <DropdownMenuItem
-//               onClick={() => alignSelectedShapeToOrigin("x")}
-//               disabled={isBaking || !selectedShapeId}
-//             >
-//               <Target
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               X to Origin
-//             </DropdownMenuItem>
-//             <DropdownMenuItem
-//               onClick={() => alignSelectedShapeToOrigin("y")}
-//               disabled={isBaking || !selectedShapeId}
-//             >
-//               <Target
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               Y to Origin
-//             </DropdownMenuItem>
-//             <DropdownMenuItem
-//               onClick={() => alignSelectedShapeToOrigin("z")}
-//               disabled={isBaking || !selectedShapeId}
-//             >
-//               <Target
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               Z to Origin
-//             </DropdownMenuItem>
-//           </DropdownMenuContent>
-//         </DropdownMenu>
-
-//         {/* File Dropdown */}
-//         <DropdownMenu>
-//           <DropdownMenuTrigger asChild>
-//             <Button
-//               variant='ghost'
-//               size='sm'
-//               className='hover:bg-primary/10'
-//               disabled={isBaking}
-//             >
-//               <Archive
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               File
-//             </Button>
-//           </DropdownMenuTrigger>
-//           <DropdownMenuContent align='end'>
-//             <DropdownMenuItem
-//               onClick={triggerJsonFileImport}
-//               disabled={isBaking}
-//             >
-//               <FilePlus
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               Import JSON
-//             </DropdownMenuItem>
-//             <DropdownMenuItem
-//               onClick={triggerGlbFileImport}
-//               disabled={isBaking}
-//             >
-//               <UploadCloud
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               Import GLB/GLTF
-//             </DropdownMenuItem>
-//             <DropdownMenuItem
-//               onClick={triggerImageFileImport}
-//               disabled={isBaking}
-//             >
-//               {" "}
-//               {/* New Item */}
-//               <ImageIcon
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               Import Image
-//             </DropdownMenuItem>
-//             <DropdownMenuSeparator />
-//             <DropdownMenuItem onClick={exportJSON} disabled={isBaking}>
-//               <FileText
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               Export JSON
-//             </DropdownMenuItem>
-//             <DropdownMenuItem onClick={exportStaticGLBFile} disabled={isBaking}>
-//               <Layers
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               Export Static GLB
-//             </DropdownMenuItem>
-//             <DropdownMenuItem
-//               onClick={bakeAndExportAnimatedGLB}
-//               disabled={isBaking}
-//             >
-//               <Film
-//                 size={iconSize}
-//                 strokeWidth={iconStrokeWidth}
-//                 className='mr-2'
-//               />{" "}
-//               Export Animated GLB
-//             </DropdownMenuItem>
-//           </DropdownMenuContent>
-//         </DropdownMenu>
-//       </div>
-//     </motion.div>
-//   );
-// }
-
-import React from "react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Undo,
-  Redo,
-  FileJsonIcon,
-  FilePlus2,
-  Download,
-  UploadCloud,
-  ImagePlus,
-  AlignCenterHorizontal,
-  LocateFixed,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+
+import {
   Play,
   Pause,
+  Archive,
+  Image as ImageIconLucide,
+  Film,
+  FileText,
+  FilePlus,
+  Undo2,
+  Redo2,
+  AlignHorizontalJustifyStart,
+  AlignVerticalJustifyStart,
+  Layers,
+  Target,
+  LayoutPanelLeft,
+  UploadCloud,
   Maximize,
-  Minimize2,
-  PackageOpen,
-  PackagePlus,
+  Minimize,
+  PanelLeft,
+  PanelRight,
+  RefreshCw,
 } from "lucide-react";
 
 export default function EditorToolbar({
@@ -362,232 +58,414 @@ export default function EditorToolbar({
   isAnimating,
   toggleGlobalAnimation,
   isBaking,
-  handleToggleFullscreen,
   isFullscreen,
+  toggleFullscreen,
+  toggleLeftSidebar,
+  toggleRightSidebar,
+  isLeftSidebarOpen,
+  isRightSidebarOpen,
+  forceRefreshCanvas,
 }) {
+  const iconSize = 16;
+  const iconStrokeWidth = 1.5;
+
+  const buttonBaseClass =
+    "border-slate-600 text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 hover:border-slate-500 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900";
+  const iconButtonClass = cn(
+    buttonBaseClass,
+    "w-9 h-9 p-0 flex items-center justify-center shrink-0"
+  ); // shrink-0 is good
+
   return (
-    <div className='p-2 bg-card/80 backdrop-blur-md border-b border-border/60 shadow-lg flex items-center justify-between space-x-1 text-sm flex-wrap gap-y-1'>
-      {/* File Operations */}
-      <div className='flex items-center space-x-1'>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant='ghost'
-              size='sm'
-              onClick={triggerJsonFileImport}
-              disabled={isBaking}
-            >
-              <UploadCloud className='h-4 w-4 mr-1' />
-              Load Scene
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Load scene from JSON (.json)</p>
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant='ghost'
-              size='sm'
-              onClick={exportJSON}
-              disabled={isBaking || shapesCount === 0}
-            >
-              <FileJsonIcon className='h-4 w-4 mr-1' />
-              Save Scene
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Save scene to JSON (.json)</p>
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant='ghost'
-              size='sm'
-              onClick={triggerGlbFileImport}
-              disabled={isBaking}
-            >
-              <PackagePlus className='h-4 w-4 mr-1' />
-              Import GLB
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Import 3D Model (.glb, .gltf)</p>
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant='ghost'
-              size='sm'
-              onClick={triggerImageFileImport}
-              disabled={isBaking}
-            >
-              <ImagePlus className='h-4 w-4 mr-1' />
-              Import Image
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Import Image as Plane</p>
-          </TooltipContent>
-        </Tooltip>
+    <motion.div
+      initial={{ y: -20, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      // REMOVED justify-between, will use flex-grow on center for spacing
+      className='flex items-center px-3 sm:px-4 py-2.5 sm:py-3 bg-slate-900/70 backdrop-blur-md border-b border-slate-700/50 shadow-lg sticky top-0 z-30'
+    >
+      {/* Left Section: Logo, Title, Mobile Toggles */}
+      <div className='flex items-center space-x-2 sm:space-x-3 shrink-0'>
+        {" "}
+        {/* Added shrink-0 to prevent left from taking too much space */}
+        <Button
+          variant={isLeftSidebarOpen ? "default" : "ghost"}
+          size='icon'
+          onClick={toggleLeftSidebar}
+          className='md:hidden w-9 h-9 text-slate-300 hover:bg-slate-700/70 data-[state=open]:bg-purple-600 active:bg-purple-700 data-[state=open]:text-white'
+          aria-label='Toggle Tools Panel'
+        >
+          {" "}
+          <PanelLeft size={iconSize + 2} />{" "}
+        </Button>
+        <motion.div
+          whileHover={{ scale: 1.05, rotate: 5 }}
+          className='w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 rounded-lg flex items-center justify-center shadow-lg shrink-0'
+        >
+          {" "}
+          <span className='text-white font-bold text-lg sm:text-xl tracking-tighter'>
+            3D
+          </span>{" "}
+        </motion.div>
+        <div className='hidden sm:block'>
+          {" "}
+          <h1 className='text-lg sm:text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent'>
+            {" "}
+            Creator Pro{" "}
+          </h1>{" "}
+          <p className='text-xs text-slate-400 hidden md:block'>
+            {" "}
+            Design & Export Tool{" "}
+          </p>{" "}
+        </div>
+        <Badge
+          variant='outline'
+          className='bg-slate-700/50 border-purple-500/50 text-purple-300 text-xs px-1.5 sm:px-2 py-0.5 hidden xs:inline-flex'
+        >
+          {" "}
+          v2.8{" "}
+        </Badge>
       </div>
 
-      {/* Edit Operations */}
-      <div className='flex items-center space-x-1'>
+      {/* Center Section: Main Controls - Make this flex-grow */}
+      <div className='flex-1 flex justify-center items-center space-x-1 sm:space-x-1.5 px-2 sm:px-4'>
+        {" "}
+        {/* Added flex-1, justify-center, and some padding */}
+        {/* This section should now always try to be visible and take up space */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant='ghost'
+              onClick={toggleGlobalAnimation}
+              variant='outline'
               size='sm'
-              onClick={undo}
-              disabled={undoStackLength === 0 || isBaking}
-            >
-              <Undo className='h-4 w-4 mr-1' />
-              Undo
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Undo (Ctrl+Z)</p>
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant='ghost'
-              size='sm'
-              onClick={redo}
-              disabled={redoStackLength === 0 || isBaking}
-            >
-              <Redo className='h-4 w-4 mr-1' />
-              Redo
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Redo (Ctrl+Y)</p>
-          </TooltipContent>
-        </Tooltip>
-      </div>
-
-      {/* Tools & View */}
-      <div className='flex items-center space-x-1'>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant='ghost'
-              size='sm'
-              onClick={alignAllShapes}
-              disabled={isBaking || shapesCount < 2}
-            >
-              <AlignCenterHorizontal className='h-4 w-4 mr-1' />
-              Align All
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Align all shapes along X-axis</p>
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant='ghost'
-              size='sm'
-              onClick={alignSelectedShapeToOrigin}
-              disabled={isBaking || !selectedShapeId}
-            >
-              <LocateFixed className='h-4 w-4 mr-1' />
-              Center Selected
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Center selected shape (XZ) at origin</p>
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant='ghost'
-              size='sm'
-              onClick={handleToggleFullscreen}
+              className={cn(buttonBaseClass, "w-auto px-2 sm:px-3 h-9")}
               disabled={isBaking}
             >
-              {isFullscreen ? (
-                <Minimize2 className='h-4 w-4 mr-1' />
+              {" "}
+              {isAnimating ? (
+                <Pause
+                  size={iconSize}
+                  strokeWidth={iconStrokeWidth}
+                  className='sm:mr-1.5'
+                />
               ) : (
-                <Maximize className='h-4 w-4 mr-1' />
-              )}
-              {isFullscreen ? "Windowed" : "Fullscreen"}
+                <Play
+                  size={iconSize}
+                  strokeWidth={iconStrokeWidth}
+                  className='sm:mr-1.5'
+                />
+              )}{" "}
+              <span className='hidden sm:inline'>
+                {isAnimating ? "Pause" : "Play"}
+              </span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>
+          <TooltipContent
+            side='bottom'
+            className='bg-slate-800 text-slate-200 border-slate-700'
+          >
             <p>
-              {isFullscreen ? "Exit Fullscreen Mode" : "Enter Fullscreen Mode"}
+              {isAnimating
+                ? "Pause all animations (P)"
+                : "Play all animations (P)"}
             </p>
           </TooltipContent>
         </Tooltip>
-      </div>
-
-      {/* Export Operations */}
-      <div className='flex items-center space-x-1'>
+        <Separator orientation='vertical' className='h-5 bg-slate-700' />{" "}
+        {/* Always visible separator */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant='ghost'
-              size='sm'
-              onClick={exportStaticGLBFile}
-              disabled={isBaking || shapesCount === 0}
+              onClick={undo}
+              disabled={undoStackLength === 0 || isBaking}
+              variant='outline'
+              size='icon'
+              className={iconButtonClass}
             >
-              <PackageOpen className='h-4 w-4 mr-1' />
-              Export Static GLB
+              <Undo2 size={iconSize} strokeWidth={iconStrokeWidth} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>
-            <p>Export scene as Static GLB</p>
+          <TooltipContent
+            side='bottom'
+            className='bg-slate-800 text-slate-200 border-slate-700'
+          >
+            Undo (Ctrl+Z)
           </TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant='ghost'
-              size='sm'
-              onClick={bakeAndExportAnimatedGLB}
-              disabled={isBaking || shapesCount === 0}
+              onClick={redo}
+              disabled={redoStackLength === 0 || isBaking}
+              variant='outline'
+              size='icon'
+              className={iconButtonClass}
             >
-              <PackageOpen className='h-4 w-4 mr-1' />
-              Export Animated GLB
+              <Redo2 size={iconSize} strokeWidth={iconStrokeWidth} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>
-            <p>Export scene with baked animations as GLB</p>
+          <TooltipContent
+            side='bottom'
+            className='bg-slate-800 text-slate-200 border-slate-700'
+          >
+            Redo (Ctrl+Y)
           </TooltipContent>
         </Tooltip>
-      </div>
-
-      {/* Animation Toggle */}
-      <div className='flex items-center space-x-1'>
+        <Separator orientation='vertical' className='h-5 bg-slate-700' />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant='ghost'
-              size='sm'
-              onClick={toggleGlobalAnimation}
+              onClick={forceRefreshCanvas}
+              variant='outline'
+              size='icon'
+              className={iconButtonClass}
               disabled={isBaking}
             >
-              {isAnimating ? (
-                <Pause className='h-4 w-4 mr-1' />
-              ) : (
-                <Play className='h-4 w-4 mr-1' />
-              )}
-              {isAnimating ? "Pause Anim" : "Play Anim"}
+              <RefreshCw size={iconSize - 1} strokeWidth={iconStrokeWidth} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>
-            <p>Toggle procedural animations (P)</p>
+          <TooltipContent
+            side='bottom'
+            className='bg-slate-800 text-slate-200 border-slate-700'
+          >
+            <p>Refresh Canvas View</p>
           </TooltipContent>
         </Tooltip>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant='outline'
+              size='sm'
+              className={cn(
+                buttonBaseClass,
+                "px-2 sm:px-3 h-9 flex items-center"
+              )}
+              disabled={isBaking}
+            >
+              <LayoutPanelLeft
+                size={iconSize}
+                strokeWidth={iconStrokeWidth}
+                className='xs:mr-1.5'
+              />{" "}
+              <span className='hidden xs:inline'>Align</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align='end'
+            className='bg-slate-800 border-slate-700 text-slate-200 w-56'
+          >
+            {/* ... Dropdown items ... */}
+            <DropdownMenuLabel className='text-slate-400 px-2 py-1.5 text-xs'>
+              Align All Shapes
+            </DropdownMenuLabel>
+            {[
+              {
+                label: "Horizontally (Avg X)",
+                action: () => alignAllShapes("x", "average"),
+                icon: AlignHorizontalJustifyStart,
+                disabled: isBaking || shapesCount < 2,
+              },
+              {
+                label: "Vertically (Avg Y)",
+                action: () => alignAllShapes("y", "average"),
+                icon: AlignVerticalJustifyStart,
+                disabled: isBaking || shapesCount < 2,
+              },
+              {
+                label: "By Depth (Avg Z)",
+                action: () => alignAllShapes("z", "average"),
+                icon: Layers,
+                disabled: isBaking || shapesCount < 2,
+              },
+            ].map((item) => (
+              <DropdownMenuItem
+                key={item.label}
+                onClick={item.action}
+                disabled={item.disabled}
+                className='focus:bg-purple-600/30 focus:text-purple-200 cursor-pointer'
+              >
+                {" "}
+                <item.icon
+                  size={iconSize - 2}
+                  strokeWidth={iconStrokeWidth}
+                  className='mr-2 text-slate-400'
+                />{" "}
+                {item.label}{" "}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator className='bg-slate-700' />
+            <DropdownMenuLabel className='text-slate-400 px-2 py-1.5 text-xs'>
+              Align Selected to Origin
+            </DropdownMenuLabel>
+            {[
+              {
+                label: "X to Origin",
+                action: () => alignSelectedShapeToOrigin("x"),
+                icon: Target,
+                disabled: isBaking || !selectedShapeId,
+              },
+              {
+                label: "Y to Origin",
+                action: () => alignSelectedShapeToOrigin("y"),
+                icon: Target,
+                disabled: isBaking || !selectedShapeId,
+              },
+              {
+                label: "Z to Origin",
+                action: () => alignSelectedShapeToOrigin("z"),
+                icon: Target,
+                disabled: isBaking || !selectedShapeId,
+              },
+            ].map((item) => (
+              <DropdownMenuItem
+                key={item.label}
+                onClick={item.action}
+                disabled={item.disabled}
+                className='focus:bg-purple-600/30 focus:text-purple-200 cursor-pointer'
+              >
+                {" "}
+                <item.icon
+                  size={iconSize - 2}
+                  strokeWidth={iconStrokeWidth}
+                  className='mr-2 text-slate-400'
+                />{" "}
+                {item.label}{" "}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-    </div>
+
+      {/* Right Section: File, Fullscreen, Mobile Toggle */}
+      <div className='flex items-center space-x-1 sm:space-x-1.5 shrink-0'>
+        {" "}
+        {/* Added shrink-0 */}
+        {/* ... File Dropdown, Fullscreen Button, Mobile Right Toggle ... (unchanged from previous version) */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='text-slate-300 hover:bg-slate-700/70 hover:text-slate-100 px-2 sm:px-3 h-9 data-[state=open]:bg-slate-700/70 flex items-center'
+              disabled={isBaking}
+            >
+              <Archive
+                size={iconSize}
+                strokeWidth={iconStrokeWidth}
+                className='xs:mr-1.5'
+              />{" "}
+              <span className='hidden xs:inline'>File</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align='end'
+            className='bg-slate-800 border-slate-700 text-slate-200 w-56'
+          >
+            {[
+              {
+                label: "Import JSON Scene",
+                action: triggerJsonFileImport,
+                icon: FilePlus,
+                disabled: isBaking,
+              },
+              {
+                label: "Import GLB/GLTF",
+                action: triggerGlbFileImport,
+                icon: UploadCloud,
+                disabled: isBaking,
+              },
+              {
+                label: "Import Image Plane",
+                action: triggerImageFileImport,
+                icon: ImageIconLucide,
+                disabled: isBaking,
+              },
+            ].map((item) => (
+              <DropdownMenuItem
+                key={item.label}
+                onClick={item.action}
+                disabled={item.disabled}
+                className='focus:bg-purple-600/30 focus:text-purple-200 cursor-pointer'
+              >
+                {" "}
+                <item.icon
+                  size={iconSize - 2}
+                  strokeWidth={iconStrokeWidth}
+                  className='mr-2 text-slate-400'
+                />{" "}
+                {item.label}{" "}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator className='bg-slate-700' />
+            {[
+              {
+                label: "Export Scene to JSON",
+                action: exportJSON,
+                icon: FileText,
+                disabled: isBaking,
+              },
+              {
+                label: "Export Static GLB",
+                action: exportStaticGLBFile,
+                icon: Layers,
+                disabled: isBaking,
+              },
+              {
+                label: "Export Animated GLB",
+                action: bakeAndExportAnimatedGLB,
+                icon: Film,
+                disabled: isBaking,
+              },
+            ].map((item) => (
+              <DropdownMenuItem
+                key={item.label}
+                onClick={item.action}
+                disabled={item.disabled}
+                className='focus:bg-purple-600/30 focus:text-purple-200 cursor-pointer'
+              >
+                {" "}
+                <item.icon
+                  size={iconSize - 2}
+                  strokeWidth={iconStrokeWidth}
+                  className='mr-2 text-slate-400'
+                />{" "}
+                {item.label}{" "}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              onClick={toggleFullscreen}
+              variant='ghost'
+              size='icon'
+              className='w-9 h-9 text-slate-300 hover:bg-slate-700/70 hover:text-purple-300 data-[state=open]:bg-slate-700/70'
+            >
+              {isFullscreen ? (
+                <Minimize size={iconSize} />
+              ) : (
+                <Maximize size={iconSize} />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent
+            side='bottom'
+            className='bg-slate-800 text-slate-200 border-slate-700'
+          >
+            <p>{isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}</p>
+          </TooltipContent>
+        </Tooltip>
+        <Button
+          variant={isRightSidebarOpen ? "default" : "ghost"}
+          size='icon'
+          onClick={toggleRightSidebar}
+          className='md:hidden w-9 h-9 text-slate-300 hover:bg-slate-700/70 data-[state=open]:bg-purple-600 active:bg-purple-700 data-[state=open]:text-white'
+          aria-label='Toggle Properties Panel'
+        >
+          {" "}
+          <PanelRight size={iconSize + 2} />{" "}
+        </Button>
+      </div>
+    </motion.div>
   );
 }

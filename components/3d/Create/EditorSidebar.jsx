@@ -1,247 +1,3 @@
-// import { motion } from "framer-motion";
-// import {
-//   Card,
-//   CardContent,
-//   CardDescription,
-//   CardHeader,
-//   CardTitle,
-// } from "@/components/ui/card";
-// import { Button } from "@/components/ui/button";
-// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-// import {
-//   Tooltip,
-//   TooltipContent,
-//   TooltipTrigger,
-// } from "@/components/ui/tooltip";
-
-// export default function EditorSidebar({
-//   mode,
-//   setMode,
-//   addShape,
-//   setCameraView,
-//   shapeOptions = [], // Default to an empty array from Model3DCreator
-// }) {
-//   const transformToolOptions = [
-//     {
-//       toolMode: "translate",
-//       icon: "↔️",
-//       label: "Translate",
-//       tooltip: "Move (W)",
-//     },
-//     { toolMode: "rotate", icon: "🔄", label: "Rotate", tooltip: "Rotate (E)" },
-//     { toolMode: "scale", icon: "📏", label: "Scale", tooltip: "Scale (R)" },
-//   ];
-
-//   const cameraViewOptions = [
-//     { name: "Top", preset: "top", icon: "⬆️" },
-//     { name: "Front", preset: "front", icon: "➡️" },
-//     { name: "Side", preset: "side", icon: "↗️" },
-//     { name: "Isometric", preset: "isometric", icon: "🎯" },
-//   ];
-
-//   const popularShapeOptions = [
-//     // These are for "customExtruded" type
-//     { name: "Heart", type: "heart", icon: "❤️" },
-//     { name: "Star", type: "star", icon: "⭐" },
-//     { name: "Crown", type: "crown", icon: "👑" },
-//     { name: "Lightning", type: "lightning", icon: "⚡" },
-//     { name: "Diamond", type: "diamond", icon: "💎" },
-//     { name: "Shield", type: "shield", icon: "🛡️" },
-//     { name: "Arrow", type: "arrow", icon: "➡️" },
-//     { name: "Leaf", type: "leaf", icon: "🍃" },
-//     { name: "Sword", type: "sword", icon: "⚔️" },
-//     { name: "Butterfly", type: "butterfly", icon: "🦋" },
-//   ];
-
-//   return (
-//     <motion.div
-//       initial={{ x: -20, opacity: 0 }}
-//       animate={{ x: 0, opacity: 1 }}
-//       transition={{ delay: 0.1 }}
-//       className='w-80 p-6 bg-card/60 backdrop-blur-lg border-r border-border/60 overflow-y-auto shadow-2xl'
-//     >
-//       <Tabs defaultValue='tools' className='space-y-6'>
-//         <TabsList className='grid w-full grid-cols-4'>
-//           <TabsTrigger value='tools'>Tools</TabsTrigger>
-//           <TabsTrigger value='shapes'>Shapes</TabsTrigger>
-//           <TabsTrigger value='popular'>Popular</TabsTrigger>
-//           <TabsTrigger value='camera'>Camera</TabsTrigger>
-//         </TabsList>
-
-//         <TabsContent value='tools' className='space-y-6'>
-//           <Card className='bg-background/50'>
-//             <CardHeader>
-//               <CardTitle className='flex items-center space-x-2'>
-//                 <span>🛠️</span>
-//                 <span>Transform Tools</span>
-//               </CardTitle>
-//               <CardDescription>
-//                 Select how you want to manipulate objects
-//               </CardDescription>
-//             </CardHeader>
-//             <CardContent>
-//               <div className='grid grid-cols-3 gap-3'>
-//                 {transformToolOptions.map((tool) => (
-//                   <Tooltip key={tool.toolMode}>
-//                     <TooltipTrigger asChild>
-//                       <motion.div
-//                         whileHover={{ scale: 1.02 }}
-//                         whileTap={{ scale: 0.98 }}
-//                       >
-//                         <Button
-//                           onClick={() => setMode(tool.toolMode)}
-//                           variant={
-//                             mode === tool.toolMode ? "default" : "outline"
-//                           }
-//                           size='sm'
-//                           className='flex flex-col items-center justify-center h-16 w-full'
-//                         >
-//                           <span className='text-lg mb-1'>{tool.icon}</span>
-//                           <span className='text-xs capitalize'>
-//                             {tool.label}
-//                           </span>
-//                         </Button>
-//                       </motion.div>
-//                     </TooltipTrigger>
-//                     <TooltipContent>{tool.tooltip}</TooltipContent>
-//                   </Tooltip>
-//                 ))}
-//               </div>
-//             </CardContent>
-//           </Card>
-//         </TabsContent>
-
-//         <TabsContent value='shapes' className='space-y-6'>
-//           <Card className='bg-background/50'>
-//             <CardHeader>
-//               <CardTitle className='flex items-center space-x-2'>
-//                 <span>🧊</span>
-//                 <span>Primitive Shapes</span>
-//               </CardTitle>
-//               <CardDescription>Click to add basic 3D objects</CardDescription>
-//             </CardHeader>
-//             <CardContent>
-//               <div className='grid grid-cols-2 gap-3'>
-//                 {Array.isArray(shapeOptions) &&
-//                   shapeOptions.map(
-//                     (
-//                       shape // shapeOptions comes from Model3DCreator
-//                     ) => (
-//                       <Tooltip key={shape.name}>
-//                         <TooltipTrigger asChild>
-//                           <motion.div
-//                             whileHover={{ scale: 1.02 }}
-//                             whileTap={{ scale: 0.98 }}
-//                           >
-//                             <Button
-//                               onClick={() => addShape(shape.geometry)} // addShape uses geometry type string
-//                               variant='outline'
-//                               size='sm'
-//                               className='flex flex-col items-center justify-center h-20 w-full hover:bg-primary/10 transition-all'
-//                             >
-//                               <span className='text-xl mb-1'>{shape.icon}</span>
-//                               <span className='text-xs'>{shape.name}</span>
-//                             </Button>
-//                           </motion.div>
-//                         </TooltipTrigger>
-//                         <TooltipContent>
-//                           Add {shape.name} to scene
-//                         </TooltipContent>
-//                       </Tooltip>
-//                     )
-//                   )}
-//               </div>
-//             </CardContent>
-//           </Card>
-//         </TabsContent>
-
-//         <TabsContent value='popular' className='space-y-6'>
-//           <Card className='bg-background/50'>
-//             <CardHeader>
-//               <CardTitle className='flex items-center space-x-2'>
-//                 <span>💖</span>
-//                 <span>Popular Shapes</span>
-//               </CardTitle>
-//               <CardDescription>
-//                 Add pre-designed 2D extruded shapes
-//               </CardDescription>
-//             </CardHeader>
-//             <CardContent>
-//               <div className='grid grid-cols-2 gap-3'>
-//                 {popularShapeOptions.map((shape) => (
-//                   <Tooltip key={shape.name}>
-//                     <TooltipTrigger asChild>
-//                       <motion.div
-//                         whileHover={{ scale: 1.02 }}
-//                         whileTap={{ scale: 0.98 }}
-//                       >
-//                         <Button
-//                           onClick={() =>
-//                             addShape("customExtruded", {
-//                               shapeType: shape.type,
-//                             })
-//                           }
-//                           variant='outline'
-//                           size='sm'
-//                           className='flex flex-col items-center justify-center h-20 w-full hover:bg-primary/10 transition-all'
-//                         >
-//                           <span className='text-xl mb-1'>{shape.icon}</span>
-//                           <span className='text-xs'>{shape.name}</span>
-//                         </Button>
-//                       </motion.div>
-//                     </TooltipTrigger>
-//                     <TooltipContent>Add {shape.name} to scene</TooltipContent>
-//                   </Tooltip>
-//                 ))}
-//               </div>
-//             </CardContent>
-//           </Card>
-//         </TabsContent>
-
-//         <TabsContent value='camera' className='space-y-6'>
-//           <Card className='bg-background/50'>
-//             <CardHeader>
-//               <CardTitle className='flex items-center space-x-2'>
-//                 <span>📷</span>
-//                 <span>Camera Views</span>
-//               </CardTitle>
-//               <CardDescription>
-//                 Quick camera positioning presets
-//               </CardDescription>
-//             </CardHeader>
-//             <CardContent>
-//               <div className='grid grid-cols-2 gap-3'>
-//                 {cameraViewOptions.map((view) => (
-//                   <Tooltip key={view.preset}>
-//                     <TooltipTrigger asChild>
-//                       <motion.div
-//                         whileHover={{ scale: 1.02 }}
-//                         whileTap={{ scale: 0.98 }}
-//                       >
-//                         <Button
-//                           onClick={() => setCameraView(view.preset)}
-//                           variant='outline'
-//                           size='sm'
-//                           className='flex items-center justify-center space-x-2 w-full'
-//                         >
-//                           <span>{view.icon}</span>
-//                           <span className='text-xs'>{view.name}</span>
-//                         </Button>
-//                       </motion.div>
-//                     </TooltipTrigger>
-//                     <TooltipContent>Switch to {view.name} view</TooltipContent>
-//                   </Tooltip>
-//                 ))}
-//               </div>
-//             </CardContent>
-//           </Card>
-//         </TabsContent>
-//       </Tabs>
-//     </motion.div>
-//   );
-// }
-
-import React from "react"; // Added React import
 import { motion } from "framer-motion";
 import {
   Card,
@@ -255,25 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider, // Ensure TooltipProvider wraps this if used standalone, or its parent
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Move,
-  RotateCcw,
-  Scale,
-  Camera,
-  Shapes,
-  Heart,
-  Star,
-  Crown,
-  Zap,
-  Gem,
-  Shield,
-  ArrowRight,
-  Leaf,
-  Swords,
-  Feather,
-} from "lucide-react"; // Using Lucide icons
+import { cn } from "@/lib/utils"; // Assuming you have a cn utility
 
 export default function EditorSidebar({
   mode,
@@ -285,96 +26,69 @@ export default function EditorSidebar({
   const transformToolOptions = [
     {
       toolMode: "translate",
-      icon: <Move className='h-5 w-5' />,
+      icon: "↔️",
       label: "Translate",
       tooltip: "Move (W)",
     },
-    {
-      toolMode: "rotate",
-      icon: <RotateCcw className='h-5 w-5' />,
-      label: "Rotate",
-      tooltip: "Rotate (E)",
-    },
-    {
-      toolMode: "scale",
-      icon: <Scale className='h-5 w-5' />,
-      label: "Scale",
-      tooltip: "Scale (R)",
-    },
+    { toolMode: "rotate", icon: "🔄", label: "Rotate", tooltip: "Rotate (E)" },
+    { toolMode: "scale", icon: "📏", label: "Scale", tooltip: "Scale (R)" },
   ];
 
   const cameraViewOptions = [
-    { name: "Top", preset: "top", icon: <Camera className='h-4 w-4' /> }, // Icon adjusted for consistency
-    { name: "Front", preset: "front", icon: <Camera className='h-4 w-4' /> },
-    { name: "Side", preset: "side", icon: <Camera className='h-4 w-4' /> },
-    {
-      name: "Isometric",
-      preset: "isometric",
-      icon: <Camera className='h-4 w-4' />,
-    },
+    { name: "Top", preset: "top", icon: "⬆️" },
+    { name: "Front", preset: "front", icon: "➡️" },
+    { name: "Side", preset: "side", icon: "↗️" },
+    { name: "Isometric", preset: "isometric", icon: "🎯" },
   ];
 
   const popularShapeOptions = [
-    { name: "Heart", type: "heart", icon: <Heart className='h-6 w-6' /> },
-    { name: "Star", type: "star", icon: <Star className='h-6 w-6' /> },
-    { name: "Crown", type: "crown", icon: <Crown className='h-6 w-6' /> },
-    { name: "Lightning", type: "lightning", icon: <Zap className='h-6 w-6' /> },
-    { name: "Diamond", type: "diamond", icon: <Gem className='h-6 w-6' /> },
-    { name: "Shield", type: "shield", icon: <Shield className='h-6 w-6' /> },
-    { name: "Arrow", type: "arrow", icon: <ArrowRight className='h-6 w-6' /> },
-    { name: "Leaf", type: "leaf", icon: <Leaf className='h-6 w-6' /> },
-    { name: "Sword", type: "sword", icon: <Swords className='h-6 w-6' /> },
-    {
-      name: "Butterfly",
-      type: "butterfly",
-      icon: <Feather className='h-6 w-6' />,
-    },
+    { name: "Heart", type: "heart", icon: "❤️" },
+    { name: "Star", type: "star", icon: "⭐" },
+    { name: "Crown", type: "crown", icon: "👑" },
+    { name: "Lightning", type: "lightning", icon: "⚡" },
+    { name: "Diamond", type: "diamond", icon: "💎" },
+    { name: "Shield", type: "shield", icon: "🛡️" },
+    { name: "Arrow", type: "arrow", icon: "➡️" },
+    { name: "Leaf", type: "leaf", icon: "🍃" },
+    { name: "Sword", type: "sword", icon: "⚔️" },
+    { name: "Butterfly", type: "butterfly", icon: "🦋" },
   ];
-
-  // Map string icons from shapeOptions (Model3DCreator) to Lucide icons if needed or use emojis
-  const getPrimitiveIcon = (iconString) => {
-    switch (iconString) {
-      case "🧊":
-        return <Shapes className='h-6 w-6' />; // Generic for cube
-      case "⚪":
-        return <Shapes className='h-6 w-6' />; // Generic for sphere
-      case "🥫":
-        return <Shapes className='h-6 w-6' />; // Generic for cylinder
-      case "🔺":
-        return <Shapes className='h-6 w-6' />; // Generic for cone/pyramid
-      case "🍩":
-        return <Shapes className='h-6 w-6' />; // Generic for torus
-      case "📝":
-        return <Shapes className='h-6 w-6' />; // Generic for text
-      case "⛰️":
-        return <Shapes className='h-6 w-6' />;
-      default:
-        return <Shapes className='h-6 w-6' />;
-    }
-  };
 
   return (
     <motion.div
-      initial={{ x: -20, opacity: 0 }}
+      initial={{ x: -30, opacity: 0 }} // Slightly increased initial offset
       animate={{ x: 0, opacity: 1 }}
-      transition={{ delay: 0.1 }}
-      className='w-72 p-4 bg-card/60 backdrop-blur-lg border-r border-border/60 overflow-y-auto shadow-2xl' // Slightly smaller width
+      transition={{ delay: 0.1, type: "spring", stiffness: 120 }}
+      className='w-72 p-4 bg-slate-900/80 backdrop-blur-sm border-r border-slate-700/50 overflow-y-auto shadow-xl scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800'
     >
-      <Tabs defaultValue='tools' className='space-y-4'>
-        <TabsList className='grid w-full grid-cols-4'>
-          <TabsTrigger value='tools'>Tools</TabsTrigger>
-          <TabsTrigger value='shapes'>Shapes</TabsTrigger>
-          <TabsTrigger value='popular'>Popular</TabsTrigger>
-          <TabsTrigger value='camera'>Camera</TabsTrigger>
+      <Tabs defaultValue='tools' className='space-y-5'>
+        {" "}
+        {/* Consistent spacing */}
+        <TabsList className='grid w-full grid-cols-4 gap-1 p-1 bg-slate-800/60 rounded-lg'>
+          {["tools", "shapes", "popular", "camera"].map((value) => (
+            <TabsTrigger
+              key={value}
+              value={value}
+              className={cn(
+                "text-xs px-2 py-1.5 rounded-md transition-colors",
+                "data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md",
+                "data-[state=inactive]:text-slate-300 data-[state=inactive]:hover:bg-slate-700/70 data-[state=inactive]:hover:text-slate-100"
+              )}
+            >
+              {value.charAt(0).toUpperCase() + value.slice(1)}
+            </TabsTrigger>
+          ))}
         </TabsList>
-
-        <TabsContent value='tools' className='space-y-4'>
-          <Card className='bg-background/50'>
-            <CardHeader className='pb-2 pt-4 px-4'>
-              <CardTitle className='text-base flex items-center space-x-2'>
-                <span>🛠️</span>
-                <span>Transform</span>
+        <TabsContent value='tools' className='space-y-5 outline-none'>
+          <Card className='bg-slate-800/70 border border-slate-700 shadow-lg'>
+            <CardHeader className='p-4'>
+              <CardTitle className='text-base text-slate-100 flex items-center space-x-2'>
+                <span className='text-lg'>🛠️</span>
+                <span>Transform Tools</span>
               </CardTitle>
+              <CardDescription className='text-xs text-slate-400 pt-1'>
+                Select object manipulation mode
+              </CardDescription>
             </CardHeader>
             <CardContent className='p-4'>
               <div className='grid grid-cols-3 gap-2'>
@@ -382,8 +96,8 @@ export default function EditorSidebar({
                   <Tooltip key={tool.toolMode}>
                     <TooltipTrigger asChild>
                       <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
                       >
                         <Button
                           onClick={() => setMode(tool.toolMode)}
@@ -391,30 +105,40 @@ export default function EditorSidebar({
                             mode === tool.toolMode ? "default" : "outline"
                           }
                           size='sm'
-                          className='flex flex-col items-center justify-center h-16 w-full'
+                          className={cn(
+                            "flex flex-col items-center justify-center h-16 w-full text-xs p-1",
+                            mode === tool.toolMode
+                              ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-500 ring-2 ring-purple-400 ring-offset-1 ring-offset-slate-800"
+                              : "text-slate-300 border-slate-600 hover:bg-slate-700/50 hover:border-slate-500 hover:text-slate-100"
+                          )}
                         >
-                          <span className='mb-1'>{tool.icon}</span>
-                          <span className='text-xs capitalize'>
-                            {tool.label}
-                          </span>
+                          <span className='text-xl mb-1'>{tool.icon}</span>
+                          <span className='capitalize'>{tool.label}</span>
                         </Button>
                       </motion.div>
                     </TooltipTrigger>
-                    <TooltipContent>{tool.tooltip}</TooltipContent>
+                    <TooltipContent
+                      side='bottom'
+                      className='bg-slate-800 text-slate-200 border-slate-700'
+                    >
+                      <p>{tool.tooltip}</p>
+                    </TooltipContent>
                   </Tooltip>
                 ))}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value='shapes' className='space-y-4'>
-          <Card className='bg-background/50'>
-            <CardHeader className='pb-2 pt-4 px-4'>
-              <CardTitle className='text-base flex items-center space-x-2'>
-                <span>🧊</span>
-                <span>Primitives</span>
+        <TabsContent value='shapes' className='space-y-5 outline-none'>
+          <Card className='bg-slate-800/70 border border-slate-700 shadow-lg'>
+            <CardHeader className='p-4'>
+              <CardTitle className='text-base text-slate-100 flex items-center space-x-2'>
+                <span className='text-lg'>🧊</span>
+                <span>Primitive Shapes</span>
               </CardTitle>
+              <CardDescription className='text-xs text-slate-400 pt-1'>
+                Add basic 3D objects to the scene
+              </CardDescription>
             </CardHeader>
             <CardContent className='p-4'>
               <div className='grid grid-cols-2 gap-2'>
@@ -423,37 +147,44 @@ export default function EditorSidebar({
                     <Tooltip key={shape.name}>
                       <TooltipTrigger asChild>
                         <motion.div
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.97 }}
                         >
                           <Button
                             onClick={() => addShape(shape.geometry)}
                             variant='outline'
                             size='sm'
-                            className='flex flex-col items-center justify-center h-20 w-full hover:bg-primary/10 transition-all'
+                            className='flex flex-col items-center justify-center h-20 w-full text-xs p-1 text-slate-300 border-slate-600 hover:bg-slate-700/50 hover:border-slate-500 hover:text-slate-100'
                           >
-                            <span className='mb-1'>
-                              {getPrimitiveIcon(shape.icon)}
+                            <span className='text-2xl mb-1.5'>
+                              {shape.icon}
                             </span>
-                            <span className='text-xs'>{shape.name}</span>
+                            <span>{shape.name}</span>
                           </Button>
                         </motion.div>
                       </TooltipTrigger>
-                      <TooltipContent>Add {shape.name} to scene</TooltipContent>
+                      <TooltipContent
+                        side='bottom'
+                        className='bg-slate-800 text-slate-200 border-slate-700'
+                      >
+                        <p>Add {shape.name}</p>
+                      </TooltipContent>
                     </Tooltip>
                   ))}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value='popular' className='space-y-4'>
-          <Card className='bg-background/50'>
-            <CardHeader className='pb-2 pt-4 px-4'>
-              <CardTitle className='text-base flex items-center space-x-2'>
-                <span>💖</span>
-                <span>Popular</span>
+        <TabsContent value='popular' className='space-y-5 outline-none'>
+          <Card className='bg-slate-800/70 border border-slate-700 shadow-lg'>
+            <CardHeader className='p-4'>
+              <CardTitle className='text-base text-slate-100 flex items-center space-x-2'>
+                <span className='text-lg'>💖</span>
+                <span>Popular 2D Extrusions</span>
               </CardTitle>
+              <CardDescription className='text-xs text-slate-400 pt-1'>
+                Add pre-designed extruded shapes
+              </CardDescription>
             </CardHeader>
             <CardContent className='p-4'>
               <div className='grid grid-cols-2 gap-2'>
@@ -461,8 +192,8 @@ export default function EditorSidebar({
                   <Tooltip key={shape.name}>
                     <TooltipTrigger asChild>
                       <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
                       >
                         <Button
                           onClick={() =>
@@ -472,28 +203,35 @@ export default function EditorSidebar({
                           }
                           variant='outline'
                           size='sm'
-                          className='flex flex-col items-center justify-center h-20 w-full hover:bg-primary/10 transition-all'
+                          className='flex flex-col items-center justify-center h-20 w-full text-xs p-1 text-slate-300 border-slate-600 hover:bg-slate-700/50 hover:border-slate-500 hover:text-slate-100'
                         >
-                          <span className='mb-1'>{shape.icon}</span>
-                          <span className='text-xs'>{shape.name}</span>
+                          <span className='text-2xl mb-1.5'>{shape.icon}</span>
+                          <span>{shape.name}</span>
                         </Button>
                       </motion.div>
                     </TooltipTrigger>
-                    <TooltipContent>Add {shape.name} to scene</TooltipContent>
+                    <TooltipContent
+                      side='bottom'
+                      className='bg-slate-800 text-slate-200 border-slate-700'
+                    >
+                      <p>Add {shape.name}</p>
+                    </TooltipContent>
                   </Tooltip>
                 ))}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value='camera' className='space-y-4'>
-          <Card className='bg-background/50'>
-            <CardHeader className='pb-2 pt-4 px-4'>
-              <CardTitle className='text-base flex items-center space-x-2'>
-                <span>📷</span>
-                <span>Views</span>
+        <TabsContent value='camera' className='space-y-5 outline-none'>
+          <Card className='bg-slate-800/70 border border-slate-700 shadow-lg'>
+            <CardHeader className='p-4'>
+              <CardTitle className='text-base text-slate-100 flex items-center space-x-2'>
+                <span className='text-lg'>📷</span>
+                <span>Camera Views</span>
               </CardTitle>
+              <CardDescription className='text-xs text-slate-400 pt-1'>
+                Quick camera positioning presets
+              </CardDescription>
             </CardHeader>
             <CardContent className='p-4'>
               <div className='grid grid-cols-2 gap-2'>
@@ -501,21 +239,26 @@ export default function EditorSidebar({
                   <Tooltip key={view.preset}>
                     <TooltipTrigger asChild>
                       <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
                       >
                         <Button
                           onClick={() => setCameraView(view.preset)}
                           variant='outline'
                           size='sm'
-                          className='flex items-center justify-center space-x-2 w-full py-3'
+                          className='flex items-center justify-center space-x-2 w-full h-12 text-xs text-slate-300 border-slate-600 hover:bg-slate-700/50 hover:border-slate-500 hover:text-slate-100'
                         >
-                          <span>{view.icon}</span>
-                          <span className='text-xs'>{view.name}</span>
+                          <span className='text-lg'>{view.icon}</span>
+                          <span>{view.name}</span>
                         </Button>
                       </motion.div>
                     </TooltipTrigger>
-                    <TooltipContent>Switch to {view.name} view</TooltipContent>
+                    <TooltipContent
+                      side='bottom'
+                      className='bg-slate-800 text-slate-200 border-slate-700'
+                    >
+                      <p>Switch to {view.name} view</p>
+                    </TooltipContent>
                   </Tooltip>
                 ))}
               </div>

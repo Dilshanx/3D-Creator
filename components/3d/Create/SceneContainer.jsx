@@ -2,8 +2,7 @@
 
 import { useRef, useEffect } from "react";
 import * as THREE from "three";
-// import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'; // If loading HDR manually
-// import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'; // For manual controls
+// import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'; // Example if you add controls
 
 const SceneContainer = ({ onSceneSetup, animate }) => {
   const containerRef = useRef(null);
@@ -14,25 +13,29 @@ const SceneContainer = ({ onSceneSetup, animate }) => {
   const cleanupFnRef = useRef(null);
 
   useEffect(() => {
-    if (!containerRef.current || rendererRef.current) return; // Prevent re-initialization
+    if (!containerRef.current || rendererRef.current) return;
 
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
+    // Aligning with ModelViewer3D.jsx reference's typical scene background
+    scene.background = new THREE.Color(0x18181b); // Dark slate gray, similar to studioDark
+    // scene.fog = new THREE.Fog(0x18181b, 10, 50); // Optional fog matching background
 
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
     camera.position.set(3, 4, 5);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false }); // Alpha false if bg is set
     renderer.setSize(width, height);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+    // Consistent tone mapping and color space with reference ModelViewer3D.jsx
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -40,9 +43,12 @@ const SceneContainer = ({ onSceneSetup, animate }) => {
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    if (!scene.environment && !scene.background) {
-      scene.background = new THREE.Color(0x1a1a2e);
-    }
+    // Example of adding controls manually if needed for this non-R3F setup
+    // const controls = new OrbitControls(camera, renderer.domElement);
+    // controls.enableDamping = true;
+    // controls.dampingFactor = 0.05;
+    // controls.minDistance = 1;
+    // controls.maxDistance = 50;
 
     if (onSceneSetup && typeof onSceneSetup === "function") {
       try {
@@ -64,14 +70,14 @@ const SceneContainer = ({ onSceneSetup, animate }) => {
       if (animate && typeof animate === "function") {
         animate();
       }
+      // if (controls) controls.update(); // If manual OrbitControls are used
       rendererRef.current.render(sceneRef.current, cameraRef.current);
     };
     animateLoop();
 
     const handleResize = () => {
-      if (!containerRef.current || !cameraRef.current || !rendererRef.current) {
+      if (!containerRef.current || !cameraRef.current || !rendererRef.current)
         return;
-      }
       const newWidth = containerRef.current.clientWidth;
       const newHeight = containerRef.current.clientHeight;
       cameraRef.current.aspect = newWidth / newHeight;
@@ -86,6 +92,7 @@ const SceneContainer = ({ onSceneSetup, animate }) => {
         frameIdRef.current = null;
       }
       window.removeEventListener("resize", handleResize);
+      // if (controls) controls.dispose(); // If manual OrbitControls are used
 
       if (cleanupFnRef.current) {
         try {
@@ -113,13 +120,17 @@ const SceneContainer = ({ onSceneSetup, animate }) => {
         rendererRef.current.dispose();
         rendererRef.current = null;
       }
-
       sceneRef.current = null;
       cameraRef.current = null;
     };
-  }, []); // Empty dependency array for mount/unmount behavior
+  }, [onSceneSetup, animate]); // Dependencies
 
-  return <div ref={containerRef} className='h-full w-full' />;
+  return (
+    <div
+      ref={containerRef}
+      className='h-full w-full bg-slate-900 rounded-lg overflow-hidden'
+    />
+  ); // Added bg for container itself
 };
 
 export default SceneContainer;

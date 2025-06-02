@@ -1,87 +1,62 @@
-// import { motion } from "framer-motion";
-// import { Separator } from "@/components/ui/separator";
+import { motion } from "framer-motion";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils"; // Assuming you have a cn utility
 
-// export default function StatusBar({ shapesCount, selectedShape }) {
-//   const selectedInfo = selectedShape
-//     ? selectedShape.type === "text"
-//       ? `Text: "${selectedShape.text?.substring(0, 15) || "Empty"}${
-//           (selectedShape.text?.length || 0) > 15 ? "..." : ""
-//         }"`
-//       : selectedShape.type === "importedGLB"
-//       ? selectedShape.name || "Imported Model"
-//       : selectedShape.type === "imagePlane" // New check
-//       ? selectedShape.name || "Image Plane"
-//       : selectedShape.name ||
-//         selectedShape.type?.charAt(0).toUpperCase() +
-//           selectedShape.type?.slice(1)
-//     : "None";
+export default function StatusBar({ shapesCount, selectedShape }) {
+  const selectedInfo = selectedShape
+    ? selectedShape.type === "text"
+      ? `Text: "${selectedShape.text?.substring(0, 10) || "Empty"}${
+          // Shorter preview
+          (selectedShape.text?.length || 0) > 10 ? "..." : ""
+        }"`
+      : selectedShape.type === "importedGLB"
+      ? selectedShape.name || "Imported Model"
+      : selectedShape.type === "imagePlane"
+      ? selectedShape.name || "Image Plane"
+      : selectedShape.name ||
+        selectedShape.type?.charAt(0).toUpperCase() +
+          selectedShape.type?.slice(1)
+    : "None";
 
-//   return (
-//     <motion.div
-//       initial={{ y: 20, opacity: 0 }}
-//       animate={{ y: 0, opacity: 1 }}
-//       transition={{ delay: 0.5 }}
-//       className='flex justify-between items-center px-6 py-3 bg-card/80 backdrop-blur-lg border-t border-border/60 text-xs shadow- ऊपर-md'
-//     >
-//       <div className='flex items-center space-x-3 text-muted-foreground'>
-//         <div className='flex items-center space-x-1.5'>
-//           <div className='w-2 h-2 bg-green-500 rounded-full animate-pulse'></div>
-//           <span>
-//             {shapesCount} {shapesCount === 1 ? "object" : "objects"}
-//           </span>
-//         </div>
-//         {selectedShape && (
-//           <>
-//             <Separator orientation='vertical' className='h-3 bg-border' />
-//             <span className='truncate max-w-[200px]' title={selectedInfo}>
-//               Selected: {selectedInfo}
-//             </span>
-//             {selectedShape.type === "imagePlane" && selectedShape.name && (
-//               <span
-//                 className='text-xs opacity-70 truncate max-w-[150px]'
-//                 title={selectedShape.name}
-//               >
-//                 ({selectedShape.name})
-//               </span>
-//             )}
-//           </>
-//         )}
-//       </div>
-//       <div className='text-muted-foreground'>
-//         Creator Pro • Orbit: Mouse • Pan: Shift+Drag • Zoom: Scroll
-//       </div>
-//     </motion.div>
-//   );
-// }
-
-import React from "react";
-import { ShapesIcon, BoxSelectIcon } from "lucide-react";
-
-export default function StatusBar({ shapesCount = 0, selectedShape = null }) {
   return (
-    <div className='px-4 py-1.5 bg-card/70 backdrop-blur-sm border-t border-border/60 text-xs text-muted-foreground flex items-center justify-between'>
-      <div className='flex items-center space-x-3'>
-        <div className='flex items-center' title='Total shapes in scene'>
-          <ShapesIcon className='h-3.5 w-3.5 mr-1.5 text-primary/70' />
-          <span>{shapesCount} Shapes</span>
+    <motion.div
+      initial={{ y: 20, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ delay: 0.5, type: "spring", stiffness: 100 }}
+      className={cn(
+        "flex flex-col xs:flex-row justify-between items-center px-3 py-1.5 sm:px-4 sm:py-2", // Responsive padding
+        "bg-slate-900/70 backdrop-blur-sm border-t border-slate-700/50 shadow-lg",
+        "text-xs text-slate-400"
+      )}
+    >
+      <div className='flex items-center space-x-2 mb-1 xs:mb-0'>
+        {" "}
+        {/* Spacing adjusted */}
+        <div className='flex items-center space-x-1'>
+          <div className='w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse ring-1 ring-green-400/30'></div>
+          <span className='text-slate-300'>
+            {shapesCount} {shapesCount === 1 ? "Object" : "Objects"}
+          </span>
         </div>
         {selectedShape && (
-          <div
-            className='flex items-center'
-            title='Selected shape name and type'
-          >
-            <BoxSelectIcon className='h-3.5 w-3.5 mr-1.5 text-accent-foreground/70' />
-            <span>
-              Selected:{" "}
-              <span className='font-medium text-foreground/80'>
-                {selectedShape.name || "Unnamed"}
-              </span>{" "}
-              ({selectedShape.type})
+          <>
+            <Separator
+              orientation='vertical'
+              className='h-3 bg-slate-700 hidden xs:block'
+            />
+            <span
+              className='truncate max-w-[150px] xs:max-w-[180px] sm:max-w-[220px] text-slate-300 block xs:inline'
+              title={selectedInfo}
+            >
+              <span className='hidden xs:inline'>Selected: </span>
+              <span className='text-purple-300'>{selectedInfo}</span>
             </span>
-          </div>
+          </>
         )}
       </div>
-      <div className='text-xs'>Creator Pro v3.0.0</div>
-    </div>
+      <div className='text-slate-500 text-center xs:text-right text-[10px] sm:text-xs leading-tight'>
+        Orbit: Mouse • Pan: Shift+Drag • Zoom: Scroll
+      </div>
+    </motion.div>
   );
 }
