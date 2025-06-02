@@ -20,7 +20,7 @@ import {
   Play,
   Pause,
   Archive,
-  Image as ImageIcon,
+  Image as ImageIcon, // New icon for Image import
   Film,
   FileText,
   FilePlus,
@@ -32,8 +32,6 @@ import {
   Target,
   LayoutPanelLeft,
   UploadCloud,
-  Zap,
-  Camera, // Added Camera icon
 } from "lucide-react";
 
 export default function EditorToolbar({
@@ -46,7 +44,7 @@ export default function EditorToolbar({
   bakeAndExportAnimatedGLB,
   triggerJsonFileImport,
   triggerGlbFileImport,
-  triggerImageFileImport,
+  triggerImageFileImport, // New prop
   alignAllShapes,
   alignSelectedShapeToOrigin,
   selectedShapeId,
@@ -54,8 +52,6 @@ export default function EditorToolbar({
   isAnimating,
   toggleGlobalAnimation,
   isBaking,
-  forceThreeJSRender,
-  takeScreenshot, // New prop for taking screenshot
 }) {
   const iconSize = 16;
   const iconStrokeWidth = 1.5;
@@ -85,42 +81,11 @@ export default function EditorToolbar({
           variant='secondary'
           className='bg-gradient-to-r from-indigo-500/10 to-purple-500/10 text-indigo-600 border-indigo-300'
         >
-          v2.7 • Screenshot {/* Updated Version Badge */}
+          v2.6 • Image Planes {/* Updated Version Badge */}
         </Badge>
       </div>
 
       <div className='flex items-center space-x-2'>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              onClick={forceThreeJSRender}
-              variant='outline'
-              size='icon'
-              className='w-9 h-9'
-              disabled={isBaking}
-              title='Force Re-render Scene View'
-            >
-              <Zap size={iconSize} strokeWidth={iconStrokeWidth} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Force Re-render Scene View</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              onClick={takeScreenshot} // Call the new function
-              variant='outline'
-              size='icon'
-              className='w-9 h-9'
-              disabled={isBaking}
-              title='Take Screenshot'
-            >
-              <Camera size={iconSize} strokeWidth={iconStrokeWidth} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Take Screenshot</TooltipContent>
-        </Tooltip>
-        <Separator orientation='vertical' className='h-6' />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -310,6 +275,8 @@ export default function EditorToolbar({
               onClick={triggerImageFileImport}
               disabled={isBaking}
             >
+              {" "}
+              {/* New Item */}
               <ImageIcon
                 size={iconSize}
                 strokeWidth={iconStrokeWidth}
