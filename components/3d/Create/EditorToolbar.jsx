@@ -1,15 +1,14 @@
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button"; // Still used for triggers and other buttons
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator as UiSeparator } from "@/components/ui/separator"; // Renamed to avoid conflict if I create a local Separator
+import { Separator as UiSeparator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-// Removed ShadCN DropdownMenu imports
 import { cn } from "@/lib/utils";
-import React, { useState, useEffect, useRef } from "react"; // Added React imports
+import React, { useState, useEffect, useRef } from "react";
 
 import {
   Play,
@@ -35,11 +34,12 @@ import {
 } from "lucide-react";
 
 // Define z-index values for clarity and easier management
+// IMPORTANT: Using the corrected z-index values for normal mode
 const Z_INDEX_VALUES = {
   normal: {
-    toolbar: 30,
-    tooltip: 40,
-    dropdown: 50,
+    tooltip: 40, // For portalled TooltipContent (global effect)
+    toolbar: 50, // Toolbar itself, must be globally above normal tooltips
+    dropdown: 55, // Dropdown content *inside* toolbar, relative to toolbar's stacking context.
   },
   fullscreen: {
     tooltip: 99990,
@@ -73,7 +73,7 @@ const CustomDropdownItem = ({
       <IconComponent
         size={iconSize - 2}
         strokeWidth={iconStrokeWidth}
-        className='mr-2 text-slate-400' // Consider dynamic color on hover/focus if needed
+        className='mr-2 text-slate-400'
       />
     )}
     {children}
@@ -127,7 +127,6 @@ export default function EditorToolbar({
   const alignDropdownRef = useRef(null);
   const fileDropdownRef = useRef(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -169,10 +168,7 @@ export default function EditorToolbar({
   };
 
   const alignDropdownItems = [
-    {
-      type: "label",
-      label: "Align All Shapes",
-    },
+    { type: "label", label: "Align All Shapes" },
     {
       label: "Horizontally (Avg X)",
       action: () => alignAllShapes("x", "average"),
@@ -192,10 +188,7 @@ export default function EditorToolbar({
       disabled: isBaking || shapesCount < 2,
     },
     { type: "separator" },
-    {
-      type: "label",
-      label: "Align Selected to Origin",
-    },
+    { type: "label", label: "Align Selected to Origin" },
     {
       label: "X to Origin",
       action: () => alignSelectedShapeToOrigin("x"),
@@ -267,7 +260,7 @@ export default function EditorToolbar({
           : Z_INDEX_VALUES.normal.toolbar,
       }}
     >
-      {/* Left Section: Logo, Title, Mobile Toggles */}
+      {/* Left Section */}
       <div className='flex items-center space-x-2 sm:space-x-3 shrink-0'>
         <Button
           variant={isLeftSidebarOpen ? "default" : "ghost"}
@@ -302,7 +295,7 @@ export default function EditorToolbar({
         </Badge>
       </div>
 
-      {/* Center Section: Main Controls */}
+      {/* Center Section */}
       <div className='flex-1 flex justify-center items-center space-x-1 sm:space-x-1.5 px-2 sm:px-4'>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -366,7 +359,6 @@ export default function EditorToolbar({
             Undo (Ctrl+Z)
           </TooltipContent>
         </Tooltip>
-
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -411,15 +403,15 @@ export default function EditorToolbar({
           </TooltipContent>
         </Tooltip>
 
-        {/* Align Dropdown (Tailwind Custom) */}
+        {/* Align Dropdown */}
         <div className='relative' ref={alignDropdownRef}>
           <Button
             variant='outline'
             size='sm'
             className={cn(
               buttonBaseClass,
-              "px-2 sm:px-3 h-9 flex items-center",
-              isAlignDropdownOpen && "bg-slate-700/70" // Indicate open state
+              "px-2 sm:px-3 h-9 flex items-center", // Sizing and flex layout
+              isAlignDropdownOpen && "bg-slate-700/70"
             )}
             disabled={isBaking}
             onClick={() => setIsAlignDropdownOpen((prev) => !prev)}
@@ -441,16 +433,14 @@ export default function EditorToolbar({
               aria-orientation='vertical'
             >
               {alignDropdownItems.map((item, index) => {
-                if (item.type === "label") {
+                if (item.type === "label")
                   return (
                     <CustomDropdownLabel key={`label-${index}`}>
                       {item.label}
                     </CustomDropdownLabel>
                   );
-                }
-                if (item.type === "separator") {
+                if (item.type === "separator")
                   return <CustomDropdownSeparator key={`sep-${index}`} />;
-                }
                 return (
                   <CustomDropdownItem
                     key={item.label}
@@ -472,16 +462,17 @@ export default function EditorToolbar({
         </div>
       </div>
 
-      {/* Right Section: File, Fullscreen, Mobile Toggle */}
+      {/* Right Section */}
       <div className='flex items-center space-x-1 sm:space-x-1.5 shrink-0'>
-        {/* File Dropdown (Tailwind Custom) */}
+        {/* File Dropdown (Tailwind Custom) - UPDATED */}
         <div className='relative' ref={fileDropdownRef}>
           <Button
-            variant='ghost'
+            variant='outline' // CHANGED from 'ghost' to 'outline'
             size='sm'
             className={cn(
-              "text-slate-300 hover:bg-slate-700/70 hover:text-slate-100 px-2 sm:px-3 h-9 flex items-center",
-              isFileDropdownOpen && "bg-slate-700/70" // Active state like original data-[state=open]
+              buttonBaseClass, // ADDED buttonBaseClass for consistency
+              "px-2 sm:px-3 h-9 flex items-center", // Ensured sizing/flex layout classes
+              isFileDropdownOpen && "bg-slate-700/70" // Kept active state
             )}
             disabled={isBaking}
             onClick={() => setIsFileDropdownOpen((prev) => !prev)}
@@ -503,17 +494,14 @@ export default function EditorToolbar({
               aria-orientation='vertical'
             >
               {fileDropdownItems.map((item, index) => {
-                if (item.type === "label") {
-                  // Though file dropdown doesn't have labels in original
+                if (item.type === "label")
                   return (
                     <CustomDropdownLabel key={`label-${index}`}>
                       {item.label}
                     </CustomDropdownLabel>
                   );
-                }
-                if (item.type === "separator") {
+                if (item.type === "separator")
                   return <CustomDropdownSeparator key={`sep-${index}`} />;
-                }
                 return (
                   <CustomDropdownItem
                     key={item.label}
@@ -540,7 +528,7 @@ export default function EditorToolbar({
               onClick={toggleFullscreen}
               variant='ghost'
               size='icon'
-              className='w-9 h-9 text-slate-300 hover:bg-slate-700/70 hover:text-purple-300' // Removed data-[state=open] as it's not a dropdown
+              className='w-9 h-9 text-slate-300 hover:bg-slate-700/70 hover:text-purple-300'
             >
               {isFullscreen ? (
                 <Minimize size={iconSize} />

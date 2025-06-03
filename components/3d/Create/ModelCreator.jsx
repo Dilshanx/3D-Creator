@@ -1,8 +1,21 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, {
+  useRef,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  Suspense,
+  // useLayoutEffect, // Not strictly needed in Model3DCreator.jsx directly
+} from "react";
 import * as THREE from "three";
+
+// Import JSM modules directly from three/examples/jsm
+import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { FontLoader } from "three/examples/jsm/loaders/FontLoader.js";
+import { TextGeometry as ThreeTextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
 import { TextureLoader as ThreeTextureLoader } from "three/src/loaders/TextureLoader.js";
 
+// UI Components
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { PanelLeft, PanelRight, X as CloseIcon } from "lucide-react";
@@ -12,9 +25,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  SelectPortal, // Ensure SelectPortal is imported if needed for older Shadcn/Radix versions
+  SelectPortal,
 } from "@/components/ui/select";
 
+// Local Application Components (ensure paths are correct)
 import PropertiesPanel from "./PropertiesPanel";
 import EditorSidebar from "./EditorSidebar";
 import EditorToolbar from "./EditorToolbar";
@@ -23,13 +37,14 @@ import StatusBar from "./StatusBar";
 import FallbackCreator from "./FallbackCreator";
 import AnimationPlaybackBar from "./AnimationPlaybackBar";
 
+// Scene Element Logic (ensure paths are correct)
 import {
   MainScene,
   CameraController,
-  createMeshFromShape,
-  exportToGLB,
+  createMeshFromShape, // This is crucial. Assuming it's well-defined in SceneElements.jsx
+  exportToGLB as sceneExportToGLB, // Renamed to avoid conflict with local exportToGLB if any
 } from "./SceneElements";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils"; // Utility for class names
 
 // --- Helper functions and constants ---
 let R3FCanvasCheck;
@@ -37,8 +52,11 @@ try {
   const r3f = require("@react-three/fiber");
   R3FCanvasCheck = r3f.Canvas;
 } catch (error) {
-  /* Handled */
+  console.warn(
+    "Model3DCreator: @react-three/fiber not available, using fallback."
+  );
 }
+
 let gltfLoaderInstance;
 const getGltfLoader = () => {
   if (!gltfLoaderInstance) {
@@ -48,20 +66,23 @@ const getGltfLoader = () => {
     } = require("three/examples/jsm/loaders/DRACOLoader.js");
     gltfLoaderInstance = new GLTFLoader();
     const dracoLoader = new DRACOLoader();
-    dracoLoader.setDecoderPath("/draco/gltf/"); // Ensure this path is correct in your /public folder
+    dracoLoader.setDecoderPath("/draco/gltf/"); // Ensure this path points to your draco decoder files in /public
     gltfLoaderInstance.setDRACOLoader(dracoLoader);
   }
   return gltfLoaderInstance;
 };
+
 const MAX_PLANE_DIMENSION = 5;
 const DEFAULT_EXPORT_FONT_PATH = "/fonts/helvetiker_regular.typeface.json"; // Ensure this path is correct
 let helvetikerFontForExport = null;
 const exportFontLoaderInstance = new FontLoader();
+
 if (typeof window !== "undefined" && !helvetikerFontForExport) {
   exportFontLoaderInstance.load(
     DEFAULT_EXPORT_FONT_PATH,
     (font) => {
       helvetikerFontForExport = font;
+      // console.log("Model3DCreator: Default EXPORT font pre-loaded.");
     },
     undefined,
     (err) =>
@@ -71,10 +92,12 @@ if (typeof window !== "undefined" && !helvetikerFontForExport) {
       )
   );
 }
+
 const saneNumber = (value, defaultValue = 0) => {
   const num = Number(value);
   return isNaN(num) || !isFinite(num) ? defaultValue : num;
 };
+
 const initialTextureProps = {
   mapUrl: null,
   normalMapUrl: null,
@@ -82,14 +105,11 @@ const initialTextureProps = {
   metalnessMapUrl: null,
   aoMapUrl: null,
   emissiveMapUrl: null,
-  // Add other PBR/Physical material props here that can be controlled via textureProps UI
-  // These are values, not URLs, but are often grouped with texture settings
-  roughness: 0.5, // Default value if no map
-  metalness: 0.0, // Default value if no map
+  roughness: 0.5,
+  metalness: 0.0,
   aoMapIntensity: 1.0,
-  emissiveColor: "#000000", // Default emissive color
+  emissiveColor: "#000000",
   emissiveIntensity: 1.0,
-  // Physical material specific
   transmission: 0.0,
   ior: 1.5,
   thickness: 0.01,
@@ -100,17 +120,17 @@ const initialTextureProps = {
   sheenRoughness: 0.0,
   specularIntensity: 1.0,
   specularColor: "#ffffff",
-  shininess: 30, // For Phong
+  shininess: 30,
 };
 
-const textureLoaderForGLB = new ThreeTextureLoader();
+const textureLoaderForGLB = new ThreeTextureLoader(); // For applyTextureToGLBNode
 
 const applyTextureToGLBNode = (
   node,
-  mapType, // e.g., "map", "normalMap", or null if only changing material type
-  textureUrl, // URL for the texture, or undefined if only changing material type
-  materialOverrideConfig, // { type: "standard" | "physical" | "model" ..., color, roughness, etc. }
-  callback // Optional callback
+  mapType,
+  textureUrl,
+  materialOverrideConfig,
+  callback
 ) => {
   if (node.isMesh && node.material) {
     const materials = Array.isArray(node.material)
@@ -127,7 +147,6 @@ const applyTextureToGLBNode = (
         !originalMaterial.userData.originalMaterialInstance &&
         originalMaterial.isMaterial
       ) {
-        // Store the original material instance only once, if not already an override
         if (!originalMaterial.userData.isOverride) {
           originalMaterial.userData.originalMaterialInstance =
             originalMaterial.clone();
@@ -140,9 +159,7 @@ const applyTextureToGLBNode = (
           originalMaterial.name || `glb_material_${node.uuid}_${index}`;
       }
 
-      // Phase 1: Handle Material Override
       if (materialOverrideConfig && materialOverrideConfig.type !== "model") {
-        // Check if current material is already the correct override type; if so, update it. Otherwise, replace.
         let newMaterialInstance;
         let MtlCtor;
         switch (materialOverrideConfig.type) {
@@ -173,19 +190,18 @@ const applyTextureToGLBNode = (
           targetMaterial instanceof MtlCtor &&
           targetMaterial.userData?.isOverride
         ) {
-          newMaterialInstance = targetMaterial; // Update existing override
+          newMaterialInstance = targetMaterial;
         } else {
-          newMaterialInstance = new MtlCtor(); // Create new override
+          newMaterialInstance = new MtlCtor();
           materialWasReplacedThisCall = true;
         }
 
-        // Common properties
         newMaterialInstance.color.set(
           new THREE.Color(
             materialOverrideConfig.color || originalMaterial.color || "#cccccc"
           )
         );
-        newMaterialInstance.side = THREE.DoubleSide; // Default for creator
+        newMaterialInstance.side = THREE.DoubleSide;
         newMaterialInstance.name =
           `${originalMaterial.userData.originalName}_override_${materialOverrideConfig.type}`.substring(
             0,
@@ -210,7 +226,6 @@ const applyTextureToGLBNode = (
           newMaterialInstance.ior = materialOverrideConfig.ior ?? 1.5;
           newMaterialInstance.thickness =
             materialOverrideConfig.thickness ?? 0.01;
-          // Add other physical props from materialOverrideConfig
           if (materialOverrideConfig.clearcoat !== undefined)
             newMaterialInstance.clearcoat = materialOverrideConfig.clearcoat;
           if (materialOverrideConfig.clearcoatRoughness !== undefined)
@@ -224,7 +239,7 @@ const applyTextureToGLBNode = (
         if (materialOverrideConfig.type === "wireframe") {
           newMaterialInstance.wireframe = true;
         } else if (newMaterialInstance.hasOwnProperty("wireframe")) {
-          newMaterialInstance.wireframe = false; // Ensure not wireframe unless specified
+          newMaterialInstance.wireframe = false;
         }
 
         if (materialWasReplacedThisCall) {
@@ -233,7 +248,7 @@ const applyTextureToGLBNode = (
             originalMaterial !== newMaterialInstance &&
             originalMaterial.userData.isOverride
           ) {
-            originalMaterial.dispose(); // Dispose old override
+            originalMaterial.dispose();
           }
           if (Array.isArray(node.material)) {
             node.material[index] = newMaterialInstance;
@@ -248,15 +263,12 @@ const applyTextureToGLBNode = (
         materialOverrideConfig.type === "model" &&
         targetMaterial.userData?.isOverride
       ) {
-        // Revert to original or a new default if original is lost
         let restoredMaterial = targetMaterial.userData.originalMaterialInstance;
         if (restoredMaterial && restoredMaterial.isMaterial) {
-          // Ensure the restored material is not the override itself
           if (restoredMaterial.uuid === targetMaterial.uuid) {
-            restoredMaterial = restoredMaterial.clone(); // clone if it's the same, something went wrong
+            restoredMaterial = restoredMaterial.clone();
           }
         } else {
-          // Fallback: create a new default standard material
           restoredMaterial = new THREE.MeshStandardMaterial({
             color: new THREE.Color(
               originalMaterial.userData.originalMaterialInstance?.color ||
@@ -265,9 +277,9 @@ const applyTextureToGLBNode = (
             name: originalMaterial.userData.originalName,
           });
         }
-        restoredMaterial.userData.isOverride = false; // No longer an override
+        restoredMaterial.userData.isOverride = false;
 
-        if (targetMaterial.isMaterial) targetMaterial.dispose(); // Dispose current override
+        if (targetMaterial.isMaterial) targetMaterial.dispose();
 
         if (Array.isArray(node.material)) {
           node.material[index] = restoredMaterial;
@@ -279,7 +291,6 @@ const applyTextureToGLBNode = (
         appliedOverall = true;
       }
 
-      // Phase 2: Apply Texture if mapType and textureUrl are provided
       if (
         mapType &&
         targetMaterial &&
@@ -291,12 +302,9 @@ const applyTextureToGLBNode = (
           targetMaterial.isMeshPhongMaterial)
       ) {
         const loadAndApply = (texUrl, mapProperty) => {
-          // Determine if it's a color map (needs SRGB) or data map (needs Linear)
           const isColorDataMap =
             mapProperty === "map" || mapProperty === "emissiveMap";
-
           if (texUrl) {
-            // Dispose previous texture if it exists
             if (
               targetMaterial[mapProperty] &&
               targetMaterial[mapProperty].isTexture
@@ -309,9 +317,8 @@ const applyTextureToGLBNode = (
                 texture.colorSpace = isColorDataMap
                   ? THREE.SRGBColorSpace
                   : THREE.LinearSRGBColorSpace;
-                texture.flipY = false; // Standard for GLTF
+                texture.flipY = false;
                 texture.needsUpdate = true;
-
                 targetMaterial[mapProperty] = texture;
 
                 if (
@@ -319,7 +326,7 @@ const applyTextureToGLBNode = (
                   (targetMaterial.isMeshStandardMaterial ||
                     targetMaterial.isMeshPhysicalMaterial)
                 ) {
-                  targetMaterial.color.set(0xffffff); // Standard PBR practice
+                  targetMaterial.color.set(0xffffff);
                 }
                 if (
                   mapProperty === "aoMap" &&
@@ -332,7 +339,7 @@ const applyTextureToGLBNode = (
                   node.geometry.setAttribute(
                     "uv2",
                     node.geometry.attributes.uv.clone()
-                  ); // Needed for aoMap
+                  );
                 }
                 if (
                   mapProperty === "emissiveMap" &&
@@ -341,11 +348,10 @@ const applyTextureToGLBNode = (
                 ) {
                   targetMaterial.emissive = new THREE.Color(
                     materialOverrideConfig?.emissiveColor || 0xffffff
-                  ); // Use config or default to white
+                  );
                   targetMaterial.emissiveIntensity =
                     materialOverrideConfig?.emissiveIntensity ?? 1.0;
                 }
-
                 targetMaterial.needsUpdate = true;
                 appliedOverall = true;
                 if (callback) callback(true, mapProperty);
@@ -361,7 +367,6 @@ const applyTextureToGLBNode = (
               }
             );
           } else {
-            // No texUrl, so clear the map
             if (
               targetMaterial[mapProperty] &&
               targetMaterial[mapProperty].isTexture
@@ -374,7 +379,6 @@ const applyTextureToGLBNode = (
               (targetMaterial.isMeshStandardMaterial ||
                 targetMaterial.isMeshPhysicalMaterial)
             ) {
-              // Revert to override color or original color
               targetMaterial.color.set(
                 new THREE.Color(
                   materialOverrideConfig?.color ||
@@ -390,17 +394,16 @@ const applyTextureToGLBNode = (
             ) {
               targetMaterial.emissive = new THREE.Color(
                 materialOverrideConfig?.emissiveColor || 0x000000
-              ); // Default to black if map removed
+              );
               targetMaterial.emissiveIntensity =
                 materialOverrideConfig?.emissiveIntensity ?? 1.0;
             }
             targetMaterial.needsUpdate = true;
-            appliedOverall = true; // Still an operation
-            if (callback) callback(true, mapProperty); // Successful removal
+            appliedOverall = true;
+            if (callback) callback(true, mapProperty);
           }
         };
 
-        // Apply specific maps
         const validMapTypesForStandardPhysical = [
           "map",
           "normalMap",
@@ -409,7 +412,7 @@ const applyTextureToGLBNode = (
           "aoMap",
           "emissiveMap",
         ];
-        const validMapTypesForOther = ["map", "normalMap"]; // Toon, Basic, Lambert, Phong generally support map, some normalMap
+        const validMapTypesForOther = ["map", "normalMap"];
 
         if (
           (targetMaterial.isMeshStandardMaterial ||
@@ -426,17 +429,14 @@ const applyTextureToGLBNode = (
         ) {
           loadAndApply(textureUrl, mapType);
         } else if (materialWasReplacedThisCall && callback) {
-          // Only material was changed, no specific texture for this mapType on this material type
           if (callback)
             callback(true, "material_override_only_no_texture_for_maptype");
         } else if (callback) {
           if (callback) callback(false, `map_type_${mapType}_not_supported`);
         }
       } else if (materialWasReplacedThisCall && callback) {
-        // Material changed, but no texture operation in this specific call
         callback(true, "material_override_only");
       } else if (callback && mapType) {
-        // mapType provided, but conditions not met for texture application
         callback(false, `texture_application_failed_for_${mapType}`);
       }
     });
@@ -450,27 +450,26 @@ const applyTextureToGLBNode = (
 export default function Model3DCreator() {
   const [shapes, setShapes] = useState([]);
   const [selectedShapeId, setSelectedShapeId] = useState(null);
-  const [mode, setMode] = useState("translate"); // translate, rotate, scale
+  const [mode, setMode] = useState("translate");
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
-  const [cameraPreset, setCameraPreset] = useState(null); // 'top', 'front', 'side', 'isometric'
-  const sceneRef = useRef(null); // Ref to the THREE.Scene object from R3F
-  const [isAnimating, setIsAnimating] = useState(true); // Global animation toggle for procedural shapes
-  const [isBaking, setIsBaking] = useState(false); // For GLB export loading state
+  const [cameraPreset, setCameraPreset] = useState(null);
+  const sceneRef = useRef(null);
+  const [isAnimating, setIsAnimating] = useState(true);
+  const [isBaking, setIsBaking] = useState(false);
 
-  const [loadedGltfObjects, setLoadedGltfObjects] = useState({}); // { [shapeId]: { scene, animations } }
+  const [loadedGltfObjects, setLoadedGltfObjects] = useState({});
 
-  // Animation playback state for GLBs
-  const [animationClips, setAnimationClips] = useState([]); // Array of AnimationClip from selected GLB
+  const [animationClips, setAnimationClips] = useState([]);
   const [selectedAnimationClipIndex, setSelectedAnimationClipIndex] =
-    useState(-1); // Index for current clip
+    useState(-1);
   const [animationPlaybackState, setAnimationPlaybackState] =
-    useState("stopped"); // 'playing', 'paused', 'stopped'
-  const [animationTime, setAnimationTime] = useState(0); // Current time of the animation (absolute)
-  const [animationDuration, setAnimationDuration] = useState(0); // Duration of the current/selected clip
+    useState("stopped");
+  const [animationTime, setAnimationTime] = useState(0); // Normalized 0-1 or absolute
+  const [animationDuration, setAnimationDuration] = useState(0);
   const [isAnimationLooping, setIsAnimationLooping] = useState(true);
   const [animationPlaybackSpeed, setAnimationPlaybackSpeed] = useState(1.0);
-  const [playAllAnimations, setPlayAllAnimations] = useState(false); // Play all clips of a GLB simultaneously
+  const [playAllAnimations, setPlayAllAnimations] = useState(false);
 
   const [forceCanvasRefreshKey, setForceCanvasRefreshKey] = useState(0);
 
@@ -480,29 +479,25 @@ export default function Model3DCreator() {
   const glbFileInputRef = useRef(null);
   const imageFileInputRef = useRef(null);
 
-  // Refs for texture file inputs (one per map type)
-  const shapeTextureFileInputRefs = useRef({}); // For general shapes
-  const textTextureFileInputRefs = useRef({}); // For Text3D specific textures
+  const shapeTextureFileInputRefs = useRef({});
+  const textTextureFileInputRefs = useRef({});
 
-  const creatorWrapperRef = useRef(null); // Ref for the main container for fullscreen
+  const creatorWrapperRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [activeMobilePanel, setActiveMobilePanel] = useState(null); // 'left', 'right', or null
+  const [activeMobilePanel, setActiveMobilePanel] = useState(null);
 
   const toggleFullscreen = useCallback(async () => {
     if (!creatorWrapperRef.current) return;
     if (!document.fullscreenElement) {
       try {
         await creatorWrapperRef.current.requestFullscreen();
-        // setIsFullscreen(true) will be handled by the event listener
       } catch (err) {
         console.error("Fullscreen request failed:", err.message, err.name);
-        // alert(`Error entering fullscreen: ${err.message}. Try browser's F11 key.`);
       }
     } else {
       if (document.exitFullscreen) {
         try {
           await document.exitFullscreen();
-          // setIsFullscreen(false) will be handled by the event listener
         } catch (err) {
           console.error("Exit fullscreen failed:", err.message, err.name);
         }
@@ -522,10 +517,10 @@ export default function Model3DCreator() {
   }, []);
 
   const saveState = useCallback(() => {
-    if (isBaking) return; // Prevent state saving during baking
+    if (isBaking) return;
     const state = shapes.map((shape) => ({
       ...shape,
-      position: [...shape.position], // Deep copy arrays
+      position: [...shape.position],
       rotation: [...shape.rotation],
       scale: [...shape.scale],
       animation: shape.animation
@@ -534,7 +529,6 @@ export default function Model3DCreator() {
             orbitCenter: [...(shape.animation.orbitCenter || [0, 0, 0])],
           }
         : undefined,
-      // Deep copy textureProps and glbMaterialOverride
       textureProps: shape.textureProps
         ? { ...shape.textureProps }
         : { ...initialTextureProps },
@@ -546,7 +540,7 @@ export default function Model3DCreator() {
         : null,
     }));
     setUndoStack((prev) => [...prev, state]);
-    setRedoStack([]); // Clear redo stack on new action
+    setRedoStack([]);
   }, [shapes, isBaking]);
 
   const addImportedShape = useCallback(
@@ -560,16 +554,16 @@ export default function Model3DCreator() {
         position: [0, 0, 0],
         rotation: [0, 0, 0],
         scale: [initialScaleFactor, initialScaleFactor, initialScaleFactor],
-        animation: { type: "none" }, // Placeholder for procedural animation, GLB uses its own clips
-        glbMaterialOverride: null, // { type: 'model', color: '#ffffff', roughness: 0.5, metalness: 0.0, ... }
-        textureProps: { ...initialTextureProps }, // For applying external textures
+        animation: { type: "none" },
+        glbMaterialOverride: null,
+        textureProps: { ...initialTextureProps },
       };
       setShapes((prev) => [...prev, newShape]);
       setLoadedGltfObjects((prev) => ({
         ...prev,
         [newShapeId]: {
-          scene: gltfData.scene, // This is the THREE.Group/Scene
-          animations: gltfData.animations || [], // Array of THREE.AnimationClip
+          scene: gltfData.scene,
+          animations: gltfData.animations || [],
         },
       }));
       setSelectedShapeId(newShapeId);
@@ -597,15 +591,15 @@ export default function Model3DCreator() {
         id: newShapeId,
         type: "imagePlane",
         name: fileName.split(".").slice(0, -1).join(".") || "Image Plane",
-        position: [0, planeHeight / 2, 0], // Center pivot at bottom for typical placement
+        position: [0, planeHeight / 2, 0],
         rotation: [0, 0, 0],
         scale: [1, 1, 1],
-        imageDataUrl, // Base64 or blob URL
+        imageDataUrl,
         originalWidth,
         originalHeight,
         planeWidth,
         planeHeight,
-        animation: { type: "none" }, // Standard animation block
+        animation: { type: "none" },
       };
       setShapes((prev) => [...prev, newShape]);
       setSelectedShapeId(newShape.id);
@@ -626,7 +620,7 @@ export default function Model3DCreator() {
         name:
           options.name ||
           geometryType.charAt(0).toUpperCase() + geometryType.slice(1),
-        material: "standard", // Default material type
+        material: "standard",
         color: `#${Math.floor(Math.random() * 16777215)
           .toString(16)
           .padStart(6, "0")}`,
@@ -637,14 +631,11 @@ export default function Model3DCreator() {
         ],
         rotation: [0, 0, 0],
         scale: [1, 1, 1],
-        // PBR properties (used by standard/physical materials)
         roughness: 0.5,
         metalness: 0.0,
-        // Physical material properties (used by physical material)
         transmission: 0.0,
         ior: 1.5,
         thickness: 0.01,
-        // Phong shininess
         shininess: 30,
         animation: {
           type: "none",
@@ -654,7 +645,7 @@ export default function Model3DCreator() {
           orbitRadius: 5,
           orbitPlane: "xz",
         },
-        textureProps: { ...initialTextureProps }, // For standard textures
+        textureProps: { ...initialTextureProps },
       };
 
       let specificProps = {};
@@ -662,11 +653,10 @@ export default function Model3DCreator() {
         specificProps = {
           text: "Text",
           textSize: 0.5,
-          extrudeDepth: 0.2, // Corresponds to "height" in Text3D
+          extrudeDepth: 0.2,
           name: "3D Text",
-          textTextureProps: { ...initialTextureProps }, // Separate textures for text if needed
+          textTextureProps: { ...initialTextureProps },
         };
-        // Adjust initial Y position based on text size and scale
         newShapeBase.position[1] =
           (specificProps.textSize || 0.5) * 0.5 * newShapeBase.scale[1];
       } else if (geometryType === "customExtruded") {
@@ -675,7 +665,7 @@ export default function Model3DCreator() {
             options.shapeType.slice(1)
           : "Custom";
         specificProps = {
-          shapeType: options.shapeType || "heart", // Default custom shape
+          shapeType: options.shapeType || "heart",
           shapeSize: options.shapeSize || 1,
           extrudeDepth: options.extrudeDepth || 0.2,
           name: shapeTypeName,
@@ -705,39 +695,32 @@ export default function Model3DCreator() {
             const loader = getGltfLoader();
             loader.parse(
               e_reader.target.result,
-              "", // path, not needed for ArrayBuffer
+              "",
               (gltf) => {
                 const originalScene = gltf.scene;
-                // Center and scale the model
                 const box = new THREE.Box3().setFromObject(originalScene);
                 const center = box.getCenter(new THREE.Vector3());
                 const size = box.getSize(new THREE.Vector3());
-
                 let sceneToUse = originalScene;
                 let scaleFactor = 1;
-                const targetMaxSize = 3.0; // Target max dimension for auto-scaling
+                const targetMaxSize = 3.0;
                 const currentMaxSize = Math.max(size.x, size.y, size.z);
-
                 if (currentMaxSize > targetMaxSize && currentMaxSize > 0) {
                   scaleFactor = targetMaxSize / currentMaxSize;
                 } else if (currentMaxSize === 0) {
                   console.warn(
                     "Imported GLB has zero size. Scale not adjusted."
                   );
-                } // else, if smaller or equal, use original scaleFactor = 1
-
-                // If model is not centered, wrap it in a group and offset the original scene
+                }
                 if (center.lengthSq() > 0.0001) {
-                  // Check if center is significantly off [0,0,0]
                   const centeringGroup = new THREE.Group();
                   centeringGroup.name = originalScene.name
                     ? originalScene.name + "_centeringWrapper"
                     : "gltf_centeringWrapper";
                   centeringGroup.add(originalScene);
-                  originalScene.position.sub(center); // Offset the model inside the wrapper
-                  sceneToUse = centeringGroup; // Use the wrapper as the main scene object
+                  originalScene.position.sub(center);
+                  sceneToUse = centeringGroup;
                 }
-
                 const processedGltf = { ...gltf, scene: sceneToUse };
                 addImportedShape(processedGltf, file.name, scaleFactor);
               },
@@ -757,7 +740,7 @@ export default function Model3DCreator() {
         };
         reader.readAsArrayBuffer(file);
       }
-      if (event.target) event.target.value = null; // Reset file input
+      if (event.target) event.target.value = null;
     },
     [isBaking, addImportedShape]
   );
@@ -795,7 +778,6 @@ export default function Model3DCreator() {
                           : [0, 0, 0],
                     }
                   : baseAnimation;
-
                 const baseShape = {
                   id: s.id || Date.now().toString() + Math.random(),
                   type: s.type || "box",
@@ -819,7 +801,6 @@ export default function Model3DCreator() {
                   textureProps: s.textureProps
                     ? { ...initialTextureProps, ...s.textureProps }
                     : { ...initialTextureProps },
-                  // Ensure all relevant material properties are loaded
                   material: s.material || "standard",
                   color:
                     s.color ||
@@ -834,7 +815,6 @@ export default function Model3DCreator() {
                   thickness: s.thickness !== undefined ? s.thickness : 0.01,
                   shininess: s.shininess !== undefined ? s.shininess : 30,
                 };
-
                 if (s.type === "importedGLB")
                   return {
                     ...baseShape,
@@ -850,7 +830,6 @@ export default function Model3DCreator() {
                     planeWidth: s.planeWidth,
                     planeHeight: s.planeHeight,
                   };
-
                 return {
                   ...baseShape,
                   ...(s.type === "text" && {
@@ -872,13 +851,12 @@ export default function Model3DCreator() {
               setSelectedShapeId(null);
               setUndoStack([]);
               setRedoStack([]);
-              setLoadedGltfObjects({}); // Clear previously loaded GLB objects
+              setLoadedGltfObjects({});
               setIsAnimating(
                 jsonData.sceneSettings?.isAnimatingGlobal !== undefined
                   ? jsonData.sceneSettings.isAnimatingGlobal
                   : true
               );
-              // alert(`Scene loaded with ${newShapes.length} shapes. GLBs require re-importing files if not embedded or paths changed.`);
             } else {
               alert("Invalid JSON: 'shapes' array missing.");
             }
@@ -925,7 +903,6 @@ export default function Model3DCreator() {
         };
         reader.readAsDataURL(file);
       } else if (file) {
-        // File selected but not an image
         alert("Please select a valid image file (e.g., PNG, JPG).");
       }
       if (event.target) event.target.value = null;
@@ -939,13 +916,11 @@ export default function Model3DCreator() {
       saveState();
       const shapeToRemove = shapes.find((s) => s.id === shapeId);
       setShapes((prev) => prev.filter((shape) => shape.id !== shapeId));
-
       if (shapeToRemove && shapeToRemove.type === "importedGLB") {
         setLoadedGltfObjects((prev) => {
           const updated = { ...prev };
           const gltfObjectData = updated[shapeId];
           if (gltfObjectData && gltfObjectData.scene) {
-            // Basic cleanup of GLTF scene from memory
             gltfObjectData.scene.traverse((child) => {
               if (child.isMesh) {
                 child.geometry?.dispose();
@@ -972,7 +947,6 @@ export default function Model3DCreator() {
     [selectedShapeId, saveState, isBaking, shapes]
   );
 
-  // Updates shape properties without saving to undo stack (e.g., during transform control drag)
   const updateShape = useCallback(
     (shapeId, updates) => {
       if (isBaking) return;
@@ -986,15 +960,11 @@ export default function Model3DCreator() {
   const updateShapeAndSave = useCallback(
     (shapeId, updates) => {
       if (isBaking) return;
-      saveState(); // Save current state before updating
-
+      saveState();
       setShapes((prevShapes) =>
         prevShapes.map((s) => {
           if (s.id === shapeId) {
             const newShape = { ...s, ...updates };
-
-            // If it's an imported GLB and material/texture properties are changing,
-            // we need to traverse its scene and apply changes directly.
             if (
               newShape.type === "importedGLB" &&
               (updates.hasOwnProperty("glbMaterialOverride") ||
@@ -1004,23 +974,18 @@ export default function Model3DCreator() {
               if (gltfObjectData && gltfObjectData.scene) {
                 gltfObjectData.scene.traverse((node) => {
                   if (node.isMesh && node.material) {
-                    // Phase 1: Apply material override if it's part of the updates or if textures are changing
                     if (
                       updates.hasOwnProperty("glbMaterialOverride") ||
                       updates.hasOwnProperty("textureProps")
                     ) {
                       applyTextureToGLBNode(
                         node,
-                        null, // No specific texture map type, just material change
+                        null,
                         undefined,
-                        newShape.glbMaterialOverride, // The latest material override config
-                        (success, mapProperty) => {
-                          /* console.log(`GLB Material override applied: ${success} for ${mapProperty}`); */
-                        }
+                        newShape.glbMaterialOverride,
+                        () => {}
                       );
                     }
-
-                    // Phase 2: Apply all textureProps if they are part of the updates OR if the material override changed
                     if (
                       newShape.textureProps &&
                       (updates.hasOwnProperty("textureProps") ||
@@ -1035,10 +1000,8 @@ export default function Model3DCreator() {
                             node,
                             mapType,
                             url,
-                            newShape.glbMaterialOverride, // Pass current override config for context
-                            (success, appliedMapType) => {
-                              /* console.log(`GLB Texture ${appliedMapType} applied: ${success}`); */
-                            }
+                            newShape.glbMaterialOverride,
+                            () => {}
                           );
                         });
                     }
@@ -1059,8 +1022,6 @@ export default function Model3DCreator() {
     if (!selectedShape || isBaking) return;
     saveState();
     const newId = Date.now().toString();
-
-    // Deep copy relevant properties, especially nested objects/arrays
     let duplicatedShapeData = {
       ...selectedShape,
       id: newId,
@@ -1088,15 +1049,12 @@ export default function Model3DCreator() {
         ? { ...selectedShape.glbMaterialOverride }
         : null,
     };
-
     if (
       selectedShape.type === "importedGLB" &&
       loadedGltfObjects[selectedShape.id]
     ) {
       const originalGltfObject = loadedGltfObjects[selectedShape.id];
-      const clonedScene = originalGltfObject.scene.clone(true); // Deep clone the THREE.Object3D
-
-      // Re-apply material override and textures to the cloned scene
+      const clonedScene = originalGltfObject.scene.clone(true);
       if (
         duplicatedShapeData.glbMaterialOverride ||
         (duplicatedShapeData.textureProps &&
@@ -1104,8 +1062,6 @@ export default function Model3DCreator() {
       ) {
         clonedScene.traverse((node) => {
           if (node.isMesh && node.material) {
-            // Check node.material
-            // Apply material override first
             applyTextureToGLBNode(
               node,
               null,
@@ -1113,7 +1069,6 @@ export default function Model3DCreator() {
               duplicatedShapeData.glbMaterialOverride,
               () => {}
             );
-            // Then apply textures
             if (duplicatedShapeData.textureProps) {
               Object.keys(duplicatedShapeData.textureProps)
                 .filter((k) => k.endsWith("Url"))
@@ -1141,7 +1096,6 @@ export default function Model3DCreator() {
         },
       }));
     }
-
     setShapes((prev) => [...prev, duplicatedShapeData]);
     setSelectedShapeId(newId);
   }, [selectedShape, saveState, isBaking, loadedGltfObjects]);
@@ -1151,32 +1105,24 @@ export default function Model3DCreator() {
       if (isBaking) return;
       setSelectedShapeId(shapeId);
       if (window.innerWidth < 768 && activeMobilePanel !== "right") {
-        // md breakpoint
         setActiveMobilePanel("right");
       }
     },
     [isBaking, activeMobilePanel]
   );
 
-  // Callback from TransformControls or direct manipulation
   const handleShapeUpdateFromTransformControls = useCallback(
     (shapeIdToUpdate) => {
       if (isBaking || !shapeIdToUpdate || !sceneRef.current) return;
-
       const currentShapeData = shapes.find((s) => s.id === shapeIdToUpdate);
       if (!currentShapeData) return;
-
-      // Construct the expected name based on shapeData
-      // This needs to match the 'name' prop given to the <Shape> component's top-level mesh/group
       let objectNameSuffix =
         currentShapeData.name ||
         (currentShapeData.type === "text"
           ? currentShapeData.text?.substring(0, 10) || "Text"
           : currentShapeData.shapeType || currentShapeData.type);
-
       const objectName = `shape_${currentShapeData.id}_${currentShapeData.type}_${objectNameSuffix}`;
       const threeObject = sceneRef.current.getObjectByName(objectName);
-
       if (threeObject) {
         const newUpdates = {
           position: [
@@ -1195,11 +1141,8 @@ export default function Model3DCreator() {
             threeObject.scale.z,
           ],
         };
-        // Use updateShape for real-time feedback without creating excessive undo states.
-        // Save to undo stack happens on drag end or other explicit actions.
-        updateShape(shapeIdToUpdate, newUpdates); // Changed from updateShapeAndSave for performance
+        updateShape(shapeIdToUpdate, newUpdates);
       } else {
-        // Fallback if precise name match fails (e.g. due to suffix truncation or issues)
         const simplerObjectName = `shape_${currentShapeData.id}`;
         const fallbackObject = sceneRef.current.getObjectByProperty(
           "name",
@@ -1225,20 +1168,17 @@ export default function Model3DCreator() {
           };
           updateShape(shapeIdToUpdate, newUpdates);
         } else {
-          console.warn(
-            `TransformControls target "${objectName}" or prefix "${simplerObjectName}" not found in scene.`
-          );
+          // console.warn(`TransformControls target "${objectName}" or prefix "${simplerObjectName}" not found in scene.`);
         }
       }
     },
     [shapes, updateShape, isBaking]
-  ); // updateShape instead of updateShapeAndSave
+  );
 
   const setCameraView = useCallback(
     (preset) => {
       if (isBaking) return;
       setCameraPreset(preset);
-      // Reset preset after a short delay to allow multiple clicks on the same preset button
       setTimeout(() => setCameraPreset(null), 100);
     },
     [isBaking]
@@ -1248,10 +1188,8 @@ export default function Model3DCreator() {
     if (undoStack.length === 0 || isBaking) return;
     const prevStates = [...undoStack];
     const stateToRestore = prevStates.pop();
-
     setRedoStack((prevRedo) => [
       shapes.map((s) => ({
-        // Current state before undoing
         ...s,
         position: [...s.position],
         rotation: [...s.rotation],
@@ -1276,8 +1214,6 @@ export default function Model3DCreator() {
     ]);
     setUndoStack(prevStates);
     setShapes(stateToRestore);
-
-    // After restoring state, re-apply GLB materials/textures if necessary
     stateToRestore.forEach((shape) => {
       if (
         shape.type === "importedGLB" &&
@@ -1289,7 +1225,6 @@ export default function Model3DCreator() {
         if (gltfObjectData && gltfObjectData.scene) {
           gltfObjectData.scene.traverse((node) => {
             if (node.isMesh && node.material) {
-              // Apply material override first
               applyTextureToGLBNode(
                 node,
                 null,
@@ -1297,7 +1232,6 @@ export default function Model3DCreator() {
                 shape.glbMaterialOverride,
                 () => {}
               );
-              // Then apply textures
               if (shape.textureProps) {
                 Object.keys(shape.textureProps)
                   .filter((k) => k.endsWith("Url"))
@@ -1318,17 +1252,15 @@ export default function Model3DCreator() {
         }
       }
     });
-    setSelectedShapeId(null); // Deselect shape on undo/redo
+    setSelectedShapeId(null);
   }, [undoStack, shapes, isBaking, loadedGltfObjects]);
 
   const redo = useCallback(() => {
     if (redoStack.length === 0 || isBaking) return;
     const nextStates = [...redoStack];
     const stateToRestore = nextStates.shift();
-
     setUndoStack((prevUndo) => [
       shapes.map((s) => ({
-        // Current state before redoing
         ...s,
         position: [...s.position],
         rotation: [...s.rotation],
@@ -1353,8 +1285,6 @@ export default function Model3DCreator() {
     ]);
     setRedoStack(nextStates);
     setShapes(stateToRestore);
-
-    // After restoring state, re-apply GLB materials/textures
     stateToRestore.forEach((shape) => {
       if (
         shape.type === "importedGLB" &&
@@ -1407,7 +1337,6 @@ export default function Model3DCreator() {
     }
     try {
       const serializableShapes = shapes.map((s) => {
-        // Base properties common to all shapes
         const baseShape = {
           id: s.id,
           type: s.type,
@@ -1437,7 +1366,6 @@ export default function Model3DCreator() {
           textureProps: s.textureProps
             ? { ...s.textureProps }
             : { ...initialTextureProps },
-          // Include all material related properties for non-GLB, non-ImagePlane shapes
           material: s.material,
           color: s.color,
           roughness: s.roughness,
@@ -1447,7 +1375,6 @@ export default function Model3DCreator() {
           thickness: s.thickness,
           shininess: s.shininess,
         };
-
         if (s.type === "text")
           return {
             ...baseShape,
@@ -1473,7 +1400,6 @@ export default function Model3DCreator() {
               ? { ...s.glbMaterialOverride }
               : null,
           };
-        // GLB specific
         else if (s.type === "imagePlane")
           return {
             ...baseShape,
@@ -1482,14 +1408,12 @@ export default function Model3DCreator() {
             originalHeight: s.originalHeight,
             planeWidth: s.planeWidth,
             planeHeight: s.planeHeight,
-          }; // ImagePlane specific
-
-        return baseShape; // For box, sphere, etc.
+          };
+        return baseShape;
       });
-
       const sceneData = {
         metadata: {
-          version: "2.9.2-robust-materials-fix",
+          version: "3.0.0-z-axis-fix",
           type: "PBR Model Creator Scene",
           generator: "Creator Pro",
           created: new Date().toISOString(),
@@ -1497,7 +1421,6 @@ export default function Model3DCreator() {
         shapes: serializableShapes,
         sceneSettings: { isAnimatingGlobal: isAnimating },
       };
-
       const jsonString = JSON.stringify(sceneData, null, 2);
       const blob = new Blob([jsonString], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -1508,7 +1431,6 @@ export default function Model3DCreator() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      // alert(`Exported ${shapes.length} shapes to JSON successfully!`);
     } catch (error) {
       console.error("[EXPORT JSON] Failed:", error);
       alert("Failed to export scene as JSON: " + error.message);
@@ -1527,11 +1449,10 @@ export default function Model3DCreator() {
 
     try {
       setIsBaking(true);
-      await new Promise((resolve) => setTimeout(resolve, 50)); // Short delay for UI update
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const exportScene = new THREE.Scene();
       exportScene.name = "StaticExportScene";
-      // Add some basic lighting to the export scene
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
       exportScene.add(ambientLight);
       const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -1539,9 +1460,7 @@ export default function Model3DCreator() {
       directionalLight.castShadow = true;
       exportScene.add(directionalLight);
 
-      let successfullyAddedCount = 0;
       const textureLoaderForExport = new ThreeTextureLoader();
-
       const loadTextureAsync = (url, isColorData = false) =>
         new Promise((resolve) => {
           if (!url || typeof url !== "string" || url.trim() === "") {
@@ -1554,7 +1473,7 @@ export default function Model3DCreator() {
               texture.colorSpace = isColorData
                 ? THREE.SRGBColorSpace
                 : THREE.LinearSRGBColorSpace;
-              texture.flipY = false; // GLTF standard
+              texture.flipY = false;
               texture.needsUpdate = true;
               resolve(texture);
             },
@@ -1571,28 +1490,26 @@ export default function Model3DCreator() {
           const gltfObjectData = loadedGltfObjects[shapeData.id];
           if (gltfObjectData && gltfObjectData.scene) {
             const modelClone = gltfObjectData.scene.clone(true);
-
-            // Apply material override and textures if present
             if (
               shapeData.glbMaterialOverride ||
               (shapeData.textureProps &&
                 Object.values(shapeData.textureProps).some(
                   (v) =>
-                    v && typeof v === "string" && v.startsWith("data:image")
+                    v &&
+                    typeof v === "string" /* && v.startsWith("data:image") */
                 ))
             ) {
+              // Removed data:image check for broader URL support
               await modelClone.traverse(async (node) => {
                 if (node.isMesh && node.material) {
                   const originalMaterials = Array.isArray(node.material)
                     ? node.material
                     : [node.material];
                   const newMaterials = [];
-
                   for (let i = 0; i < originalMaterials.length; i++) {
-                    constmatInstance = originalMaterials[i];
+                    const matInstance = originalMaterials[i];
                     let newMaterialInstance;
                     const overrideConf = shapeData.glbMaterialOverride;
-
                     if (overrideConf && overrideConf.type !== "model") {
                       const newMaterialProps = {
                         color: new THREE.Color(
@@ -1618,7 +1535,6 @@ export default function Model3DCreator() {
                           newMaterialProps.ior = overrideConf.ior ?? 1.5;
                           newMaterialProps.thickness =
                             overrideConf.thickness ?? 0.01;
-                          // Add other physical props from overrideConf
                           break;
                         case "toon":
                           NewCtor = THREE.MeshToonMaterial;
@@ -1646,10 +1562,8 @@ export default function Model3DCreator() {
                         (matInstance.name || `glb_mat_export_${i}`) +
                         `_override_${overrideConf.type}`;
                     } else {
-                      newMaterialInstance = matInstance.clone(); // Clone original or existing material if no override type or type is 'model'
+                      newMaterialInstance = matInstance.clone();
                     }
-
-                    // Apply textures from shapeData.textureProps
                     if (shapeData.textureProps) {
                       if (shapeData.textureProps.mapUrl) {
                         newMaterialInstance.map = await loadTextureAsync(
@@ -1725,7 +1639,6 @@ export default function Model3DCreator() {
                             shapeData.textureProps.emissiveIntensity ?? 1.0;
                         }
                       }
-                      // Apply non-map PBR props if no map is present for them
                       if (
                         newMaterialInstance.hasOwnProperty("roughness") &&
                         !newMaterialInstance.roughnessMap &&
@@ -1749,7 +1662,6 @@ export default function Model3DCreator() {
                 }
               });
             }
-
             modelClone.position.fromArray(shapeData.position);
             modelClone.rotation.fromArray(shapeData.rotation);
             modelClone.scale.fromArray(shapeData.scale);
@@ -1767,33 +1679,29 @@ export default function Model3DCreator() {
           return null;
         }
 
-        // Procedural shapes (Text, Box, Sphere, etc.)
         let mesh;
         if (shapeData.type === "text") {
-          // Special handling for Text
           let fontToUse = helvetikerFontForExport;
           if (!fontToUse) {
             try {
-              fontToUse = await new Promise((resolve, reject) => {
+              fontToUse = await new Promise((resolve, reject) =>
                 exportFontLoaderInstance.load(
                   DEFAULT_EXPORT_FONT_PATH,
                   resolve,
                   undefined,
                   reject
-                );
-              });
+                )
+              );
               if (!helvetikerFontForExport) helvetikerFontForExport = fontToUse;
             } catch (e) {
               console.error("Text export: Font load failed", e);
               return null;
             }
           }
-          const {
-            TextGeometry,
-          } = require("three/examples/jsm/geometries/TextGeometry.js");
+
           const tS = saneNumber(shapeData.textSize, 0.5);
           const tD = saneNumber(shapeData.extrudeDepth, 0.2);
-          const textGeo = new TextGeometry(shapeData.text || "3D", {
+          const textGeo = new ThreeTextGeometry(shapeData.text || "3D", {
             font: fontToUse,
             size: tS,
             height: tD,
@@ -1804,15 +1712,39 @@ export default function Model3DCreator() {
             bevelOffset: 0,
             bevelSegments: 3,
           });
-          // Manual centering for TextGeometry
+
+          textGeo.computeBoundingBox();
+          const actualZDepth =
+            textGeo.boundingBox.max.z - textGeo.boundingBox.min.z;
+          const expectedZDepth = tD;
+          let zScaleFactor = 1.0;
+          if (
+            actualZDepth !== 0 &&
+            !isNaN(actualZDepth) &&
+            isFinite(actualZDepth)
+          ) {
+            zScaleFactor = expectedZDepth / actualZDepth;
+          } else if (expectedZDepth === 0 && actualZDepth === 0) {
+            zScaleFactor = 1.0;
+          } else if (actualZDepth === 0 && expectedZDepth !== 0) {
+            console.warn(
+              "TextGeometry created with zero depth for export, scaling might be odd."
+            );
+          }
+          if (
+            Math.abs(zScaleFactor - 1.0) > 0.0001 &&
+            isFinite(zScaleFactor) &&
+            zScaleFactor > 0
+          ) {
+            textGeo.scale(1, 1, zScaleFactor);
+          }
+
           textGeo.computeBoundingBox();
           const centerOffsetX =
             -0.5 * (textGeo.boundingBox.max.x + textGeo.boundingBox.min.x);
           const centerOffsetY =
             -0.5 * (textGeo.boundingBox.max.y + textGeo.boundingBox.min.y);
-          const centerOffsetZ =
-            -0.5 * (textGeo.boundingBox.max.z + textGeo.boundingBox.min.z);
-          textGeo.translate(centerOffsetX, centerOffsetY, centerOffsetZ);
+          textGeo.translate(centerOffsetX, centerOffsetY, 0);
 
           const materialProps = {
             color: new THREE.Color(shapeData.color || "#ffffff"),
@@ -1835,11 +1767,9 @@ export default function Model3DCreator() {
                 thickness: saneNumber(shapeData.thickness, 0.01),
               });
               break;
-            // Add other cases as in createMeshFromShape
             default:
               material = new THREE.MeshStandardMaterial(materialProps);
           }
-
           const texProps =
             shapeData.textTextureProps ||
             shapeData.textureProps ||
@@ -1853,21 +1783,18 @@ export default function Model3DCreator() {
               texProps.normalMapUrl,
               false
             );
-          // ... add other texture types for text if supported by its material ...
           mesh = new THREE.Mesh(textGeo, material);
         } else {
-          // Other procedural shapes or image planes
-          mesh = await createMeshFromShape(shapeData); // This creates mesh with basic material
+          // Assuming createMeshFromShape is defined elsewhere (e.g., SceneElements.jsx) and available in scope
+          mesh = await createMeshFromShape(shapeData);
           if (
             mesh &&
             shapeData.textureProps &&
             shapeData.type !== "imagePlane"
           ) {
-            // Re-apply textures with correct color spaces if createMeshFromShape doesn't handle them all
-            const newMaterial = mesh.material.clone(); // Clone to avoid modifying shared material
+            const newMaterial = mesh.material.clone();
             const texProps = shapeData.textureProps;
             let colorSetByMap = false;
-
             if (texProps.mapUrl) {
               newMaterial.map = await loadTextureAsync(texProps.mapUrl, true);
               if (newMaterial.map) {
@@ -1930,7 +1857,6 @@ export default function Model3DCreator() {
                   texProps.emissiveIntensity ?? 1.0;
               }
             }
-            // Apply non-map PBR props if no map is present for them
             if (
               newMaterial.hasOwnProperty("roughness") &&
               !newMaterial.roughnessMap &&
@@ -1943,11 +1869,12 @@ export default function Model3DCreator() {
               texProps.metalness !== undefined
             )
               newMaterial.metalness = texProps.metalness;
-
             if (!colorSetByMap && shapeData.color)
-              newMaterial.color.set(shapeData.color); // Restore base color if no map
+              newMaterial.color.set(shapeData.color);
 
-            mesh.material.dispose(); // Dispose old material from createMeshFromShape
+            if (mesh.material && typeof mesh.material.dispose === "function") {
+              mesh.material.dispose(); // Dispose old if it exists and is disposable
+            }
             mesh.material = newMaterial;
           }
         }
@@ -1972,18 +1899,16 @@ export default function Model3DCreator() {
       meshes.forEach((mesh) => {
         if (mesh) {
           exportScene.add(mesh);
-          successfullyAddedCount++;
         }
       });
 
-      if (successfullyAddedCount === 0) {
+      if (meshes.length === 0) {
         alert("No shapes could be prepared for Static GLB export.");
         setIsBaking(false);
         return;
       }
-
-      exportToGLB(exportScene, `static-model-${Date.now()}.glb`);
-      // alert(`Exported ${successfullyAddedCount} shapes to Static GLB successfully!`);
+      // Using sceneExportToGLB from SceneElements.jsx
+      sceneExportToGLB(exportScene, `static-model-${Date.now()}.glb`);
     } catch (error) {
       console.error("[STATIC GLB EXPORT] Critical error:", error);
       alert("Static GLB Export failed: " + error.message);
@@ -2044,13 +1969,11 @@ export default function Model3DCreator() {
         });
 
       const meshCreationPromises = shapes.map(async (shapeData) => {
-        let targetObjectForAnimation; // This will be the THREE.Object3D added to exportScene
-
+        let targetObjectForAnimation;
         if (shapeData.type === "importedGLB") {
           const gltfObjectData = loadedGltfObjects[shapeData.id];
           if (gltfObjectData && gltfObjectData.scene) {
             targetObjectForAnimation = gltfObjectData.scene.clone(true);
-            // Apply material override and textures to the cloned GLB scene
             if (
               shapeData.glbMaterialOverride ||
               (shapeData.textureProps &&
@@ -2068,7 +1991,6 @@ export default function Model3DCreator() {
                     const matInstance = originalMaterials[i];
                     let newMaterialInstance;
                     const overrideConf = shapeData.glbMaterialOverride;
-
                     if (overrideConf && overrideConf.type !== "model") {
                       const newMaterialProps = {
                         color: new THREE.Color(
@@ -2095,7 +2017,6 @@ export default function Model3DCreator() {
                           newMaterialProps.thickness =
                             overrideConf.thickness ?? 0.01;
                           break;
-                        // Add other cases from applyTextureToGLBNode
                         case "toon":
                           NewCtor = THREE.MeshToonMaterial;
                           break;
@@ -2124,8 +2045,6 @@ export default function Model3DCreator() {
                     } else {
                       newMaterialInstance = matInstance.clone();
                     }
-
-                    // Apply textures
                     if (shapeData.textureProps) {
                       if (shapeData.textureProps.mapUrl) {
                         newMaterialInstance.map = await loadTextureAsyncAnim(
@@ -2224,7 +2143,6 @@ export default function Model3DCreator() {
                 }
               });
             }
-            // Add original animations from the GLB
             if (
               gltfObjectData.animations &&
               gltfObjectData.animations.length > 0
@@ -2234,7 +2152,7 @@ export default function Model3DCreator() {
               );
             }
           } else {
-            return null; /* GLB data missing */
+            return null;
           }
         } else if (shapeData.type === "text") {
           let fontToUse = helvetikerFontForExport;
@@ -2253,12 +2171,10 @@ export default function Model3DCreator() {
               return null;
             }
           }
-          const {
-            TextGeometry,
-          } = require("three/examples/jsm/geometries/TextGeometry.js");
+
           const tS = saneNumber(shapeData.textSize, 0.5);
           const tD = saneNumber(shapeData.extrudeDepth, 0.2);
-          const textGeo = new TextGeometry(shapeData.text || "3D", {
+          const textGeo = new ThreeTextGeometry(shapeData.text || "3D", {
             font: fontToUse,
             size: tS,
             height: tD,
@@ -2269,12 +2185,39 @@ export default function Model3DCreator() {
             bevelOffset: 0,
             bevelSegments: 3,
           });
+
           textGeo.computeBoundingBox();
-          textGeo.translate(
-            -0.5 * (textGeo.boundingBox.max.x + textGeo.boundingBox.min.x),
-            -0.5 * (textGeo.boundingBox.max.y + textGeo.boundingBox.min.y),
-            -0.5 * (textGeo.boundingBox.max.z + textGeo.boundingBox.min.z)
-          );
+          const actualZDepth =
+            textGeo.boundingBox.max.z - textGeo.boundingBox.min.z;
+          const expectedZDepth = tD;
+          let zScaleFactor = 1.0;
+          if (
+            actualZDepth !== 0 &&
+            !isNaN(actualZDepth) &&
+            isFinite(actualZDepth)
+          ) {
+            zScaleFactor = expectedZDepth / actualZDepth;
+          } else if (expectedZDepth === 0 && actualZDepth === 0) {
+            zScaleFactor = 1.0;
+          } else if (actualZDepth === 0 && expectedZDepth !== 0) {
+            console.warn(
+              "TextGeometry created with zero depth for export, scaling might be odd."
+            );
+          }
+          if (
+            Math.abs(zScaleFactor - 1.0) > 0.0001 &&
+            isFinite(zScaleFactor) &&
+            zScaleFactor > 0
+          ) {
+            textGeo.scale(1, 1, zScaleFactor);
+          }
+
+          textGeo.computeBoundingBox();
+          const centerOffsetX =
+            -0.5 * (textGeo.boundingBox.max.x + textGeo.boundingBox.min.x);
+          const centerOffsetY =
+            -0.5 * (textGeo.boundingBox.max.y + textGeo.boundingBox.min.y);
+          textGeo.translate(centerOffsetX, centerOffsetY, 0);
 
           const materialProps = {
             color: new THREE.Color(shapeData.color || "#ffffff"),
@@ -2315,8 +2258,7 @@ export default function Model3DCreator() {
             );
           targetObjectForAnimation = new THREE.Mesh(textGeo, material);
         } else {
-          // Other procedural shapes
-          targetObjectForAnimation = await createMeshFromShape(shapeData); // Uses basic material
+          targetObjectForAnimation = await createMeshFromShape(shapeData);
           if (
             targetObjectForAnimation &&
             shapeData.textureProps &&
@@ -2404,16 +2346,20 @@ export default function Model3DCreator() {
               newMaterial.metalness = texProps.metalness;
             if (!colorSetByMap && shapeData.color)
               newMaterial.color.set(shapeData.color);
-            targetObjectForAnimation.material.dispose();
+
+            if (
+              targetObjectForAnimation.material &&
+              typeof targetObjectForAnimation.material.dispose === "function"
+            ) {
+              targetObjectForAnimation.material.dispose();
+            }
             targetObjectForAnimation.material = newMaterial;
           }
         }
 
         if (!targetObjectForAnimation && shapeData.type !== "importedGLB")
-          return null; // Failed to create mesh for procedural
-
+          return null;
         if (shapeData.type !== "importedGLB") {
-          // For procedural, set transform and add to scene
           targetObjectForAnimation.position.fromArray(shapeData.position);
           targetObjectForAnimation.rotation.fromArray(shapeData.rotation);
           targetObjectForAnimation.scale.fromArray(shapeData.scale);
@@ -2425,7 +2371,6 @@ export default function Model3DCreator() {
           targetObjectForAnimation.castShadow = shapeData.type !== "imagePlane";
           targetObjectForAnimation.receiveShadow = true;
         } else {
-          // For GLB, already cloned, just set root transform from shapeData
           targetObjectForAnimation.position.fromArray(shapeData.position);
           targetObjectForAnimation.rotation.fromArray(shapeData.rotation);
           targetObjectForAnimation.scale.fromArray(shapeData.scale);
@@ -2439,20 +2384,18 @@ export default function Model3DCreator() {
             }
           });
         }
-        exportScene.add(targetObjectForAnimation); // Add to export scene
-        processedShapeCount++;
-        return { shapeData, targetObjectForAnimation }; // Return data for animation baking
+        exportScene.add(targetObjectForAnimation);
+        return { shapeData, targetObjectForAnimation };
       });
 
       const results = (await Promise.all(meshCreationPromises)).filter(
         (r) => r !== null
       );
+      processedShapeCount = results.length;
 
       for (const result of results) {
         if (!result) continue;
         const { shapeData, targetObjectForAnimation } = result;
-
-        // Bake procedural animations (not for GLBs, they use their own clips)
         if (
           shapeData.animation &&
           shapeData.animation.type !== "none" &&
@@ -2461,7 +2404,7 @@ export default function Model3DCreator() {
         ) {
           const animParams = shapeData.animation;
           let bakeDur = 5;
-          const bakeFps = 30; // Default duration and FPS
+          const bakeFps = 30;
           if (
             animParams.type === "orbit" &&
             (animParams.speed || 1) * 0.2 !== 0
@@ -2475,17 +2418,14 @@ export default function Model3DCreator() {
             bakeDur = Math.abs((Math.PI * 2) / (animParams.speed || 1));
             bakeDur = Math.max(1, Math.min(10, bakeDur));
           }
-
           const totalFrames = Math.max(2, Math.floor(bakeDur * bakeFps));
           const timeStep = bakeDur / (totalFrames - 1);
           const times = [];
           const positions = [];
           const quaternions = [];
-
-          const simObj = new THREE.Object3D(); // Simulation object
-          simObj.position.copy(targetObjectForAnimation.position); // Start from initial position
-          simObj.quaternion.copy(targetObjectForAnimation.quaternion); // Start from initial rotation
-
+          const simObj = new THREE.Object3D();
+          simObj.position.copy(targetObjectForAnimation.position);
+          simObj.quaternion.copy(targetObjectForAnimation.quaternion);
           let currentOrbitAngle = Math.atan2(
             simObj.position.z - (animParams.orbitCenter?.[2] || 0),
             simObj.position.x - (animParams.orbitCenter?.[0] || 0)
@@ -2494,13 +2434,11 @@ export default function Model3DCreator() {
             animParams.type === "orbit" &&
             (animParams.orbitRadius || 0) === 0
           )
-            currentOrbitAngle = 0; // Avoid NaN if radius is 0
-
+            currentOrbitAngle = 0;
           for (let i = 0; i < totalFrames; i++) {
             const time = i * timeStep;
             times.push(time);
-            const effSpeedThisFrame = (animParams.speed || 1) * timeStep; // Speed for this frame step
-
+            const effSpeedThisFrame = (animParams.speed || 1) * timeStep;
             switch (animParams.type) {
               case "rotate":
                 const axisVec = new THREE.Vector3();
@@ -2511,7 +2449,7 @@ export default function Model3DCreator() {
                   axisVec,
                   effSpeedThisFrame
                 );
-                simObj.quaternion.premultiply(R); // Apply rotation relative to current
+                simObj.quaternion.premultiply(R);
                 break;
               case "orbit":
                 currentOrbitAngle += effSpeedThisFrame * 0.2;
@@ -2520,7 +2458,7 @@ export default function Model3DCreator() {
                 const cY =
                   animParams.orbitCenter?.[1] !== undefined
                     ? animParams.orbitCenter[1]
-                    : simObj.position.y; // Keep original Y if not specified for orbit center
+                    : simObj.position.y;
                 const cZ = animParams.orbitCenter?.[2] || 0;
                 const p = animParams.orbitPlane || "xz";
                 if (p === "xz")
@@ -2556,8 +2494,6 @@ export default function Model3DCreator() {
               simObj.quaternion.w
             );
           }
-          // Create KeyframeTracks
-          // IMPORTANT: GLTF Exporter needs tracks to target node UUIDs, not names.
           const posTrack = new THREE.VectorKeyframeTrack(
             `${targetObjectForAnimation.uuid}.position`,
             times,
@@ -2568,7 +2504,6 @@ export default function Model3DCreator() {
             times,
             quaternions
           );
-
           const clip = new THREE.AnimationClip(
             `Anim_${shapeData.id}_${animParams.type}`,
             totalFrames > 1 ? bakeDur : 0,
@@ -2577,17 +2512,13 @@ export default function Model3DCreator() {
           allBakedClips.push(clip);
         }
       }
-
       if (processedShapeCount === 0 && shapes.length > 0) {
-        // No shapes were processed but some exist
         alert("No valid shapes could be prepared for animated export.");
         setIsBaking(false);
         return;
       }
-
-      exportScene.animations = [...allBakedClips, ...allOriginalClipsFromGLBs]; // Combine baked and original GLB clips
-      exportToGLB(exportScene, `baked-animated-model-${Date.now()}.glb`);
-      // alert(`Exported ${processedShapeCount} shapes with ${exportScene.animations.length} animation clips to GLB!`);
+      exportScene.animations = [...allBakedClips, ...allOriginalClipsFromGLBs];
+      sceneExportToGLB(exportScene, `baked-animated-model-${Date.now()}.glb`);
     } catch (error) {
       console.error("[BAKED GLB EXPORT] Critical error:", error);
       alert("Animated GLB Export failed: " + error.message);
@@ -2624,9 +2555,7 @@ export default function Model3DCreator() {
           ),
         }));
       }
-      // Could add other methods like 'min', 'max'
       setShapes(newShapes);
-      // alert(`${shapes.length} shapes aligned along ${axis.toUpperCase()}-axis (${method}).`);
     },
     [shapes, saveState, isBaking]
   );
@@ -2636,11 +2565,9 @@ export default function Model3DCreator() {
       if (!selectedShapeId || isBaking) return;
       const currentShape = shapes.find((s) => s.id === selectedShapeId);
       if (!currentShape) return;
-
       const newPosition = [...currentShape.position];
       newPosition[{ x: 0, y: 1, z: 2 }[axis]] = 0;
-      updateShapeAndSave(selectedShapeId, { position: newPosition }); // Use save version for explicit action
-      // alert(`Selected shape aligned to origin on ${axis.toUpperCase()}-axis.`);
+      updateShapeAndSave(selectedShapeId, { position: newPosition });
     },
     [selectedShapeId, shapes, updateShapeAndSave, isBaking]
   );
@@ -2653,11 +2580,10 @@ export default function Model3DCreator() {
         alert("Cannot process drop while baking.");
         return;
       }
-
       const files = event.dataTransfer.files;
       if (files && files.length > 0) {
-        const file = files[0]; // Process first file only for simplicity
-        const syntheticEvent = { target: { files: [file], value: null } }; // Mock event for handlers
+        const file = files[0];
+        const syntheticEvent = { target: { files: [file], value: null } };
         if (
           file.name.toLowerCase().endsWith(".glb") ||
           file.name.toLowerCase().endsWith(".gltf")
@@ -2685,7 +2611,7 @@ export default function Model3DCreator() {
     { name: "Cylinder", geometry: "cylinder", icon: "🥫" },
     { name: "Cone", geometry: "cone", icon: "🔺" },
     { name: "Torus", geometry: "torus", icon: "🍩" },
-    { name: "Pyramid", geometry: "pyramid", icon: "🔺" }, // Uses custom geometry component
+    { name: "Pyramid", geometry: "pyramid", icon: "🔺" },
     { name: "3D Text", geometry: "text", icon: "📝" },
   ];
 
@@ -2696,7 +2622,6 @@ export default function Model3DCreator() {
 
   useEffect(() => {
     const handleKeyDown = (event) => {
-      // Ignore keydowns if an input field is focused or contentEditable
       if (
         event.target.tagName === "INPUT" ||
         event.target.tagName === "TEXTAREA" ||
@@ -2704,7 +2629,6 @@ export default function Model3DCreator() {
         isBaking
       )
         return;
-
       switch (event.key.toLowerCase()) {
         case "w":
           setMode("translate");
@@ -2725,11 +2649,10 @@ export default function Model3DCreator() {
         case "p":
           event.preventDefault();
           toggleGlobalAnimation();
-          break; // Toggle global animation
+          break;
         default:
           break;
       }
-      // Ctrl/Cmd shortcuts
       if (event.ctrlKey || event.metaKey) {
         if (event.key.toLowerCase() === "z") {
           event.preventDefault();
@@ -2755,7 +2678,6 @@ export default function Model3DCreator() {
     toggleGlobalAnimation,
   ]);
 
-  // GLB Animation Playback Handlers
   const handlePlayPauseAnimation = () => {
     if (
       !selectedShape ||
@@ -2763,7 +2685,7 @@ export default function Model3DCreator() {
       animationClips.length === 0
     )
       return;
-    if (!playAllAnimations && selectedAnimationClipIndex < 0) return; // No clip selected for single play
+    if (!playAllAnimations && selectedAnimationClipIndex < 0) return;
     setAnimationPlaybackState((prev) =>
       prev === "playing" ? "paused" : "playing"
     );
@@ -2776,18 +2698,16 @@ export default function Model3DCreator() {
     )
       return;
     setAnimationPlaybackState("stopped");
-    setAnimationTime(0); // Reset time on stop
+    setAnimationTime(0);
   };
   const handleAnimationClipChange = (indexStr) => {
     const index = parseInt(indexStr, 10);
     if (index >= 0 && index < animationClips.length) {
       setSelectedAnimationClipIndex(index);
       setAnimationDuration(animationClips[index].duration || 0);
-      setAnimationTime(0); // Reset time when clip changes
-      // setAnimationPlaybackState("stopped"); // Optionally stop animation on clip change
+      setAnimationTime(0);
     } else if (index === -1 && playAllAnimations) {
-      // Special value for "All Clips Playing" if using SelectItem for it
-      setSelectedAnimationClipIndex(-1); // Ensure it's set for playAllAnimations mode
+      setSelectedAnimationClipIndex(-1);
       const maxDuration = animationClips.reduce(
         (max, clip) => Math.max(max, clip.duration || 0),
         0
@@ -2796,38 +2716,33 @@ export default function Model3DCreator() {
       setAnimationTime(0);
     }
   };
-  const handleAnimationTimeChange = (newTime) => {
-    // newTime is absolute time
+  const handleAnimationTimeChange = (newTimeArray) => {
+    const newTime = newTimeArray[0];
     setAnimationTime(newTime);
     if (animationPlaybackState === "playing") {
-      // If playing, briefly pause then play to reflect scrub
       setAnimationPlaybackState("paused");
       requestAnimationFrame(() => setAnimationPlaybackState("playing"));
     } else if (animationPlaybackState === "stopped") {
-      // If stopped, scrubbing should move to paused state to show the frame
       setAnimationPlaybackState("paused");
     }
-    // If already paused, just updating animationTime will be handled by the effect
   };
   const handleAnimationLoopToggle = (checked) => {
     setIsAnimationLooping(checked);
   };
-  const handleAnimationSpeedChange = (speed) => {
-    setAnimationPlaybackSpeed(parseFloat(speed) || 1.0);
+  const handleAnimationSpeedChange = (speedArray) => {
+    setAnimationPlaybackSpeed(parseFloat(speedArray[0]) || 1.0);
   };
   const handlePlayAllAnimationsToggle = (checked) => {
     setPlayAllAnimations(checked);
     if (checked) {
-      setSelectedAnimationClipIndex(-1); // Indicate all clips mode
+      setSelectedAnimationClipIndex(-1);
       const maxDuration = animationClips.reduce(
         (max, clip) => Math.max(max, clip.duration || 0),
         0
       );
       setAnimationDuration(maxDuration);
     } else {
-      // Switched off playAll
       if (animationClips.length > 0) {
-        // Default to first clip if current selection is invalid for single play
         if (
           selectedAnimationClipIndex < 0 ||
           selectedAnimationClipIndex >= animationClips.length
@@ -2835,7 +2750,6 @@ export default function Model3DCreator() {
           setSelectedAnimationClipIndex(0);
           setAnimationDuration(animationClips[0].duration || 0);
         } else {
-          // Keep current valid clip
           setAnimationDuration(
             animationClips[selectedAnimationClipIndex].duration || 0
           );
@@ -2844,22 +2758,19 @@ export default function Model3DCreator() {
         setAnimationDuration(0);
       }
     }
-    setAnimationTime(0); // Reset time on mode change
+    setAnimationTime(0);
   };
 
-  // Texture Upload/Clear Handlers
   const handleTextureUpload = useCallback(
     (shapeId, mapTypeStr, event, isTextSpecific = false) => {
       const file = event.target.files[0];
       if (!file) return;
       const currentShape = shapes.find((s) => s.id === shapeId);
       if (!currentShape) return;
-
       const reader = new FileReader();
       reader.onload = (e_reader) => {
-        const newTextureUrl = e_reader.target.result; // This will be a data URL
+        const newTextureUrl = e_reader.target.result;
         let updatePayload = {};
-
         const targetPropsKey =
           currentShape.type === "text" && isTextSpecific
             ? "textTextureProps"
@@ -2868,18 +2779,16 @@ export default function Model3DCreator() {
           currentShape[targetPropsKey] || initialTextureProps;
         const oldUrl = oldPropValues[`${mapTypeStr}Url`];
         if (oldUrl && oldUrl.startsWith("blob:")) {
-          // Revoke old blob URL if it exists
           URL.revokeObjectURL(oldUrl);
         }
         updatePayload[targetPropsKey] = {
           ...oldPropValues,
           [`${mapTypeStr}Url`]: newTextureUrl,
         };
-
         updateShapeAndSave(shapeId, updatePayload);
       };
       reader.readAsDataURL(file);
-      if (event.target) event.target.value = null; // Reset file input
+      if (event.target) event.target.value = null;
     },
     [shapes, updateShapeAndSave]
   );
@@ -2889,7 +2798,6 @@ export default function Model3DCreator() {
       const currentShape = shapes.find((s) => s.id === shapeId);
       if (!currentShape) return;
       let updatePayload = {};
-
       const targetPropsKey =
         currentShape.type === "text" && isTextSpecific
           ? "textTextureProps"
@@ -2897,25 +2805,22 @@ export default function Model3DCreator() {
       const oldPropValues = currentShape[targetPropsKey] || initialTextureProps;
       const oldUrl = oldPropValues[`${mapTypeStr}Url`];
       if (oldUrl && oldUrl.startsWith("blob:")) {
-        // Revoke old blob URL
         URL.revokeObjectURL(oldUrl);
       }
       updatePayload[targetPropsKey] = {
         ...oldPropValues,
         [`${mapTypeStr}Url`]: null,
       };
-
       updateShapeAndSave(shapeId, updatePayload);
     },
     [shapes, updateShapeAndSave]
   );
 
-  // Effect to manage body overflow for mobile panel
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 768 && activeMobilePanel)
         setActiveMobilePanel(null);
-    }; // md breakpoint
+    };
     window.addEventListener("resize", handleResize);
     if (activeMobilePanel) document.body.style.overflow = "hidden";
     else document.body.style.overflow = "";
@@ -2925,13 +2830,11 @@ export default function Model3DCreator() {
     };
   }, [activeMobilePanel]);
 
-  // Effect to update animation clips when selected GLB changes
   useEffect(() => {
     if (selectedShape && selectedShape.type === "importedGLB") {
       const gltfData = loadedGltfObjects[selectedShape.id];
       if (gltfData && gltfData.animations && gltfData.animations.length > 0) {
         setAnimationClips(gltfData.animations);
-        // If current selection is invalid or -1 (for playAll) and playAll is false, default to first clip
         if (
           !playAllAnimations &&
           (selectedAnimationClipIndex < 0 ||
@@ -2940,34 +2843,48 @@ export default function Model3DCreator() {
           setSelectedAnimationClipIndex(0);
           setAnimationDuration(gltfData.animations[0]?.duration || 0);
         } else if (playAllAnimations) {
-          setSelectedAnimationClipIndex(-1); // Ensure -1 for playAll
+          setSelectedAnimationClipIndex(-1);
           const maxDuration = gltfData.animations.reduce(
             (max, clip) => Math.max(max, clip.duration || 0),
             0
           );
           setAnimationDuration(maxDuration);
-        } else {
-          // Valid clip selected, update its duration
+        } else if (
+          selectedAnimationClipIndex >= 0 &&
+          selectedAnimationClipIndex < gltfData.animations.length
+        ) {
+          // Ensure index is valid before accessing
           setAnimationDuration(
             gltfData.animations[selectedAnimationClipIndex]?.duration || 0
           );
+        } else {
+          // Fallback if index became invalid somehow
+          setSelectedAnimationClipIndex(
+            gltfData.animations.length > 0 ? 0 : -1
+          );
+          setAnimationDuration(
+            gltfData.animations.length > 0
+              ? gltfData.animations[0]?.duration || 0
+              : 0
+          );
         }
       } else {
-        // No animations or no GLTF data
         setAnimationClips([]);
         setSelectedAnimationClipIndex(-1);
         setAnimationDuration(0);
       }
     } else {
-      // Not a GLB or no shape selected
       setAnimationClips([]);
       setSelectedAnimationClipIndex(-1);
       setAnimationDuration(0);
     }
-    // Reset animation time when clips/shape change
-    setAnimationTime(0);
-    // setAnimationPlaybackState("stopped"); // Optionally stop on shape change
-  }, [selectedShape, loadedGltfObjects, playAllAnimations]); // playAllAnimations is a dependency
+    setAnimationTime(0); // Always reset time when relevant dependencies change
+  }, [
+    selectedShape,
+    loadedGltfObjects,
+    playAllAnimations,
+    selectedAnimationClipIndex,
+  ]);
 
   const showAnimationBar =
     selectedShape &&
@@ -2982,12 +2899,11 @@ export default function Model3DCreator() {
       <div
         ref={creatorWrapperRef}
         className={cn(
-          "flex flex-col h-[100svh] overflow-hidden", // Changed to 100svh for better mobile viewport height
+          "flex flex-col h-[100svh] overflow-hidden",
           "bg-gradient-to-br from-slate-950 via-slate-900 to-purple-950 text-slate-100 select-none",
           isBaking ? "opacity-50 pointer-events-none" : ""
         )}
       >
-        {/* Hidden file inputs */}
         <input
           type='file'
           accept='.json'
@@ -3010,7 +2926,6 @@ export default function Model3DCreator() {
           style={{ display: "none" }}
         />
 
-        {/* Hidden texture file inputs (one per map type) */}
         {Object.keys(initialTextureProps)
           .filter((k) => k.endsWith("Url"))
           .map((mapTypeKey) => {
@@ -3033,7 +2948,6 @@ export default function Model3DCreator() {
           .filter((k) => k.endsWith("Url"))
           .map((mapTypeKey) => {
             const mapType = mapTypeKey.replace("Url", "");
-            // Example: only allow map and normalMap for text for now
             return (
               (mapType === "map" || mapType === "normalMap") && (
                 <input
@@ -3173,8 +3087,7 @@ export default function Model3DCreator() {
                 CameraControllerComponent={CameraController}
                 isAnimating={isAnimating}
                 onDropOnCanvas={handleDropOnCanvas}
-                // GLB animation props for MainScene
-                animationClips={animationClips} // Pass all clips for potential use
+                animationClips={animationClips}
                 selectedAnimationClipIndex={selectedAnimationClipIndex}
                 animationPlaybackState={animationPlaybackState}
                 isAnimationLooping={isAnimationLooping}
@@ -3201,7 +3114,6 @@ export default function Model3DCreator() {
                   onAnimationSpeedChange={handleAnimationSpeedChange}
                   playAllAnimations={playAllAnimations}
                   onPlayAllAnimationsToggle={handlePlayAllAnimationsToggle}
-                  // Fullscreen props for Select inside AnimationPlaybackBar
                   portalContainerRef={creatorWrapperRef}
                   isFullscreen={isFullscreen}
                 />
@@ -3220,16 +3132,15 @@ export default function Model3DCreator() {
             <div className='h-full w-full bg-slate-900/95 md:bg-transparent md:border-l md:border-slate-700/30 backdrop-blur-md md:backdrop-blur-none overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800'>
               <PropertiesPanel
                 selectedShape={selectedShape}
-                updateShape={updateShapeAndSave} // Use save version for explicit property changes
+                updateShape={updateShapeAndSave}
                 removeShape={removeShape}
                 duplicateShape={duplicateShape}
-                addShape={addShape} // To add shapes from panel potentially
+                addShape={addShape}
                 handleTextureUpload={handleTextureUpload}
                 handleClearTexture={handleClearTexture}
                 shapeTextureFileInputRefs={shapeTextureFileInputRefs}
                 textTextureFileInputRefs={textTextureFileInputRefs}
                 forceRefreshCanvas={handleForceCanvasRefresh}
-                // Fullscreen props for Selects inside PropertiesPanel
                 portalContainerRef={creatorWrapperRef}
                 isFullscreen={isFullscreen}
               />
