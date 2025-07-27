@@ -74,7 +74,7 @@ const Footer = () => {
                 whileHover={{ scale: 1.05 }}
                 className='text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent'
               >
-                3D Model Hub
+                Hono Dev Studio
               </motion.div>
             </Link>
             <p className='text-gray-600 dark:text-gray-400 text-sm'>
@@ -164,7 +164,7 @@ const Footer = () => {
             >
               <Heart className='h-4 w-4 fill-current' />
             </motion.span>
-            by Your Team
+            by Hono Dev Studio & Dilshan Jayatissa
           </motion.div>
         </div>
       </div>

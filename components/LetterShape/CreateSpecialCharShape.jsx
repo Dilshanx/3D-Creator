@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-function createSpecialCharShape(char, size) {
+export default function createSpecialCharShape(char, size) {
   const letterSize = size;
   const shape = new THREE.Shape();
 

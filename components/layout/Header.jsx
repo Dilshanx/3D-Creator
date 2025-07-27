@@ -16,8 +16,9 @@ export default function Header() {
 
   const navLinks = [
     { href: "/", label: "Home" },
-    { href: "/models", label: "Create" },
-    { href: "/showcase", label: "Showcase" },
+    { href: "/modelcreator", label: "Create" },
+    { href: "/modelshowroom", label: "Showroom" },
+    { href: "/modeldisplay", label: "Display" },
   ];
 
   useEffect(() => {
