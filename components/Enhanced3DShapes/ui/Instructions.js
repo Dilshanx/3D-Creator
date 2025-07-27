@@ -14,7 +14,7 @@ const Instructions = () => (
         <ul className='space-y-1.5 text-sm sm:text-base list-disc list-inside marker:text-purple-400'>
           <li>Select a base shape from the panel.</li>
           <li>
-            Open "Advanced Settings" to fine-tune:
+            Open Advanced Settings to fine-tune:
             <ul className='list-disc list-inside ml-4 mt-1 space-y-1 marker:text-purple-300'>
               <li>Material type (Metallic, Glass, etc.).</li>
               <li>Shape color using the color picker.</li>

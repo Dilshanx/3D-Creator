@@ -1,11 +1,10 @@
+
 import React, {
   useRef,
   useEffect,
   useState,
   useCallback,
-  useMemo,
-  Suspense,
-  // useLayoutEffect, // Not strictly needed in Model3DCreator.jsx directly
+
 } from "react";
 import * as THREE from "three";
 
@@ -317,7 +316,8 @@ const applyTextureToGLBNode = (
                 texture.colorSpace = isColorDataMap
                   ? THREE.SRGBColorSpace
                   : THREE.LinearSRGBColorSpace;
-                texture.flipY = false;
+                // FIX: Changed flipY to true to match standard texture coordinates
+                texture.flipY = true;
                 texture.needsUpdate = true;
                 targetMaterial[mapProperty] = texture;
 
@@ -1473,7 +1473,8 @@ export default function Model3DCreator() {
               texture.colorSpace = isColorData
                 ? THREE.SRGBColorSpace
                 : THREE.LinearSRGBColorSpace;
-              texture.flipY = false;
+              // FIX: Changed flipY to true to match standard texture coordinates
+              texture.flipY = true;
               texture.needsUpdate = true;
               resolve(texture);
             },
@@ -1956,7 +1957,8 @@ export default function Model3DCreator() {
               t.colorSpace = isColorData
                 ? THREE.SRGBColorSpace
                 : THREE.LinearSRGBColorSpace;
-              t.flipY = false;
+              // FIX: Changed flipY to true to match standard texture coordinates
+              t.flipY = true;
               t.needsUpdate = true;
               resolve(t);
             },

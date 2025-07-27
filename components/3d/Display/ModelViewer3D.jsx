@@ -2912,7 +2912,10 @@ const ModelViewer3D = () => {
           url,
           (texture) => {
             // Success
-            texture.flipY = false; // GLTF standard for textures
+            // ** FIX: Set flipY to true to match three.js's default behavior,
+            // which correctly orients standard image textures. The GLTFExporter
+            // will handle the coordinate system conversion.
+            texture.flipY = true;
             texture.needsUpdate = true;
             resolve(texture);
           },
@@ -5637,3 +5640,4 @@ const ModelViewer3D = () => {
   );
 };
 export default ModelViewer3D;
+
